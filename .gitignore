@@ -80,3 +80,22 @@ specs-pack/
 /spike/
 /.cargo/
 /.github/
+
+# Root tooling for the vendored Rust workspace (reference only, not published)
+/Cargo.toml
+/Cargo.lock
+/Cross.toml
+/deny.toml
+/rust-toolchain.toml
+/.rustfmt.toml
+/typos.toml
+/feed.json
+/feed-schema.json
+
+# Stale amazon-q leftovers (docs describe Amazon Q, health files are AWS-branded)
+/AmazonQ.md
+/codebase-summary.md
+/CODEOWNERS
+/CODE_OF_CONDUCT.md
+/CONTRIBUTING.md
+/SECURITY.md
