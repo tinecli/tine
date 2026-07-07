@@ -5,7 +5,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APPDIR="$ROOT/app"
-BUNDLE="$ROOT/.build/Tine.app"
+# Separate identity from the released (brew) app: own bundle id → own Accessibility
+# grant (no TCC conflict), own display name + menu-bar icon, and own executable
+# name so pkill below never touches the production app.
+BUNDLE="$ROOT/.build/Tine-dev.app"
 # Default to the same socket the installed tine.zsh uses, so your real terminals
 # connect with no extra env. Override with TINE_SOCK for an isolated instance.
 SOCK="${TINE_SOCK:-$HOME/.local/share/tine/tine.sock}"
@@ -17,16 +20,16 @@ BIN="$APPDIR/.build/debug/tine"
 echo "› bundling $BUNDLE"
 rm -rf "$BUNDLE"
 mkdir -p "$BUNDLE/Contents/MacOS"
-cp "$BIN" "$BUNDLE/Contents/MacOS/tine"
+cp "$BIN" "$BUNDLE/Contents/MacOS/tine-dev"
 cat > "$BUNDLE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Tine</string>
-  <key>CFBundleDisplayName</key><string>Tine</string>
-  <key>CFBundleExecutable</key><string>tine</string>
-  <key>CFBundleIdentifier</key><string>dev.gustaf.tine</string>
+  <key>CFBundleName</key><string>Tine - development</string>
+  <key>CFBundleDisplayName</key><string>Tine - development</string>
+  <key>CFBundleExecutable</key><string>tine-dev</string>
+  <key>CFBundleIdentifier</key><string>dev.gustaf.tine.dev</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.0.1</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
@@ -57,8 +60,8 @@ SIGN_ID="${TINE_SIGN_ID:-Developer ID Application: Gustaf Eriksson (82K3YC8HVF)}
 echo "› signing ($SIGN_ID)"
 codesign --force --deep --sign "$SIGN_ID" "$BUNDLE"
 
-echo "› stopping any running tine"
-pkill -x tine 2>/dev/null || true
+echo "› stopping any running dev build (leaves the production app alone)"
+pkill -x tine-dev 2>/dev/null || true
 
 echo "› TINE_SOCK=$SOCK"
 echo "› launching (logs: /tmp/tine.log)"

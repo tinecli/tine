@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindow: NSWindow?
     private let frecency = Frecency()
     private var idleHide: DispatchWorkItem?
+    private var statusItem: NSStatusItem?
+    private var sockPath = ""
     // Latest caret rect from the input method (screen coords), for terminals
     // whose Accessibility can't report it (Ghostty).
     private var imeCaret: (rect: CGRect, at: Date)?
@@ -25,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let env = ProcessInfo.processInfo.environment
         // Fixed default (the input-method process can't see the shell's TINE_SOCK).
         let sockPath = env["TINE_SOCK"] ?? "\(NSHomeDirectory())/.local/share/tine/tine.sock"
+        self.sockPath = sockPath
         try? FileManager.default.createDirectory(
             atPath: (sockPath as NSString).deletingLastPathComponent,
             withIntermediateDirectories: true)
@@ -147,7 +150,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         AXCaret.ensureTrusted()
         tlog("listening on \(sockPath) (AX trusted: \(AXCaret.isTrusted))")
+        setupStatusItem()
     }
+
+    /// Menu-bar item: shows which build is running (name + socket) and gives a
+    /// way to open the dashboard or quit — the app is otherwise invisible
+    /// (.accessory). Dev builds get a distinct icon so two menu-bar items (dev +
+    /// released) are tellable apart.
+    private func setupStatusItem() {
+        let name = (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? "Tine"
+        let isDev = Bundle.main.bundleIdentifier?.hasSuffix(".dev") ?? false
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.button?.image = NSImage(
+            systemSymbolName: isDev ? "hammer.fill" : "wand.and.stars", accessibilityDescription: name)
+        item.button?.toolTip = name
+
+        let menu = NSMenu()
+        let header = NSMenuItem(title: name, action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
+        let sock = NSMenuItem(title: "socket: \((sockPath as NSString).lastPathComponent)", action: nil, keyEquivalent: "")
+        sock.isEnabled = false
+        menu.addItem(sock)
+        menu.addItem(.separator())
+        let open = NSMenuItem(title: "Open Dashboard", action: #selector(statusOpenDashboard), keyEquivalent: "")
+        open.target = self
+        menu.addItem(open)
+        let quit = NSMenuItem(title: "Quit \(name)", action: #selector(statusQuit), keyEquivalent: "q")
+        quit.target = self
+        menu.addItem(quit)
+        item.menu = menu
+        statusItem = item
+    }
+
+    @objc private func statusOpenDashboard() { showMainWindow() }
+    @objc private func statusQuit() { NSApp.terminate(nil) }
 
     @objc private func appActivated(_ note: Notification) {
         let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
@@ -231,7 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let host = NSHostingController(rootView: SettingsView().environmentObject(state))
             host.sizingOptions = [.preferredContentSize]
             let win = NSWindow(contentViewController: host)
-            win.title = "Tine"
+            win.title = (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String) ?? "Tine"
             win.styleMask = [.titled, .closable, .miniaturizable]
             win.isReleasedWhenClosed = false
             win.setContentSize(NSSize(width: 560, height: 600))
