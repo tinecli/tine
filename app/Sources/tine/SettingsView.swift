@@ -1,8 +1,15 @@
+import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var state: AppState
     @StateObject private var installer = SpecInstaller()
+
+    // Re-read externally-owned state (Accessibility grant, IME, login item) so the
+    // UI reflects changes made outside the app without needing a relaunch.
+    @State private var axTrusted = AXCaret.isTrusted
+    @State private var startAtLogin = SMAppService.mainApp.status == .enabled
+    private let refresh = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
 
     private let tints = ["blue", "purple", "green", "pink", "orange", "teal"]
     // (config value, display name). "" = the system monospaced font.
@@ -23,7 +30,7 @@ struct SettingsView: View {
         let specCount = SpecInstaller.installedCount()
         Form {
             Section("Setup") {
-                setupRow("Accessibility", ok: AXCaret.isTrusted,
+                setupRow("Accessibility", ok: axTrusted,
                          detail: "Positions the panel at your cursor (Terminal & iTerm).") {
                     Button("Grant") {
                         AXCaret.ensureTrusted()
@@ -47,6 +54,11 @@ struct SettingsView: View {
                          detail: shellLine) {
                     Button("Copy line") { copy(shellLine) }
                 }
+            }
+
+            Section("General") {
+                Toggle("Start at login", isOn: $startAtLogin)
+                    .onChange(of: startAtLogin) { _, on in setStartAtLogin(on) }
             }
 
             Section("Appearance") {
@@ -109,6 +121,21 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 560, height: 600)
+        .onReceive(refresh) { _ in
+            axTrusted = AXCaret.isTrusted
+            imeEnabled = IMEManager.isEnabled
+        }
+    }
+
+    /// Register/unregister the app as a login item; revert the toggle to the real
+    /// system state if the call fails (e.g. the user must approve in Login Items).
+    private func setStartAtLogin(_ on: Bool) {
+        do {
+            if on { try SMAppService.mainApp.register() }
+            else { try SMAppService.mainApp.unregister() }
+        } catch {
+            startAtLogin = SMAppService.mainApp.status == .enabled
+        }
     }
 
     @ViewBuilder private var installerStatus: some View {
