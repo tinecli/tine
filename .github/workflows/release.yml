@@ -1,0 +1,84 @@
+name: Release
+
+# On a version tag (v1.2.3): build the spec pack + app, package a dmg (ad-hoc
+# signed — not notarized), attach it to a GitHub Release, and bump the Homebrew
+# cask in gustaferiksson/homebrew-tap.
+#
+# Optional secret:
+#   TAP_GITHUB_TOKEN  PAT with write access to gustaferiksson/homebrew-tap
+#                     (cask bump is skipped if unset)
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write   # create the GitHub Release
+
+jobs:
+  release:
+    name: Build & release
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install tools
+        run: |
+          corepack enable
+          brew install librsvg
+
+      - name: Install JS deps
+        run: corepack pnpm install
+
+      - name: Fetch upstream Fig specs
+        run: corepack pnpm add -w -D @withfig/autocomplete
+
+      - name: Build + install spec pack
+        run: bash scripts/install-specs.sh
+
+      - name: Package (ad-hoc signed)
+        env:
+          TINE_SIGN_ID: "-"
+          TINE_VERSION: ${{ steps.ver.outputs.version }}
+          TINE_BUILD: ${{ github.run_number }}
+        run: bash scripts/package.sh
+
+      - name: Compute sha256
+        id: sha
+        run: |
+          echo "sha256=$(shasum -a 256 "dist/Tine-${{ steps.ver.outputs.version }}.dmg" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/Tine-${{ steps.ver.outputs.version }}.dmg" \
+            --title "Tine ${{ steps.ver.outputs.version }}" \
+            --notes "Install: \`brew install --cask gustaferiksson/tap/tine\`. Ad-hoc signed (not notarized) — right-click → Open on first launch."
+
+      - name: Bump Homebrew cask
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          SHA256: ${{ steps.sha.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TAP_TOKEN:-}" ]; then
+            echo "TAP_GITHUB_TOKEN not set — skipping cask bump."; exit 0
+          fi
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/gustaferiksson/homebrew-tap.git" tap
+          cd tap
+          sed -i '' -E "s/^  version \".*\"/  version \"$VERSION\"/" Casks/tine.rb
+          sed -i '' -E "s/^  sha256 \".*\"/  sha256 \"$SHA256\"/" Casks/tine.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "tine $VERSION"
+          git push

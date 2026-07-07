@@ -57,10 +57,15 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-echo "› sign ($SIGN_ID) + hardened runtime"
-codesign --force --options runtime --timestamp \
-  --entitlements "$APPDIR/tine.entitlements" \
-  --sign "$SIGN_ID" "$APP"
+# TINE_SIGN_ID="-" → ad-hoc (CI / unsigned dist); else Developer ID (+ timestamp).
+if [ "$SIGN_ID" = "-" ]; then
+  echo "› ad-hoc sign + hardened runtime (unsigned distribution)"
+  codesign --force --options runtime --entitlements "$APPDIR/tine.entitlements" --sign - "$APP"
+else
+  echo "› sign ($SIGN_ID) + hardened runtime"
+  codesign --force --options runtime --timestamp \
+    --entitlements "$APPDIR/tine.entitlements" --sign "$SIGN_ID" "$APP"
+fi
 codesign --verify --strict --verbose=1 "$APP" 2>&1 | tail -2
 
 echo "› dmg"

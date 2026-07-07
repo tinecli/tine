@@ -17,6 +17,23 @@ with match highlighting, dangerous-command warnings, first-token command-name
 completion, a Ctrl+K detail pane, shell-alias expansion, and a personal specs
 directory that overrides the shipped pack.
 
+## Install
+
+```sh
+brew install --cask gustaferiksson/tap/tine
+```
+
+Then finish setup:
+
+```sh
+echo 'source ~/.local/share/tine/tine.zsh' >> ~/.zshrc   # shell integration
+open -a Tine                                              # launch once (installs the widget)
+```
+
+Grant **Accessibility** (System Settings → Privacy & Security → Accessibility) so the
+panel can track your cursor. The app is Developer ID signed but not yet notarized, so on
+first launch use **right-click → Open** (or approve it in System Settings).
+
 ## Requirements
 
 macOS 14+, zsh, and (to build) Swift 6, Node 22 + pnpm.
@@ -32,14 +49,28 @@ Then grant **Accessibility** (System Settings → Privacy & Security → Accessi
 so the panel can track your cursor. For Ghostty, enable the bundled input method
 (Settings → Input method → Enable).
 
-## Package a release
+## Releasing
+
+Tag a version and push — the `Release` GitHub Action builds the spec pack + app,
+packages a dmg (ad-hoc signed), publishes a GitHub Release, and bumps the Homebrew
+cask in `gustaferiksson/homebrew-tap`:
+
+```sh
+git tag v0.1.1 && git push origin v0.1.1
+```
+
+(Set the repo secret `TAP_GITHUB_TOKEN` — a PAT with write access to the tap — for the
+cask bump to run.)
+
+To build a dmg locally instead:
 
 ```sh
 scripts/package.sh                       # → dist/Tine.app + dist/Tine-<version>.dmg
 ```
 
-Developer ID signed with a hardened runtime + JIT entitlement (JavaScriptCore).
-Notarization is a separate step (Apple ID credentials required).
+`package.sh` Developer ID signs with a hardened runtime + JIT entitlement
+(JavaScriptCore needs it); set `TINE_SIGN_ID=-` for an ad-hoc build. Notarization is a
+separate step (Apple ID credentials required).
 
 ## Configure
 

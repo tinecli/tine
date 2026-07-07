@@ -1,0 +1,41 @@
+name: CI
+
+# Build-only sanity: proves the engine bundles and the app compiles + packages
+# (ad-hoc signed, no spec pack) on every push / PR. No secrets.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    name: Build (unsigned)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install tools
+        run: |
+          corepack enable
+          brew install librsvg
+
+      - name: Install JS deps
+        run: corepack pnpm install
+
+      - name: Build engine
+        run: bash scripts/build-engine.sh
+
+      - name: Package (ad-hoc, no specs)
+        run: TINE_SIGN_ID="-" bash scripts/package.sh --no-specs
+
+      - name: Verify bundle
+        run: |
+          set -euo pipefail
+          test -x dist/Tine.app/Contents/MacOS/tine
+          test -f dist/Tine.app/Contents/Resources/tine-engine.js
+          test -f dist/Tine.app/Contents/Resources/AppIcon.icns
+          echo "✅ app built + icon + engine present"
