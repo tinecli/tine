@@ -28,8 +28,10 @@ enum IMEManager {
         return Unmanaged<CFBoolean>.fromOpaque(ptr).takeUnretainedValue() == kCFBooleanTrue
     }
 
-    /// Register (if needed), enable, and select the input method.
-    /// Returns nil on success, or a human-readable error.
+    /// Register (if needed) and enable the input method — but do NOT select it.
+    /// Enabling is enough for IME-capable terminals (Ghostty) to route caret
+    /// queries to it; selecting would hijack the user's active input source,
+    /// which Fig deliberately never did. Returns nil on success, else an error.
     @discardableResult
     static func enable() -> String? {
         guard isInstalled else {
@@ -39,14 +41,10 @@ enum IMEManager {
         TISRegisterInputSource(URL(fileURLWithPath: appPath) as CFURL)
 
         guard let src = source() else {
-            return "Input method not found after registering — a logout/login may be needed once."
+            return "Input method not registered — it must be notarized, then re-launched."
         }
         let e = TISEnableInputSource(src)
         guard e == noErr else { return "Couldn't enable it (error \(e))." }
-        let s = TISSelectInputSource(src)
-        guard s == noErr else {
-            return "Enabled, but couldn't auto-switch (error \(s)) — pick “Tine” from the input menu."
-        }
         return nil
     }
 }

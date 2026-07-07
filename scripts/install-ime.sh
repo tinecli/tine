@@ -58,13 +58,28 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-# Developer ID (not ad-hoc): macOS is more reliable about indexing a stably-signed
-# input method into the input-source list. Set TINE_SIGN_ID=- to force ad-hoc.
+# Developer ID + hardened runtime (required for notarization). macOS 26 refuses
+# to register an un-notarized input method, so a plain Developer ID signature is
+# not enough on its own. Set TINE_SIGN_ID=- to force ad-hoc (won't register on 26).
 echo "› signing ($SIGN_ID)"
-codesign --force --deep --sign "$SIGN_ID" "$BUNDLE"
+codesign --force --options runtime --sign "$SIGN_ID" "$BUNDLE"
+
+# Notarize when a keychain credential profile is provided (see scripts/notarize
+# setup in the README). Without it, the IME won't register on macOS 26.
+if [ -n "${TINE_NOTARY_PROFILE:-}" ]; then
+  echo "› notarizing (profile: $TINE_NOTARY_PROFILE) — this can take a minute"
+  ZIP="$(mktemp -d)/TineInputMethod.zip"
+  ditto -c -k --keepParent "$BUNDLE" "$ZIP"
+  xcrun notarytool submit "$ZIP" --keychain-profile "$TINE_NOTARY_PROFILE" --wait
+  xcrun stapler staple "$BUNDLE"
+  rm -rf "$(dirname "$ZIP")"
+else
+  echo "⚠ TINE_NOTARY_PROFILE not set — skipping notarization. On macOS 26 the IME"
+  echo "  will NOT register until notarized. See README (notarization setup)."
+fi
 
 echo ""
 echo "Installed. Now:"
-echo "  1) System Settings → Keyboard → Input Sources → +  → search 'tine' → Add"
-echo "  2) Switch to it (or keep it active) so it can report the caret in Ghostty"
-echo "  (You may need to log out/in once for it to appear.)"
+echo "  1) bash scripts/enable-ime.sh   (enables it — does NOT change your input source)"
+echo "  2) Restart Ghostty so it picks up the input method"
+echo "  Ghostty caret tracking should then work without touching your keyboard layout."

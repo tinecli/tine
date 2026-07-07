@@ -28,15 +28,16 @@ usleep(400_000)
 guard let cf = TISCreateInputSourceList(nil, true)?.takeRetainedValue(),
       let list = cf as? [TISInputSource] else { print("no input source list"); exit(1) }
 
+// Enable only — never select. Selecting would hijack the active input source;
+// enabling is enough for IME-capable terminals (Ghostty) to query the caret.
 var ok = false
 for s in list where (strProp(s, kTISPropertyInputSourceID) ?? "").lowercased().contains("tine") {
-    _ = TISEnableInputSource(s)
-    if boolProp(s, kTISPropertyInputSourceIsSelectCapable) && TISSelectInputSource(s) == noErr { ok = true }
+    if TISEnableInputSource(s) == noErr { ok = true }
 }
 if ok {
-    print("✅ Tine input method enabled + selected. Caret tracking active in Ghostty/VSCode.")
+    print("✅ Tine input method enabled (input source unchanged). Restart Ghostty to pick it up.")
 } else {
-    print("⚠ Tine not registered yet. Log out and back in once, then re-run this script.")
+    print("⚠ Tine not registered. It must be notarized first (macOS 26 blocks unnotarized input methods), then re-launched.")
     exit(1)
 }
 SWIFT
