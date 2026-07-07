@@ -68,9 +68,9 @@ specs-pack/
 dist/
 
 # Vendored amazon-q monorepo kept locally as reference only (not published)
+# (proto/ IS a JS workspace package — @tine/proto — so it stays tracked)
 /crates/
 /models/
-/proto/
 /build-config/
 /build-scripts/
 /bundle/
