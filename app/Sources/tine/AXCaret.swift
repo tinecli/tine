@@ -48,6 +48,13 @@ enum AXCaret {
             rect = bounds(element, CFRange(location: caret.location, length: 1))
             anchorRight = false
         }
+        // Canvas/Electron terminals (VSCode) refuse boundsForRange, but xterm.js
+        // parks a hidden IME text field at the caret — the focused element's own
+        // frame tracks the cursor cell-by-cell, so it *is* the caret.
+        if !valid(rect), let er = caretSizedElementRect(element) {
+            rect = er
+            anchorRight = false
+        }
         guard let r = rect, valid(r) else {
             tlog("AX[\(app)] no valid bounds for caret \(caret)")
             return nil
@@ -61,6 +68,22 @@ enum AXCaret {
 
         tlog("AX[\(app)] caret=\(caret) rect=\(r) anchorRight=\(anchorRight) -> \(point)")
         return point
+    }
+
+    // The focused element's own frame, but only when it's caret-sized. A
+    // caret-tracking field (VSCode/xterm.js parks one at the cursor) is a few
+    // points wide; a whole terminal canvas (Ghostty) is hundreds — only the
+    // former locates the caret, so reject anything larger than a single cell.
+    private static func caretSizedElementRect(_ el: AXUIElement) -> CGRect? {
+        var posRef: CFTypeRef?, szRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(el, kAXPositionAttribute as CFString, &posRef) == .success,
+              AXUIElementCopyAttributeValue(el, kAXSizeAttribute as CFString, &szRef) == .success,
+              let p = posRef, let s = szRef else { return nil }
+        var pos = CGPoint.zero, sz = CGSize.zero
+        AXValueGetValue(p as! AXValue, .cgPoint, &pos)
+        AXValueGetValue(s as! AXValue, .cgSize, &sz)
+        guard sz.width > 0, sz.height > 0, sz.width < 100, sz.height < 100 else { return nil }
+        return CGRect(origin: pos, size: sz)
     }
 
     private static func valid(_ rect: CGRect?) -> Bool {
