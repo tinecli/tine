@@ -36,49 +36,18 @@ they launch normally.
 
 ## Requirements
 
-macOS 14+, zsh, and (to build) Swift 6, Node 22 + pnpm.
-
-## Run (dev)
-
-```sh
-scripts/dev-run.sh                       # build app + engine, install specs + shell, launch
-echo 'source ~/.local/share/tine/tine.zsh' >> ~/.zshrc
-```
-
-Then grant **Accessibility** (System Settings → Privacy & Security → Accessibility)
-so the panel can track your cursor. Works in Terminal, iTerm2, VSCode, and Ghostty
-— no pseudo-terminal, so nothing can leak your keystrokes.
-
-## Releasing
-
-Tag a version and push — the `Release` GitHub Action builds the spec pack + app,
-packages a Developer ID signed + notarized dmg, publishes a GitHub Release, and bumps
-the Homebrew cask in `gustaferiksson/homebrew-tap`:
-
-```sh
-git tag v0.1.1 && git push origin v0.1.1
-```
-
-Repo secrets: `APPLE_CERT_P12` (base64 of the exported Developer ID Application cert) +
-`APPLE_CERT_PASSWORD`, `NOTARY_APPLE_ID` + `NOTARY_PASSWORD` (an app-specific password),
-and `TAP_GITHUB_TOKEN` (a PAT with write access to the tap) for the cask bump. Without
-the Apple secrets the build falls back to ad-hoc signing.
-
-To build a dmg locally instead:
-
-```sh
-scripts/package.sh                       # → dist/Tine.app + dist/Tine-<version>.dmg
-```
-
-`package.sh` Developer ID signs with a hardened runtime + JIT entitlement
-(JavaScriptCore needs it); set `TINE_SIGN_ID=-` for an ad-hoc build. It notarizes +
-staples too when `NOTARY_APPLE_ID`/`NOTARY_TEAM_ID`/`NOTARY_PASSWORD` are set.
+macOS 14+ and zsh.
 
 ## Configure
 
 Via the Settings window or `~/.config/tine/config.json`: font + size, max rows,
 accent, glass, command-name completion, and the local specs directory. Drop your
 own `.js` Fig specs in `~/.tine/specs` — they load first and override the pack.
+
+## Development
+
+Build and run from source: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Cutting a
+release: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Credits & license
 
