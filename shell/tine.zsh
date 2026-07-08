@@ -98,14 +98,14 @@ _tine_up() {
      && _tine_req up && [[ "$_TINE_REPLY" != "PASS" ]]; then
     return
   fi
-  _tine_history up-line-or-history
+  _tine_history "$_TINE_UP_WIDGET"
 }
 _tine_down() {
   if [[ ${_TINE_HIST:-0} -eq 0 && ${_TINE_ACTIVE:-0} -gt 0 ]] \
      && _tine_req down && [[ "$_TINE_REPLY" != "PASS" ]]; then
     return
   fi
-  _tine_history down-line-or-history
+  _tine_history "$_TINE_DOWN_WIDGET"
 }
 zle -N _tine_up
 zle -N _tine_down
@@ -186,6 +186,19 @@ if (( $+functions[add-zle-hook-widget] )); then
   add-zle-hook-widget line-init _tine_line_init
   add-zle-hook-widget line-pre-redraw _tine_feed
   add-zle-hook-widget line-finish _tine_hide
+
+  # Preserve whatever Up/Down were already bound to (oh-my-zsh binds a prefix
+  # search, up-line-or-beginning-search) so history navigation keeps that
+  # behaviour instead of a plain, unfiltered walk. Capture before rebinding, and
+  # skip our own widgets so re-sourcing doesn't capture them and recurse.
+  : ${_TINE_UP_WIDGET:=up-line-or-history}
+  : ${_TINE_DOWN_WIDGET:=down-line-or-history}
+  _tine_capture() {
+    local w=${${(s: :)$(bindkey "$1")}[-1]}
+    case "$w" in (_tine_up|_tine_down|''|undefined-key) ;; (*) typeset -g "$2"="$w" ;; esac
+  }
+  _tine_capture '^[[A' _TINE_UP_WIDGET
+  _tine_capture '^[[B' _TINE_DOWN_WIDGET
 
   bindkey '^[[A' _tine_up;   bindkey '^[OA' _tine_up
   bindkey '^[[B' _tine_down; bindkey '^[OB' _tine_down
