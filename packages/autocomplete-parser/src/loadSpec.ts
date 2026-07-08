@@ -28,6 +28,7 @@ import {
 import { DisabledSpecError, MissingSpecError } from "./errors.js";
 import { specCache } from "./caches.js";
 import { tryResolveSpecToSubcommand } from "./tryResolveSpecToSubcommand.js";
+import { mergeSubcommand } from "./mergeSubcommand.js";
 
 /**
  * This searches for the first directory containing a .fig/ folder in the parent directories
@@ -163,26 +164,9 @@ export const importSpecFromLocation = async (
   } else if (!specFile) {
     const { name, diffVersionedFile: versionFileName } = specLocation;
 
-    // tine: the user's own specs (~/.tine/specs/local, Fig's ~/.q/specs) win —
-    // even for commands not in the shipped pack index.
-    const localDir = (globalThis as { __tineLocalSpecsDir?: string })
-      .__tineLocalSpecsDir;
-    if (localDir) {
-      try {
-        specFile = await importSpecFromFile(
-          versionFileName ? `${name}/${versionFileName}` : name,
-          localDir,
-          localLogger,
-        );
-        resolvedLocation = { type: "public", name };
-      } catch {
-        /* not overridden locally — fall through to the pack */
-      }
-    }
-
-    if (specFile) {
-      // loaded from the user's local specs above
-    } else if (await publicSpecExists(name)) {
+    // The pack is the base; the user's own specs (~/.tine/specs) are merged on
+    // top in loadSubcommandCached rather than shadowing the pack here.
+    if (await publicSpecExists(name)) {
       // If we're here, importing was successful.
       try {
         const result = await importFromPublicCDN(
@@ -254,11 +238,49 @@ export const loadSubcommandCached = async (
     return specCache.get(key) as Subcommand;
   }
 
-  const subcommand = await withTimeout(
-    5000,
-    loadFigSubcommand(specLocation, context, localLogger),
-  );
-  const converted = convertSubcommand(subcommand, initializeDefault);
-  specCache.set(key, converted);
-  return converted;
+  // Base spec (the pack). Missing is not fatal: a command may exist only as a
+  // user spec (a command not in the pack).
+  let merged: Subcommand | undefined;
+  try {
+    const subcommand = await withTimeout(
+      5000,
+      loadFigSubcommand(specLocation, context, localLogger),
+    );
+    merged = convertSubcommand(subcommand, initializeDefault);
+  } catch (err) {
+    if (!(err instanceof MissingSpecError)) throw err;
+  }
+
+  // User specs (GLOBAL commands only — scripts/.fig keep their own resolution),
+  // in two sibling folders under the user specs dir:
+  //   override/<cmd>.js  REPLACES the pack spec (full override)
+  //   extend/<cmd>.js    is MERGED on top additively (keeps the pack, adds to it)
+  if (source === SpecLocationSource.GLOBAL) {
+    const dir = (globalThis as { __tineLocalSpecsDir?: string }).__tineLocalSpecsDir;
+    if (dir) {
+      const override = await loadUserSpec(specLocation, `${dir}/override`, localLogger);
+      if (override) merged = override;
+      const extension = await loadUserSpec(specLocation, `${dir}/extend`, localLogger);
+      if (extension) merged = merged ? mergeSubcommand(merged, extension) : extension;
+    }
+  }
+
+  if (!merged) throw new MissingSpecError("No spec found");
+  specCache.set(key, merged);
+  return merged;
+};
+
+/** Load + convert a user spec for `name` from `dir`, or undefined if absent. */
+const loadUserSpec = async (
+  specLocation: SpecLocation,
+  dir: string,
+  localLogger: Logger,
+): Promise<Subcommand | undefined> => {
+  try {
+    const specFile = await importSpecFromFile(specLocation.name, dir, localLogger);
+    const subcommand = await tryResolveSpecToSubcommand(specFile, specLocation);
+    return convertSubcommand(subcommand, initializeDefault);
+  } catch {
+    return undefined;
+  }
 };

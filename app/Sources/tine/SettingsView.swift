@@ -93,7 +93,7 @@ struct SettingsView: View {
 
             Section("Your specs") {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Drop your own `.js` specs here — they load first and override the pack. Restart tine after changing this.")
+                    Text("Drop Fig `.js` specs in `override/<cmd>.js` (replaces a spec) or `extend/<cmd>.js` (adds to it) under this folder. Restart tine after changing this.")
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
                         TextField("Local specs folder", text: bind(\.localSpecsDir))

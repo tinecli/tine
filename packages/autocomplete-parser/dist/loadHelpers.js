@@ -80,16 +80,9 @@ export const canLoadSpecProtocol = () => typeof window !== "undefined" ? window.
 // tine: load specs from the locally-installed spec pack (downloaded by the app
 // to __tineSpecsDir), not a CDN. Keeps runtime fully local + offline.
 export async function importFromPublicCDN(name) {
+    // The pack is the base spec. The user's own specs (~/.tine/specs) are merged
+    // on top additively in loadSubcommandCached, so they must NOT shadow here.
     const g = globalThis;
-    // User's own specs win over the pack (Fig's ~/.q/specs behaviour).
-    if (g.__tineLocalSpecsDir) {
-        try {
-            return (await importSpecFromFile(name, g.__tineLocalSpecsDir));
-        }
-        catch {
-            /* not overridden locally — fall back to the pack */
-        }
-    }
     return importSpecFromFile(name, g.__tineSpecsDir ?? "");
 }
 async function jsonFromPublicCDN(path) {

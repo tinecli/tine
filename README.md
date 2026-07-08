@@ -41,8 +41,16 @@ macOS 14+ and zsh.
 ## Configure
 
 Via the Settings window or `~/.config/tine/config.json`: font + size, max rows,
-accent, glass, command-name completion, and the local specs directory. Drop your
-own `.js` Fig specs in `~/.tine/specs` — they load first and override the pack.
+accent, glass, command-name completion, and the local specs directory.
+
+Drop your own Fig `.js` specs under `~/.tine/specs/` to teach tine your commands —
+in either of two folders:
+
+- **`override/<cmd>.js`** fully replaces a command's spec.
+- **`extend/<cmd>.js`** merges *additively* onto the pack's spec — adds
+  subcommands/options while keeping everything upstream. Great for adding your own
+  or a company CLI's commands (e.g. a missing `aws sso login`) without inheriting
+  the whole 400-file `aws` spec.
 
 ## Development
 

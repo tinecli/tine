@@ -120,15 +120,9 @@ export const canLoadSpecProtocol = () =>
 export async function importFromPublicCDN<T = SpecFileImport>(
   name: string,
 ): Promise<T> {
-  const g = globalThis as { __tineSpecsDir?: string; __tineLocalSpecsDir?: string };
-  // User's own specs win over the pack (Fig's ~/.q/specs behaviour).
-  if (g.__tineLocalSpecsDir) {
-    try {
-      return (await importSpecFromFile(name, g.__tineLocalSpecsDir)) as T;
-    } catch {
-      /* not overridden locally — fall back to the pack */
-    }
-  }
+  // The pack is the base spec. The user's own specs (~/.tine/specs) are merged
+  // on top additively in loadSubcommandCached, so they must NOT shadow here.
+  const g = globalThis as { __tineSpecsDir?: string };
   return importSpecFromFile(name, g.__tineSpecsDir ?? "") as Promise<T>;
 }
 
