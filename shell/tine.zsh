@@ -20,6 +20,8 @@ _TINE_ACOL=1   # prompt-start cursor column (1-based)
 _TINE_CW=0     # cell width in device pixels (0 = unknown)
 _TINE_CH=0     # cell height in device pixels
 _TINE_PREVLEN=0 # buffer length at the previous feed, to spot the first typed char
+_TINE_DISMISSED=0    # Esc dismissed the panel; stay hidden until the buffer changes
+_TINE_DISMISS_BUF="" # buffer at the moment of dismissal
 
 # Terminals whose caret Accessibility reports directly (Terminal, iTerm2, VSCode)
 # use the AX path and need no shell-side cursor anchor — so we skip the tty
@@ -71,6 +73,13 @@ _tine_req() {
 _tine_feed() {
   if [[ ${_TINE_NAV:-0} -eq 1 ]]; then _TINE_NAV=0; return; fi
   _TINE_HIST=0
+  # Esc dismissed the panel: stay inactive until the buffer actually changes, so
+  # the redraw that follows Esc can't silently re-arm acceptance (otherwise Enter
+  # would accept a selection whose panel is hidden). Typing clears the latch.
+  if [[ ${_TINE_DISMISSED:-0} -eq 1 ]]; then
+    [[ "$BUFFER" == "${_TINE_DISMISS_BUF-}" ]] && return
+    _TINE_DISMISSED=0
+  fi
   # Canvas terminals: capture the prompt anchor on the first typed character. This
   # hook runs *before* ZLE repaints, so the terminal cursor still sits where the
   # prompt ended (the new char isn't drawn yet) = the anchor. Doing it here, not at
@@ -91,7 +100,7 @@ zle -N _tine_feed
 
 # Hide the panel when the line is submitted/abandoned. Reset the anchor tracker so
 # the next prompt re-captures on its first keystroke.
-_tine_hide() { _tine_req dismiss; _TINE_ACTIVE=0; _TINE_HIST=0; _TINE_NAV=0; _TINE_PREVLEN=0; }
+_tine_hide() { _tine_req dismiss; _TINE_ACTIVE=0; _TINE_HIST=0; _TINE_NAV=0; _TINE_PREVLEN=0; _TINE_DISMISSED=0; }
 zle -N _tine_hide
 
 # Hand off to zsh history (Up past the top row, or Down/Up with no panel). Hides
@@ -168,7 +177,7 @@ _tine_tab() {
   fi
 }
 _tine_enter() { _tine_do_accept || zle accept-line; }
-_tine_esc()   { if [[ ${_TINE_ACTIVE:-0} -gt 0 ]]; then _tine_req dismiss; _TINE_ACTIVE=0; zle redisplay; fi; }
+_tine_esc()   { if [[ ${_TINE_ACTIVE:-0} -gt 0 ]]; then _tine_req dismiss; _TINE_ACTIVE=0; _TINE_DISMISSED=1; _TINE_DISMISS_BUF=$BUFFER; fi; }
 # Ctrl+K: toggle the detail pane while the panel is up (else normal kill-line).
 _tine_detail() { if [[ ${_TINE_ACTIVE:-0} -gt 0 ]]; then _tine_req toggleDetail; else zle kill-line; fi; }
 zle -N _tine_tab
