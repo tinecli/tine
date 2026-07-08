@@ -63,7 +63,7 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Suggestions") {
+            Section {
                 LabeledContent("Max rows shown") {
                     HStack(spacing: 6) {
                         TextField("", value: bind(\.maxVisibleRows), format: .number)
@@ -73,6 +73,11 @@ struct SettingsView: View {
                     }
                 }
                 Toggle("Complete command names", isOn: bind(\.firstTokenCompletion))
+            } header: {
+                Text("Suggestions")
+            } footer: {
+                Text("↑ ↓ move · Tab inserts the shared prefix · Enter accepts · Esc dismisses · **⌃K** toggles the detail pane")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Specs") {

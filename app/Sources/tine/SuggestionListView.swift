@@ -59,7 +59,9 @@ struct SuggestionListView: View {
     static let listWidth: CGFloat = 520
 
     private var content: some View {
-        HStack(spacing: 0) {
+        // Pin to the top: when the detail pane is taller than the list (few rows,
+        // long description), the list must stay at the top, not center in the gap.
+        HStack(alignment: .top, spacing: 0) {
             list.frame(width: Self.listWidth)
             if state.config.showDetail {
                 Divider().overlay(.white.opacity(0.12))

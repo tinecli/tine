@@ -11,7 +11,8 @@ DEST="${TINE_SPECS_DIR:-$HOME/.local/share/tine/specs}"
 echo "› installing spec pack → $DEST"
 mkdir -p "$DEST"
 rsync -a --delete "$ROOT/specs-pack/" "$DEST/"
-echo "› $(find "$DEST" -name '*.js' | wc -l | tr -d ' ') specs installed"
+clis=$(find "$DEST" -name '*.js' | sed -E "s#^$DEST/##; s#\.js\$##; s#/.*##" | sort -u | wc -l | tr -d ' ')
+echo "› $clis CLIs ($(find "$DEST" -name '*.js' | wc -l | tr -d ' ') spec files) installed"
 
 # Install the shell integration next to it (what ~/.zshrc sources).
 cp "$ROOT/shell/tine.zsh" "$(dirname "$DEST")/tine.zsh"

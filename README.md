@@ -7,7 +7,7 @@ pseudo-terminal**.
 ## What it is
 
 - A native, non-activating `NSPanel` + SwiftUI suggestion UI (not a webview).
-- The Fig autocomplete engine (1400+ command specs) runs locally in
+- The Fig autocomplete engine (700+ CLIs) runs locally in
   **JavaScriptCore** — the same specs Fig/Amazon Q used, no network.
 - A **zsh ZLE widget** feeds the edit buffer to the app over a unix socket. No
   pty wrapper, so nothing can leak the way pty-based tools can.

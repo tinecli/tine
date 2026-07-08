@@ -10,13 +10,25 @@ final class SpecInstaller: ObservableObject {
     }
     @Published var status: Status = .idle
 
-    /// Installed spec count (from the pack's index.json).
+    /// Distinct CLIs covered by the pack. Counted as unique top-level entries —
+    /// one `foo.js` or one `foo/` directory each — NOT index.json entries, which
+    /// list one per spec *file* (a single tool like `aws` fragments into hundreds
+    /// of files, ~2x-inflating the number vs. how other tools report coverage).
     nonisolated static func installedCount() -> Int {
-        let path = "\(NSHomeDirectory())/.local/share/tine/specs/index.json"
-        guard let data = FileManager.default.contents(atPath: path),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let c = obj["completions"] as? [Any] else { return 0 }
-        return c.count
+        let dir = "\(NSHomeDirectory())/.local/share/tine/specs"
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return 0 }
+        var clis = Set<String>()
+        for e in entries {
+            if e.hasSuffix(".js") {
+                clis.insert(String(e.dropLast(3)))
+            } else {
+                var isDir: ObjCBool = false
+                if FileManager.default.fileExists(atPath: "\(dir)/\(e)", isDirectory: &isDir), isDir.boolValue {
+                    clis.insert(e)
+                }
+            }
+        }
+        return clis.count
     }
 
     /// The repo root, inferred from the .app location in dev (…/tine/.build/tine.app).

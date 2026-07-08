@@ -20,4 +20,5 @@ find "$SRC" -name '*.js' -print0 | xargs -0 "$ESBUILD" \
   --outdir="$OUT" --outbase="$SRC" --log-level=error
 
 cp "$SRC/index.json" "$OUT/index.json"
-echo "› $(find "$OUT" -name '*.js' | wc -l | tr -d ' ') specs, $(du -sh "$OUT" | cut -f1)"
+clis=$(find "$OUT" -name '*.js' | sed -E "s#^$OUT/##; s#\.js\$##; s#/.*##" | sort -u | wc -l | tr -d ' ')
+echo "› $clis CLIs ($(find "$OUT" -name '*.js' | wc -l | tr -d ' ') spec files), $(du -sh "$OUT" | cut -f1)"
