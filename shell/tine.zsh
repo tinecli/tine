@@ -19,6 +19,7 @@ _TINE_AROW=1   # prompt-start cursor row (1-based), captured once per prompt
 _TINE_ACOL=1   # prompt-start cursor column (1-based)
 _TINE_CW=0     # cell width in device pixels (0 = unknown)
 _TINE_CH=0     # cell height in device pixels
+_TINE_PREVLEN=0 # buffer length at the previous feed, to spot the first typed char
 
 # Terminals whose caret Accessibility reports directly (Terminal, iTerm2, VSCode)
 # use the AX path and need no shell-side cursor anchor — so we skip the tty
@@ -47,22 +48,6 @@ _tine_cellsize() {
   [[ "$_TINE_CW" == <-> && "$_TINE_CH" == <-> ]] || { _TINE_CW=0; _TINE_CH=0; }
 }
 
-# Prompt-start cursor cell, captured at line-init — after the prompt is drawn and
-# before the user types, so the cursor sits exactly where the buffer begins. This
-# is the anchor the app offsets the buffer against to place the panel in canvas
-# terminals (Ghostty). Not a pty — one cursor-position query per prompt on the
-# terminal we already own. ZLE has the tty in raw mode, so no stty dance.
-_tine_line_init() {
-  _tine_ax_terminal && return
-  local reply
-  print -n -- $'\e[6n' >/dev/tty
-  read -r -d R -t 0.3 reply </dev/tty   # generous: -d R returns the instant the reply lands; the timeout only caps a missing reply
-  reply=${reply#*$'\e['}
-  _TINE_AROW=${reply%%;*}
-  _TINE_ACOL=${reply##*;}
-  [[ "$_TINE_AROW" == <-> && "$_TINE_ACOL" == <-> ]] || { _TINE_AROW=1; _TINE_ACOL=1; }
-}
-
 # Request/response with the app. Sends "<type><US><cursor><US><cwd><US><buffer>"
 # and stores the reply line in _TINE_REPLY. Best-effort; never blocks the prompt.
 _tine_req() {
@@ -86,12 +71,27 @@ _tine_req() {
 _tine_feed() {
   if [[ ${_TINE_NAV:-0} -eq 1 ]]; then _TINE_NAV=0; return; fi
   _TINE_HIST=0
+  # Canvas terminals: capture the prompt anchor on the first typed character. This
+  # hook runs *before* ZLE repaints, so the terminal cursor still sits where the
+  # prompt ended (the new char isn't drawn yet) = the anchor. Doing it here, not at
+  # line-init, means the prompt is fully rendered — an async prompt segment that's
+  # still drawing at line-init would otherwise be captured half-width.
+  if [[ ${_TINE_PREVLEN:-0} -eq 0 && ${#BUFFER} -gt 0 ]] && ! _tine_ax_terminal; then
+    local reply
+    print -n -- $'\e[6n' >/dev/tty
+    read -r -d R -t 0.3 reply </dev/tty
+    reply=${reply#*$'\e['}
+    [[ "${reply%%;*}" == <-> && "${reply##*;}" == <-> ]] \
+      && { _TINE_AROW=${reply%%;*}; _TINE_ACOL=${reply##*;} }
+  fi
+  _TINE_PREVLEN=${#BUFFER}
   _tine_req update && _TINE_ACTIVE=${_TINE_REPLY:-0}
 }
 zle -N _tine_feed
 
-# Hide the panel when the line is submitted/abandoned.
-_tine_hide() { _tine_req dismiss; _TINE_ACTIVE=0; _TINE_HIST=0; _TINE_NAV=0; }
+# Hide the panel when the line is submitted/abandoned. Reset the anchor tracker so
+# the next prompt re-captures on its first keystroke.
+_tine_hide() { _tine_req dismiss; _TINE_ACTIVE=0; _TINE_HIST=0; _TINE_NAV=0; _TINE_PREVLEN=0; }
 zle -N _tine_hide
 
 # Hand off to zsh history (Up past the top row, or Down/Up with no panel). Hides
@@ -197,7 +197,6 @@ fi
 
 autoload -Uz add-zle-hook-widget 2>/dev/null
 if (( $+functions[add-zle-hook-widget] )); then
-  add-zle-hook-widget line-init _tine_line_init
   add-zle-hook-widget line-pre-redraw _tine_feed
   add-zle-hook-widget line-finish _tine_hide
 
