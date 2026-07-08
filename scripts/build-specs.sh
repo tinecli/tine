@@ -20,5 +20,23 @@ find "$SRC" -name '*.js' -print0 | xargs -0 "$ESBUILD" \
   --outdir="$OUT" --outbase="$SRC" --log-level=error
 
 cp "$SRC/index.json" "$OUT/index.json"
+
+# tine's own built-in specs (builtin-specs/*.js — e.g. the `tine` CLI itself):
+# copy into the pack and register each in the completions index so they resolve
+# like any other pack spec.
+if ls "$ROOT/builtin-specs"/*.js >/dev/null 2>&1; then
+  echo "› adding built-in specs"
+  cp "$ROOT/builtin-specs"/*.js "$OUT/"
+  node -e '
+    const fs = require("fs");
+    const [idxPath, dir] = process.argv.slice(1);
+    const idx = JSON.parse(fs.readFileSync(idxPath, "utf8"));
+    const set = new Set(idx.completions || []);
+    for (const f of fs.readdirSync(dir)) if (f.endsWith(".js")) set.add(f.slice(0, -3));
+    idx.completions = [...set];
+    fs.writeFileSync(idxPath, JSON.stringify(idx));
+  ' "$OUT/index.json" "$ROOT/builtin-specs"
+fi
+
 clis=$(find "$OUT" -name '*.js' | sed -E "s#^$OUT/##; s#\.js\$##; s#/.*##" | sort -u | wc -l | tr -d ' ')
 echo "› $clis CLIs ($(find "$OUT" -name '*.js' | wc -l | tr -d ' ') spec files), $(du -sh "$OUT" | cut -f1)"

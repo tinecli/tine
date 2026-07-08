@@ -112,6 +112,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // The shell's PATH, so generators can find non-system tools.
                 CommandRunner.setShellPath(req.buffer)
                 return "0"
+            case "showDashboard":
+                self.showMainWindow()   // handler already runs on the main thread
+                return "0"
+            case "doctor":
+                // Health report for `tine doctor` (semicolon-joined key=value).
+                let v = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
+                return "ax=\(AXCaret.isTrusted ? 1 : 0);specs=\(SpecInstaller.installedCount());version=\(v)"
             case "aliases":
                 // buffer = the shell's `alias` output, lines joined by US.
                 var map: [String: String] = [:]

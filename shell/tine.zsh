@@ -212,6 +212,57 @@ _tine_send_path() {
   IFS= read -r -u "$fd" reply
   exec {fd}>&-
 }
+# `tine` CLI — manage the app from the shell.
+#   tine dashboard   open the dashboard window
+#   tine doctor      check tine is set up correctly
+tine() {
+  emulate -L zsh
+  case "$1" in
+    dashboard)
+      _tine_req showDashboard >/dev/null 2>&1 || open -a Tine 2>/dev/null \
+        || print -u2 -- "tine: could not reach the app (is Tine installed?)"
+      ;;
+    doctor) _tine_doctor ;;
+    ""|help|-h|--help)
+      print -- "usage: tine <command>"
+      print -- "  dashboard   open the dashboard window"
+      print -- "  doctor      check tine is set up correctly"
+      ;;
+    *) print -u2 -- "tine: unknown command: $1 (try: tine help)"; return 1 ;;
+  esac
+}
+
+_tine_doctor() {
+  emulate -L zsh
+  local ok=$'\e[32m✓\e[0m' no=$'\e[31m✗\e[0m'
+  print -- "tine doctor"
+  print -- "  $ok shell integration loaded"
+  if grep -q "tine.zsh" "${ZDOTDIR:-$HOME}/.zshrc" 2>/dev/null; then
+    print -- "  $ok sourced from .zshrc"
+  else
+    print -- "  $no not in .zshrc — add: source ~/.local/share/tine/tine.zsh"
+  fi
+  if [[ -n "$TINE_SOCK" ]] && _tine_req doctor 2>/dev/null && [[ -n "$_TINE_REPLY" ]]; then
+    local ax specs version kv
+    for kv in ${(s.;.)_TINE_REPLY}; do
+      case $kv in
+        (ax=*) ax=${kv#ax=} ;;
+        (specs=*) specs=${kv#specs=} ;;
+        (version=*) version=${kv#version=} ;;
+      esac
+    done
+    print -- "  $ok app running (v${version})"
+    if [[ "$ax" == 1 ]]; then
+      print -- "  $ok Accessibility granted"
+    else
+      print -- "  $no Accessibility not granted — System Settings › Privacy & Security › Accessibility"
+    fi
+    print -- "  $ok ${specs} CLIs available"
+  else
+    print -- "  $no app not reachable — launch it with: tine dashboard"
+  fi
+}
+
 autoload -Uz add-zsh-hook 2>/dev/null
 if (( $+functions[add-zsh-hook] )); then
   add-zsh-hook precmd _tine_send_aliases
