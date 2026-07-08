@@ -78,7 +78,10 @@ async function suggest(
     currentWorkingDirectory: cwd || "/",
     currentProcess: "",
     sshPrefix: "",
-    environmentVariables: {},
+    // HOME lets the path generators expand `~` (e.g. `cd ~/`); set by the host.
+    environmentVariables: {
+      HOME: (globalThis as { __tineHome?: string }).__tineHome ?? "",
+    },
   };
   const parsed = await parseArguments(command as never, context as never);
 

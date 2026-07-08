@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let specsDir = env["TINE_SPECS_DIR"]
             ?? (FileManager.default.fileExists(atPath: installed) ? installed : "\(resources)/specs")
         state.engine = JSEngine(specsDir: specsDir,
-                                localSpecsDir: state.config.localSpecsDirExpanded,
+                                localSpecsDirs: state.config.localSpecsDirsExpanded,
                                 resourcesDir: resources)
 
         state.engine?.setFirstTokenEnabled(state.config.firstTokenCompletion)
@@ -108,6 +108,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return "\(c)\(TINE_US)\(b)"
                 }
                 return ""
+            case "path":
+                // The shell's PATH, so generators can find non-system tools.
+                CommandRunner.setShellPath(req.buffer)
+                return "0"
             case "aliases":
                 // buffer = the shell's `alias` output, lines joined by US.
                 var map: [String: String] = [:]

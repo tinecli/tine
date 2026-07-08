@@ -26,6 +26,17 @@ enum CommandRunner {
     /// results without waiting for the next keystroke.
     static var onRefresh: (() -> Void)?
 
+    /// The shell's PATH (sent by tine.zsh). A GUI-launched app gets only the
+    /// minimal launchd PATH, so generators shelling out to Homebrew/pyenv/npm
+    /// tools (aws, gh, docker, …) fail without this.
+    private static var _shellPath: String?
+    static func setShellPath(_ path: String) {
+        lock.lock(); _shellPath = path.isEmpty ? nil : path; lock.unlock()
+    }
+    private static func shellPath() -> String? {
+        lock.lock(); defer { lock.unlock() }; return _shellPath
+    }
+
     private static func encode(stdout: String, stderr: String, exitCode: Int32) -> String {
         let obj: [String: Any] = ["stdout": stdout, "stderr": stderr, "exitCode": Int(exitCode)]
         let data = (try? JSONSerialization.data(withJSONObject: obj)) ?? Data()
@@ -87,6 +98,9 @@ enum CommandRunner {
         proc.arguments = [executable] + args
         if !cwd.isEmpty { proc.currentDirectoryURL = URL(fileURLWithPath: cwd) }
         var environment = ProcessInfo.processInfo.environment
+        // Use the shell's PATH so Homebrew/pyenv/npm tools resolve; a generator's
+        // own env still wins if it sets PATH explicitly.
+        if let path = shellPath() { environment["PATH"] = path }
         for (k, v) in env { environment[k] = v }
         proc.environment = environment
 

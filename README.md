@@ -40,11 +40,10 @@ macOS 14+ and zsh.
 
 ## Configure
 
-Via the Settings window or `~/.config/tine/config.json`: font + size, max rows,
-accent, glass, command-name completion, and the local specs directory.
-
-Drop your own Fig `.js` specs under `~/.tine/specs/` to teach tine your commands —
-in either of two folders:
+Everything lives under `~/.config/tine/`: `config.json` (also editable in the
+Settings window — font + size, max rows, accent, glass, command-name completion)
+and your own Fig `.js` specs under `~/.config/tine/specs/` (add more locations in
+Settings). Each spec location has two folders:
 
 - **`override/<cmd>.js`** fully replaces a command's spec.
 - **`extend/<cmd>.js`** merges *additively* onto the pack's spec — adds

@@ -8,6 +8,7 @@ struct SettingsView: View {
     // Re-read externally-owned state (Accessibility grant, login item) so the UI
     // reflects changes made outside the app without needing a relaunch.
     @State private var axTrusted = AXCaret.isTrusted
+    @State private var selectedSpecDir: Int?
     @State private var startAtLogin = SMAppService.mainApp.status == .enabled
     private let refresh = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
 
@@ -93,14 +94,26 @@ struct SettingsView: View {
 
             Section("Your specs") {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Drop Fig `.js` specs in `override/<cmd>.js` (replaces a spec) or `extend/<cmd>.js` (adds to it) under this folder. Restart tine after changing this.")
+                    Text("In each folder, drop Fig `.js` specs in `override/<cmd>.js` (replaces a spec) or `extend/<cmd>.js` (adds to it). Earlier folders win. Restart tine after changing.")
                         .font(.caption).foregroundStyle(.secondary)
-                    HStack {
-                        TextField("Local specs folder", text: bind(\.localSpecsDir))
-                            .textFieldStyle(.roundedBorder)
-                            .font(.caption.monospaced())
-                        Button("Reveal") { revealLocalSpecs() }
+                    List(selection: $selectedSpecDir) {
+                        ForEach(state.config.localSpecsDirs.indices, id: \.self) { i in
+                            TextField("Spec folder", text: bindDir(i),
+                                      prompt: Text(verbatim: "~/.config/tine/specs"))
+                                .font(.caption.monospaced())
+                        }
                     }
+                    .listStyle(.bordered(alternatesRowBackgrounds: true))
+                    .frame(height: 92)
+                    HStack(spacing: 2) {
+                        Button { addDir() } label: { Image(systemName: "plus") }
+                        Button { removeSelectedDir() } label: { Image(systemName: "minus") }
+                            .disabled(selectedSpecDir == nil || state.config.localSpecsDirs.count <= 1)
+                        Spacer()
+                        Button("Reveal") { revealSelectedDir() }
+                            .disabled(selectedSpecDir == nil)
+                    }
+                    .buttonStyle(.borderless)
                 }
             }
 
@@ -162,9 +175,32 @@ struct SettingsView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(s, forType: .string)
     }
-    private func revealLocalSpecs() {
-        let dir = state.config.localSpecsDirExpanded
-        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    /// Two-way binding to one spec-folder path (writing through config saves it).
+    private func bindDir(_ i: Int) -> Binding<String> {
+        Binding(
+            get: { state.config.localSpecsDirs.indices.contains(i) ? state.config.localSpecsDirs[i] : "" },
+            set: { if state.config.localSpecsDirs.indices.contains(i) { state.config.localSpecsDirs[i] = $0 } }
+        )
+    }
+    private func addDir() {
+        state.config.localSpecsDirs.append("")
+        selectedSpecDir = state.config.localSpecsDirs.count - 1
+    }
+    private func removeSelectedDir() {
+        guard let i = selectedSpecDir, state.config.localSpecsDirs.indices.contains(i) else { return }
+        state.config.localSpecsDirs.remove(at: i)
+        selectedSpecDir = nil
+    }
+    private func revealSelectedDir() {
+        guard let i = selectedSpecDir, state.config.localSpecsDirs.indices.contains(i) else { return }
+        revealSpecs(state.config.localSpecsDirs[i])
+    }
+    private func revealSpecs(_ path: String) {
+        let dir = (path as NSString).expandingTildeInPath
+        guard !dir.isEmpty else { return }
+        for sub in ["override", "extend"] {
+            try? FileManager.default.createDirectory(atPath: "\(dir)/\(sub)", withIntermediateDirectories: true)
+        }
         NSWorkspace.shared.open(URL(fileURLWithPath: dir))
     }
 }

@@ -10,11 +10,15 @@ struct TineConfig: Codable, Equatable {
     var firstTokenCompletion: Bool = true   // complete bare command names
     var showDetail: Bool = false            // Ctrl+K detail pane visible
     var showMenuBarIcon: Bool = true        // status-bar item visible
-    // User's own specs (loaded first, override the pack). Fig's equivalent of ~/.q/specs.
-    var localSpecsDir: String = "\(NSHomeDirectory())/.tine/specs"
+    // User's own spec locations. Each holds override/<cmd>.js (replace) and
+    // extend/<cmd>.js (merge) subfolders. Default lives under ~/.config/tine,
+    // alongside this config; add more (e.g. a team-shared repo) in Settings.
+    var localSpecsDirs: [String] = ["\(NSHomeDirectory())/.config/tine/specs"]
 
-    /// The specs dir with a leading `~` expanded — safe to hand to the file layer.
-    var localSpecsDirExpanded: String { (localSpecsDir as NSString).expandingTildeInPath }
+    /// The spec dirs with a leading `~` expanded — safe to hand to the file layer.
+    var localSpecsDirsExpanded: [String] {
+        localSpecsDirs.map { ($0 as NSString).expandingTildeInPath }
+    }
 
     static let path = "\(NSHomeDirectory())/.config/tine/config.json"
 

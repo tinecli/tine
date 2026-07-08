@@ -21,7 +21,7 @@ final class JSEngine {
     private let ctx = JSContext()!
     private(set) var ready = false
 
-    init(specsDir: String, localSpecsDir: String, resourcesDir: String) {
+    init(specsDir: String, localSpecsDirs: [String], resourcesDir: String) {
         ctx.exceptionHandler = { _, exc in tlog("JS EXC: \(exc?.toString() ?? "?")") }
 
         // Synchronous file read for the spec loader (fread -> __tineReadFile).
@@ -30,13 +30,19 @@ final class JSEngine {
         }
         ctx.setObject(readFile, forKeyedSubscript: "__tineReadFile" as NSString)
         ctx.setObject(specsDir as NSString, forKeyedSubscript: "__tineSpecsDir" as NSString)
-        // User's own specs dir (checked before the pack). Create it if missing.
-        try? FileManager.default.createDirectory(atPath: localSpecsDir, withIntermediateDirectories: true)
-        ctx.setObject(localSpecsDir as NSString, forKeyedSubscript: "__tineLocalSpecsDir" as NSString)
+        // User's own spec locations (merged onto the pack). Create the
+        // override/ + extend/ subfolders so it's obvious where specs go.
+        for d in localSpecsDirs {
+            try? FileManager.default.createDirectory(atPath: "\(d)/override", withIntermediateDirectories: true)
+            try? FileManager.default.createDirectory(atPath: "\(d)/extend", withIntermediateDirectories: true)
+        }
+        ctx.setObject(localSpecsDirs as NSArray, forKeyedSubscript: "__tineLocalSpecsDirs" as NSString)
 
         // Command bridge for dynamic generators (git branch, ls, file paths, ).
         let runCommand: @convention(block) (String) -> String = { CommandRunner.run($0) }
         ctx.setObject(runCommand, forKeyedSubscript: "__tineRun" as NSString)
+        // HOME so the path generators expand `~` (e.g. `cd ~/`).
+        ctx.setObject(NSHomeDirectory() as NSString, forKeyedSubscript: "__tineHome" as NSString)
 
         // Shims are baked into the bundle via esbuild --inject, so this is the
         // single self-contained artifact.

@@ -198,9 +198,24 @@ _tine_send_aliases() {
   IFS= read -r -u "$fd" reply
   exec {fd}>&-
 }
+
+# Send the shell's PATH so the app can run generators (git branch, aws, gh, …)
+# with the same tools the user has — a GUI-launched app otherwise gets only the
+# minimal launchd PATH. Sent every prompt so per-dir PATH (direnv, venvs) tracks.
+_tine_send_path() {
+  [[ -n "$TINE_SOCK" ]] || return
+  zmodload zsh/net/socket 2>/dev/null || return
+  local fd reply
+  zsocket "$TINE_SOCK" 2>/dev/null || return
+  fd=$REPLY
+  print -u "$fd" -r -- "path${_TINE_US}0${_TINE_US}${PWD}${_TINE_US}0;0;0;0;0;0${_TINE_US}${PATH}"
+  IFS= read -r -u "$fd" reply
+  exec {fd}>&-
+}
 autoload -Uz add-zsh-hook 2>/dev/null
 if (( $+functions[add-zsh-hook] )); then
   add-zsh-hook precmd _tine_send_aliases
+  add-zsh-hook precmd _tine_send_path
   add-zsh-hook precmd _tine_cellsize
 fi
 

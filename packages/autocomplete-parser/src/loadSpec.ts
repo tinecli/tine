@@ -251,15 +251,26 @@ export const loadSubcommandCached = async (
     if (!(err instanceof MissingSpecError)) throw err;
   }
 
-  // User specs (GLOBAL commands only — scripts/.fig keep their own resolution),
-  // in two sibling folders under the user specs dir:
-  //   override/<cmd>.js  REPLACES the pack spec (full override)
+  // User specs (GLOBAL commands only — scripts/.fig keep their own resolution).
+  // Each configured location holds, for a command <cmd>:
+  //   <cmd>.js           REPLACES the pack spec — kept for backwards compatibility
+  //   override/<cmd>.js  REPLACES the pack spec (wins over the root file)
   //   extend/<cmd>.js    is MERGED on top additively (keeps the pack, adds to it)
+  // Locations are in priority order: the first with an override wins; every
+  // location's extend is merged (earlier/higher-priority wins name collisions).
   if (source === SpecLocationSource.GLOBAL) {
-    const dir = (globalThis as { __tineLocalSpecsDir?: string }).__tineLocalSpecsDir;
-    if (dir) {
-      const override = await loadUserSpec(specLocation, `${dir}/override`, localLogger);
-      if (override) merged = override;
+    const dirs =
+      (globalThis as { __tineLocalSpecsDirs?: string[] }).__tineLocalSpecsDirs ?? [];
+    for (const dir of dirs) {
+      const override =
+        (await loadUserSpec(specLocation, `${dir}/override`, localLogger)) ??
+        (await loadUserSpec(specLocation, dir, localLogger));
+      if (override) {
+        merged = override;
+        break;
+      }
+    }
+    for (const dir of dirs) {
       const extension = await loadUserSpec(specLocation, `${dir}/extend`, localLogger);
       if (extension) merged = merged ? mergeSubcommand(merged, extension) : extension;
     }
