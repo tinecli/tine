@@ -7,6 +7,9 @@ final class AppState: ObservableObject {
     @Published var cwd = ""
     @Published var suggestions: [Suggestion] = []
     @Published var selectedIndex = 0
+    /// A generator subprocess is still running for the current buffer (e.g. `git
+    /// checkout ` fetching branches). Shows a spinner instead of an empty pane.
+    @Published var isLoading = false
     @Published var config = TineConfig.load() {
         didSet {
             config.save()
@@ -18,6 +21,10 @@ final class AppState: ObservableObject {
     var engine: JSEngine?
 
     var hasSuggestions: Bool { !suggestions.isEmpty }
+
+    /// The panel should be visible when there's something to show — suggestions,
+    /// or a spinner while a generator is still running.
+    var hasContent: Bool { hasSuggestions || isLoading }
 
     /// True when the highlighted row is Fig's "auto-execute" (run the line as-is).
     var selectedIsExecute: Bool {
@@ -43,6 +50,7 @@ final class AppState: ObservableObject {
         suggestions = result?.items ?? []
         searchTerm = result?.searchTerm ?? ""
         selectedIndex = 0
+        isLoading = CommandRunner.isLoading
         return true
     }
 
@@ -58,6 +66,7 @@ final class AppState: ObservableObject {
         suggestions = items
         searchTerm = result?.searchTerm ?? ""
         if selectedIndex >= suggestions.count { selectedIndex = 0 }
+        isLoading = CommandRunner.isLoading
         return changed
     }
 

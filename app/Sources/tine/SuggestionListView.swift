@@ -40,8 +40,12 @@ struct SuggestionListView: View {
         let count = state.suggestions.count
         return ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(state.suggestions.enumerated()), id: \.offset) { i, s in
-                    row(index: i, s: s).id(i)
+                if count == 0 {
+                    loadingRow
+                } else {
+                    ForEach(Array(state.suggestions.enumerated()), id: \.offset) { i, s in
+                        row(index: i, s: s).id(i)
+                    }
                 }
             }
             .scrollTargetLayout()
@@ -51,6 +55,13 @@ struct SuggestionListView: View {
         .frame(height: rowHeight * CGFloat(min(count == 0 ? 1 : count, maxRows)))
         .padding(.vertical, 4)
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        // A generator is still running while more suggestions are already showing:
+        // a small unobtrusive spinner in the corner (Fig-style).
+        .overlay(alignment: .topTrailing) {
+            if state.isLoading && count > 0 {
+                ProgressView().controlSize(.small).scaleEffect(0.6).padding(4)
+            }
+        }
         .onChange(of: state.selectedIndex) { _, sel in keepVisible(sel) }
         .onChange(of: state.suggestions.count) { _, _ in topID = 0 }
     }
@@ -155,6 +166,19 @@ struct SuggestionListView: View {
             out += piece
         }
         return Text(out)
+    }
+
+    /// Shown when the pane is empty but a generator is still running (the panel is
+    /// only presented with no suggestions while `isLoading`).
+    private var loadingRow: some View {
+        HStack(spacing: 7) {
+            ProgressView().controlSize(.small).scaleEffect(0.6).frame(width: 13)
+            Text("Loading…").font(rowFont).foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: rowHeight)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder

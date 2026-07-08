@@ -37,6 +37,13 @@ enum CommandRunner {
         lock.lock(); defer { lock.unlock() }; return _shellPath
     }
 
+    /// True while a generator subprocess is running in the background — the last
+    /// suggestion pass asked for output that wasn't cached yet. Drives the panel's
+    /// loading spinner.
+    static var isLoading: Bool {
+        lock.lock(); defer { lock.unlock() }; return !inflight.isEmpty
+    }
+
     private static func encode(stdout: String, stderr: String, exitCode: Int32) -> String {
         let obj: [String: Any] = ["stdout": stdout, "stderr": stderr, "exitCode": Int(exitCode)]
         let data = (try? JSONSerialization.data(withJSONObject: obj)) ?? Data()

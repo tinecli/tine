@@ -74,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     FeedMessage(cursor: req.cursor, cwd: req.cwd, buffer: req.buffer))
                 if changed {
                     self.reflectPanel(buffer: req.buffer)
-                } else if req.buffer.isEmpty || !self.state.hasSuggestions {
+                } else if req.buffer.isEmpty || !self.state.hasContent {
                     self.panel?.hidePanel()
                 } else {
                     self.scheduleIdleHide() // keep visible, don't move
@@ -188,9 +188,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let panel = self.panel, !self.state.buffer.isEmpty else { return }
             self.state.recompute()
             // Content is bound to @Published suggestions, so a visible panel updates
-            // itself; only (re)position when it wasn't showing yet.
-            if self.state.hasSuggestions {
+            // itself; only (re)position when it wasn't showing yet. If the generator
+            // finished with nothing (no suggestions, no longer loading), hide.
+            if self.state.hasContent {
                 if panel.isVisible != true { self.reflectPanel(buffer: self.state.buffer) }
+            } else {
+                panel.hidePanel()
             }
         }
         refreshWork = work
@@ -245,7 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Position/show the panel at the caret, or hide it if there's nothing to show.
     private func reflectPanel(buffer: String) {
         guard let panel else { return }
-        guard !buffer.isEmpty, state.hasSuggestions else { panel.hidePanel(); return }
+        guard !buffer.isEmpty, state.hasContent else { panel.hidePanel(); return }
         // The caret is read one frame late: this handler runs during zsh's
         // line-pre-redraw, before the terminal has drawn the just-typed char, so
         // AX still reports the previous cursor spot (the "first space doesn't
