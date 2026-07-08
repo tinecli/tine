@@ -151,6 +151,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .removeDuplicates()
             .sink { [weak self] visible in self?.statusItem?.isVisible = visible }
             .store(in: &cancellables)
+
+        // A background generator finished with new data — re-run the current
+        // suggestion so late results appear without another keystroke.
+        CommandRunner.onRefresh = { [weak self] in self?.scheduleRefresh() }
+    }
+
+    private var refreshWork: DispatchWorkItem?
+
+    /// Coalesce bursts of background-generator completions into one recompute.
+    private func scheduleRefresh() {
+        refreshWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, let panel = self.panel, !self.state.buffer.isEmpty else { return }
+            self.state.recompute()
+            // Content is bound to @Published suggestions, so a visible panel updates
+            // itself; only (re)position when it wasn't showing yet.
+            if self.state.hasSuggestions {
+                if panel.isVisible != true { self.reflectPanel(buffer: self.state.buffer) }
+            }
+        }
+        refreshWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01, execute: work)
     }
 
     /// Menu-bar item: shows which build is running (name + socket) and gives a

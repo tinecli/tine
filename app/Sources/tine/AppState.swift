@@ -46,6 +46,21 @@ final class AppState: ObservableObject {
         return true
     }
 
+    /// Recompute suggestions for the current buffer without the change guard —
+    /// used when a background generator finishes and we want its results to appear
+    /// even though the buffer didn't change. Returns true if the set changed.
+    @discardableResult
+    func recompute() -> Bool {
+        guard !buffer.isEmpty else { return false }
+        let result = engine?.suggest(line: buffer, cursor: cursor, cwd: cwd)
+        let items = result?.items ?? []
+        let changed = items.count != suggestions.count
+        suggestions = items
+        searchTerm = result?.searchTerm ?? ""
+        if selectedIndex >= suggestions.count { selectedIndex = 0 }
+        return changed
+    }
+
     /// Fig's Tab: insert the longest common prefix of the visible suggestions,
     /// if it extends past what's typed. Returns new (buffer, cursor) or nil.
     func commonPrefix() -> (buffer: String, cursor: Int)? {

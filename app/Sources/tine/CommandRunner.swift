@@ -21,6 +21,11 @@ enum CommandRunner {
     private static let queue = DispatchQueue(label: "dev.gustaf.tine.generator", attributes: .concurrent)
     private static let ttl: TimeInterval = 3
 
+    /// Called (on the main thread) when a background refresh produced *new* output,
+    /// so the app can re-run the current suggestion and surface late generator
+    /// results without waiting for the next keystroke.
+    static var onRefresh: (() -> Void)?
+
     private static func encode(stdout: String, stderr: String, exitCode: Int32) -> String {
         let obj: [String: Any] = ["stdout": stdout, "stderr": stderr, "exitCode": Int(exitCode)]
         let data = (try? JSONSerialization.data(withJSONObject: obj)) ?? Data()
@@ -58,12 +63,18 @@ enum CommandRunner {
                 let result = execute(executable: executable, args: args, cwd: cwd,
                                      env: env, timeoutMs: timeoutMs)
                 lock.lock()
+                let prev = cache[key]?.output
                 cache[key] = (result, Date())
                 inflight.remove(key)
                 if cache.count > 128 {
                     cache = cache.filter { Date().timeIntervalSince($0.value.at) < ttl }
                 }
                 lock.unlock()
+                // New data the current suggestion pass didn't have — ask the app to
+                // re-run it so late results (e.g. a fresh `ls` after `cd`) appear.
+                if result != prev, let refresh = onRefresh {
+                    DispatchQueue.main.async(execute: refresh)
+                }
             }
         }
         return hit?.output ?? encode(stdout: "", stderr: "", exitCode: 0)
