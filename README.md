@@ -31,8 +31,8 @@ open -a Tine                                              # launch once (install
 ```
 
 Grant **Accessibility** (System Settings → Privacy & Security → Accessibility) so the
-panel can track your cursor. The app is Developer ID signed but not yet notarized, so on
-first launch use **right-click → Open** (or approve it in System Settings).
+panel can track your cursor. Released builds are Developer ID signed & notarized, so
+they launch normally.
 
 ## Requirements
 
@@ -52,15 +52,17 @@ so the panel can track your cursor. Works in Terminal, iTerm2, VSCode, and Ghost
 ## Releasing
 
 Tag a version and push — the `Release` GitHub Action builds the spec pack + app,
-packages a dmg (ad-hoc signed), publishes a GitHub Release, and bumps the Homebrew
-cask in `gustaferiksson/homebrew-tap`:
+packages a Developer ID signed + notarized dmg, publishes a GitHub Release, and bumps
+the Homebrew cask in `gustaferiksson/homebrew-tap`:
 
 ```sh
 git tag v0.1.1 && git push origin v0.1.1
 ```
 
-(Set the repo secret `TAP_GITHUB_TOKEN` — a PAT with write access to the tap — for the
-cask bump to run.)
+Repo secrets: `APPLE_CERT_P12` (base64 of the exported Developer ID Application cert) +
+`APPLE_CERT_PASSWORD`, `NOTARY_APPLE_ID` + `NOTARY_PASSWORD` (an app-specific password),
+and `TAP_GITHUB_TOKEN` (a PAT with write access to the tap) for the cask bump. Without
+the Apple secrets the build falls back to ad-hoc signing.
 
 To build a dmg locally instead:
 
@@ -69,8 +71,8 @@ scripts/package.sh                       # → dist/Tine.app + dist/Tine-<versio
 ```
 
 `package.sh` Developer ID signs with a hardened runtime + JIT entitlement
-(JavaScriptCore needs it); set `TINE_SIGN_ID=-` for an ad-hoc build. Notarization is a
-separate step (Apple ID credentials required).
+(JavaScriptCore needs it); set `TINE_SIGN_ID=-` for an ad-hoc build. It notarizes +
+staples too when `NOTARY_APPLE_ID`/`NOTARY_TEAM_ID`/`NOTARY_PASSWORD` are set.
 
 ## Configure
 

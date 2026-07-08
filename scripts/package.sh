@@ -1,8 +1,32 @@
 #!/usr/bin/env bash
-# Build a distributable, signed (not notarized) Tine.app + .dmg.
-# Notarization needs Apple ID creds (task #6) and is done separately.
+# Build a distributable, Developer ID signed (+ optionally notarized) Tine.app + .dmg.
 #   TINE_VERSION=0.1.0 scripts/package.sh [--no-specs]
+# Signing: TINE_SIGN_ID="-" → ad-hoc; else Developer ID (default).
+# Notarization (skipped unless all three are set): NOTARY_APPLE_ID, NOTARY_TEAM_ID,
+# NOTARY_PASSWORD (an app-specific password). Staples the ticket into app + dmg so
+# first launch is Gatekeeper-clean even offline.
 set -euo pipefail
+
+# Notarize + staple a .app or .dmg, if notary creds are present (else no-op).
+notarize() {
+  local path="$1" zip
+  if [ -z "${NOTARY_APPLE_ID:-}" ] || [ -z "${NOTARY_TEAM_ID:-}" ] || [ -z "${NOTARY_PASSWORD:-}" ]; then
+    echo "  (notary creds unset — skipping notarization of $(basename "$path"))"
+    return 0
+  fi
+  echo "› notarize $(basename "$path") — this can take a minute"
+  if [[ "$path" == *.app ]]; then
+    zip="$(mktemp -d)/$(basename "$path").zip"
+    ditto -c -k --keepParent "$path" "$zip"
+    xcrun notarytool submit "$zip" --apple-id "$NOTARY_APPLE_ID" \
+      --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD" --wait
+    rm -rf "$(dirname "$zip")"
+  else
+    xcrun notarytool submit "$path" --apple-id "$NOTARY_APPLE_ID" \
+      --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD" --wait
+  fi
+  xcrun stapler staple "$path"
+}
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APPDIR="$ROOT/app"
 DIST="$ROOT/dist"
@@ -68,6 +92,10 @@ else
 fi
 codesign --verify --strict --verbose=1 "$APP" 2>&1 | tail -2
 
+# Notarize + staple the app before it goes into the dmg, so the copy dragged to
+# /Applications launches cleanly even offline.
+notarize "$APP"
+
 echo "› dmg"
 DMG="$DIST/Tine-${VERSION}.dmg"
 rm -f "$DMG"
@@ -77,8 +105,9 @@ ln -s /Applications "$STAGE/Applications"
 hdiutil create -volname "Tine ${VERSION}" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
 rm -rf "$STAGE"
 
+# Notarize + staple the dmg too (it's what users download from the release).
+notarize "$DMG"
+
 echo ""
 echo "✅ $APP"
 echo "✅ $DMG ($(du -h "$DMG" | cut -f1))"
-echo "Not notarized yet — for Gatekeeper-clean distribution, run notarytool with an"
-echo "Apple ID + app-specific password (task #6), then: xcrun stapler staple \"$APP\""
