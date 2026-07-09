@@ -229,12 +229,18 @@ tine() {
         || print -u2 -- "tine: could not reach the app (is Tine installed?)"
       ;;
     restart)
-      # Kill the release binary (named `tine`; leaves a `tine-dev` build alone),
-      # wait for it to exit, then relaunch by bundle id.
+      # Relaunch the *exact* bundle that's running, by path — never `open -b
+      # <bundleid>`, which LaunchServices may resolve to a stale registered copy
+      # (e.g. an old Caskroom backup left by `brew upgrade`). Derive the .app from
+      # the running release binary (named `tine`; leaves a `tine-dev` build alone).
+      local pid app
+      pid=$(pgrep -x tine 2>/dev/null | head -1)
+      [[ -n "$pid" ]] && app=${${(f)"$(ps -p "$pid" -o comm= 2>/dev/null)"}%/Contents/MacOS/*}
+      [[ -n "$app" && -d "$app" ]] || app=/Applications/Tine.app
       pkill -x tine 2>/dev/null
       local i=0
       while pgrep -x tine >/dev/null 2>&1 && (( i < 30 )); do sleep 0.1; (( i++ )); done
-      if open -b dev.gustaf.tine 2>/dev/null || open -a Tine 2>/dev/null; then
+      if [[ -d "$app" ]] && open "$app" 2>/dev/null; then
         print -- "tine: restarted"
       else
         print -u2 -- "tine: could not launch the app (is Tine installed?)"; return 1
