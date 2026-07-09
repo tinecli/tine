@@ -10,12 +10,29 @@ final class SpecInstaller: ObservableObject {
         case idle, running, done(String), failed(String)
     }
     @Published var status: Status = .idle
+    /// True when the fork's pack is newer than what's installed (cached from a
+    /// background HEAD check). Surfaced by `tine doctor`. Fails closed: stays
+    /// false when GitHub is unreachable, so doctor never nags on a flaky network.
+    @Published var updateAvailable = false
 
     /// Pinned HTTPS release asset — same trust root as the notarized app. Never
     /// make this a user-configurable host.
     nonisolated static let packURL = URL(string:
         "https://github.com/tinecli/autocomplete/releases/download/specs/specs.tar.gz")!
     nonisolated static let specsDir = "\(NSHomeDirectory())/.local/share/tine/specs"
+    /// The installed pack's ETag, kept *beside* (not inside) specsDir — the install
+    /// swap wipes specsDir, so a marker in it wouldn't survive.
+    nonisolated static let markerPath = "\(NSHomeDirectory())/.local/share/tine/.pack-etag"
+
+    /// Plain status line for the `tine install` poll (installStatus socket case).
+    var statusLine: String {
+        switch status {
+        case .idle: return "idle"
+        case .running: return "running"
+        case .done(let m): return "done:\(m)"
+        case .failed(let m): return "failed:\(m)"
+        }
+    }
 
     /// Called after a successful install (main thread) so the app can refresh.
     var onInstalled: (() -> Void)?
@@ -45,13 +62,23 @@ final class SpecInstaller: ObservableObject {
         return clis.count
     }
 
+    /// Download + install, but skip the download when the installed pack already
+    /// matches the fork's (compared by ETag). Drives both first-run and `tine
+    /// install`; the shell polls `statusLine` while this runs.
     func install() {
         guard status != .running else { return }
         status = .running
         Task {
             do {
+                let remote = try? await Self.remoteETag()
+                if let remote, remote == Self.storedETag(), Self.isInstalled() {
+                    self.updateAvailable = false
+                    self.status = .done("specs up to date (\(Self.installedCount()) commands)")
+                    return
+                }
                 let count = try await Self.downloadAndInstall()
-                self.status = .done("\(count) commands")
+                self.updateAvailable = false
+                self.status = .done("specs updated (\(count) commands)")
                 self.onInstalled?()
             } catch {
                 self.status = .failed(error.localizedDescription)
@@ -59,10 +86,40 @@ final class SpecInstaller: ObservableObject {
         }
     }
 
+    /// Background HEAD check to populate `updateAvailable` for `tine doctor`.
+    /// Fails closed — any error leaves the flag untouched.
+    func checkForUpdate() {
+        Task {
+            guard Self.isInstalled(), let remote = try? await Self.remoteETag() else { return }
+            // No marker yet (installed before ETag tracking): adopt the current pack
+            // as the baseline instead of nagging everyone once, post-upgrade.
+            guard let stored = Self.storedETag() else {
+                try? remote.write(toFile: Self.markerPath, atomically: true, encoding: .utf8)
+                return
+            }
+            self.updateAvailable = remote != stored
+        }
+    }
+
+    /// The current pack asset's ETag (HEAD, following GitHub's redirect to the
+    /// object store). Content-derived and stable, so it changes exactly when the
+    /// fork republishes. Returns nil on any non-200 / network failure.
+    nonisolated private static func remoteETag() async throws -> String? {
+        var req = URLRequest(url: packURL)
+        req.httpMethod = "HEAD"
+        let (_, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+        return http.value(forHTTPHeaderField: "Etag")
+    }
+
+    nonisolated private static func storedETag() -> String? {
+        try? String(contentsOfFile: markerPath, encoding: .utf8)
+    }
+
     nonisolated private static func downloadAndInstall() async throws -> Int {
         let fm = FileManager.default
         let (tmp, resp) = try await URLSession.shared.download(from: packURL)
-        guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
+        guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
             throw NSError(domain: "tine", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "spec download failed (HTTP error)"])
         }
@@ -88,6 +145,10 @@ final class SpecInstaller: ObservableObject {
                                withIntermediateDirectories: true)
         try? fm.removeItem(atPath: specsDir)
         try fm.moveItem(atPath: staging, toPath: specsDir)
+        // Record the ETag so the next check can tell if the fork has moved on.
+        if let etag = http.value(forHTTPHeaderField: "Etag") {
+            try? etag.write(toFile: markerPath, atomically: true, encoding: .utf8)
+        }
         return installedCount()
     }
 

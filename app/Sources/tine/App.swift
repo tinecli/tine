@@ -22,9 +22,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory) // no dock icon
         TineLog.reset()
         Self.installShellIntegration()
-        // No dock/menu bar: opening the app opens the window; closing it leaves
-        // the autocomplete agent running (reopen by launching the app again).
-        DispatchQueue.main.async { self.showMainWindow() }
+        // No dock/menu bar: closing the window leaves the autocomplete agent
+        // running (reopen by launching the app again). Opening the window on
+        // launch is opt-out via Settings.
+        if state.config.openWindowAtStart {
+            DispatchQueue.main.async { self.showMainWindow() }
+        }
         let panel = SuggestionPanel(state: state)
         self.panel = panel
 
@@ -45,14 +48,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 localSpecsDirs: state.config.localSpecsDirsExpanded,
                                 resourcesDir: resources)
 
-        // First run (or a wiped pack): download it in the background. Suggestions
-        // are just empty until it lands; nothing blocks.
-        if !SpecInstaller.isInstalled() {
-            let installer = SpecInstaller()
-            installer.onInstalled = { [weak self] in self?.scheduleRefresh() }
+        // Keep the installer around so `tine install` / doctor can use it. First
+        // run (or a wiped pack): download in the background — suggestions are just
+        // empty until it lands, nothing blocks. Otherwise, quietly check whether
+        // the fork has a newer pack so doctor can flag it.
+        let installer = SpecInstaller()
+        installer.onInstalled = { [weak self] in self?.scheduleRefresh() }
+        if SpecInstaller.isInstalled() {
+            installer.checkForUpdate()
+        } else {
             installer.install()
-            specInstaller = installer
         }
+        specInstaller = installer
 
         state.engine?.setFirstTokenEnabled(state.config.firstTokenCompletion)
 
@@ -126,10 +133,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "showDashboard":
                 self.showMainWindow()   // handler already runs on the main thread
                 return "0"
+            case "install":
+                // Kick the (conditional) download off the main thread; the shell
+                // polls `installStatus` for progress. Never blocks this handler.
+                self.specInstaller?.install()
+                return "started"
+            case "installStatus":
+                return self.specInstaller?.statusLine ?? "idle"
             case "doctor":
                 // Health report for `tine doctor` (semicolon-joined key=value).
                 let v = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
-                return "ax=\(AXCaret.isTrusted ? 1 : 0);specs=\(SpecInstaller.installedCount());version=\(v)"
+                let update = self.specInstaller?.updateAvailable == true ? 1 : 0
+                return "ax=\(AXCaret.isTrusted ? 1 : 0);specs=\(SpecInstaller.installedCount());version=\(v);update=\(update)"
             case "aliases":
                 // buffer = the shell's `alias` output, lines joined by US.
                 var map: [String: String] = [:]

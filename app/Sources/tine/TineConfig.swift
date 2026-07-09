@@ -10,6 +10,7 @@ struct TineConfig: Codable, Equatable {
     var firstTokenCompletion: Bool = true   // complete bare command names
     var showDetail: Bool = false            // Ctrl+K detail pane visible
     var showMenuBarIcon: Bool = true        // status-bar item visible
+    var openWindowAtStart: Bool = true      // open the dashboard window on launch
     // User's own spec locations. Each holds override/<cmd>.js (replace) and
     // extend/<cmd>.js (merge) subfolders. Default lives under ~/.config/tine,
     // alongside this config; add more (e.g. a team-shared repo) in Settings.

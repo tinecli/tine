@@ -44,6 +44,7 @@ struct SettingsView: View {
                 Toggle("Start at login", isOn: $startAtLogin)
                     .onChange(of: startAtLogin) { _, on in setStartAtLogin(on) }
                 Toggle("Menu bar icon", isOn: bind(\.showMenuBarIcon))
+                Toggle("Open window at start", isOn: bind(\.openWindowAtStart))
             }
 
             Section("Appearance") {

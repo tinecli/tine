@@ -10,6 +10,11 @@
 : ${TINE_SOCK:="$HOME/.local/share/tine/tine.sock"}
 export TINE_SOCK
 
+# This file's path + mtime, so `tine restart` can re-source it after an upgrade
+# replaced it (and skip re-sourcing when it's unchanged).
+_TINE_SRC=${(%):-%x}
+zmodload zsh/stat 2>/dev/null && zstat -A _TINE_SRC_MTIME +mtime "$_TINE_SRC" 2>/dev/null
+
 _TINE_US=$'\x1f'
 _TINE_ACTIVE=0
 _TINE_REPLY=""
@@ -215,6 +220,7 @@ _tine_send_path() {
 # `tine` CLI — manage the app from the shell.
 #   tine dashboard   open the dashboard window
 #   tine doctor      check tine is set up correctly
+#   tine restart     quit and relaunch the app
 tine() {
   emulate -L zsh
   case "$1" in
@@ -222,14 +228,65 @@ tine() {
       _tine_req showDashboard >/dev/null 2>&1 || open -a Tine 2>/dev/null \
         || print -u2 -- "tine: could not reach the app (is Tine installed?)"
       ;;
+    restart)
+      # Kill the release binary (named `tine`; leaves a `tine-dev` build alone),
+      # wait for it to exit, then relaunch by bundle id.
+      pkill -x tine 2>/dev/null
+      local i=0
+      while pgrep -x tine >/dev/null 2>&1 && (( i < 30 )); do sleep 0.1; (( i++ )); done
+      if open -b dev.gustaf.tine 2>/dev/null || open -a Tine 2>/dev/null; then
+        print -- "tine: restarted"
+      else
+        print -u2 -- "tine: could not launch the app (is Tine installed?)"; return 1
+      fi
+      # Re-source only if an upgrade replaced this file since we loaded it.
+      _tine_resource_if_changed
+      ;;
+    install) _tine_install ;;
     doctor) _tine_doctor ;;
     ""|help|-h|--help)
       print -- "usage: tine <command>"
       print -- "  dashboard   open the dashboard window"
       print -- "  doctor      check tine is set up correctly"
+      print -- "  install     download the latest completion specs"
+      print -- "  restart     quit and relaunch the app"
       ;;
     *) print -u2 -- "tine: unknown command: $1 (try: tine help)"; return 1 ;;
   esac
+}
+
+# Re-source this file if an upgrade replaced it since it was loaded. Safe to run
+# repeatedly: hook registration (add-zsh-hook / add-zle-hook-widget) and the
+# Up/Down widget capture all dedupe on re-source.
+_tine_resource_if_changed() {
+  emulate -L zsh
+  [[ -n "$_TINE_SRC" && -f "$_TINE_SRC" ]] || return 0
+  local now
+  zmodload zsh/stat 2>/dev/null && zstat -A now +mtime "$_TINE_SRC" 2>/dev/null
+  [[ -n "$now" && "$now" != "$_TINE_SRC_MTIME" ]] || return 0
+  source "$_TINE_SRC" && print -- "tine: reloaded shell integration"
+}
+
+# Ask the app to fetch the latest spec pack (it downloads only if there's a newer
+# one), showing a spinner while it works. The download runs in the app off the
+# main thread; we poll its status over the socket.
+_tine_install() {
+  emulate -L zsh
+  if ! _tine_req install 2>/dev/null; then
+    print -u2 -- "tine: could not reach the app (is it running? try: tine restart)"; return 1
+  fi
+  local spin='|/-\' i=0
+  printf 'tine: checking for spec updates… '
+  while true; do
+    sleep 0.2
+    _tine_req installStatus 2>/dev/null || { printf '\r\e[K'; print -u2 -- "tine: lost contact with the app"; return 1 }
+    case "$_TINE_REPLY" in
+      running)   printf '\rtine: downloading specs… %s ' "${spin:$((i%4)):1}"; (( i++ )) ;;
+      done:*)    printf '\rtine: %s\e[K\n' "${_TINE_REPLY#done:}"; return 0 ;;
+      failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${_TINE_REPLY#failed:}"; return 1 ;;
+      *)         printf '\r\e[K'; return 0 ;;
+    esac
+  done
 }
 
 _tine_doctor() {
@@ -243,12 +300,13 @@ _tine_doctor() {
     print -- "  $no not in .zshrc — add: source ~/.local/share/tine/tine.zsh"
   fi
   if [[ -n "$TINE_SOCK" ]] && _tine_req doctor 2>/dev/null && [[ -n "$_TINE_REPLY" ]]; then
-    local ax specs version kv
+    local ax specs version update kv
     for kv in ${(s.;.)_TINE_REPLY}; do
       case $kv in
         (ax=*) ax=${kv#ax=} ;;
         (specs=*) specs=${kv#specs=} ;;
         (version=*) version=${kv#version=} ;;
+        (update=*) update=${kv#update=} ;;
       esac
     done
     print -- "  $ok app running (v${version})"
@@ -257,7 +315,11 @@ _tine_doctor() {
     else
       print -- "  $no Accessibility not granted — System Settings › Privacy & Security › Accessibility"
     fi
-    print -- "  $ok ${specs} CLIs available"
+    if [[ "$update" == 1 ]]; then
+      print -- "  $no ${specs} CLIs available — new specs to fetch (run: tine install)"
+    else
+      print -- "  $ok ${specs} CLIs available"
+    fi
   else
     print -- "  $no app not reachable — launch it with: tine dashboard"
   fi
