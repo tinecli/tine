@@ -4,7 +4,6 @@ import Foundation
 struct TineConfig: Codable, Equatable {
     var maxVisibleRows: Int = 12
     var glass: Bool = true          // Liquid Glass vs. a solid panel
-    var accentTintName: String = "blue"
     var fontName: String = ""       // "" = system monospaced; else a named font
     var fontSize: Double = 12
     var firstTokenCompletion: Bool = true   // complete bare command names

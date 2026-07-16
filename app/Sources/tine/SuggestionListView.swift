@@ -14,16 +14,8 @@ struct SuggestionListView: View {
             : .custom(state.config.fontName, size: fontSize)
     }
 
-    private var tint: Color {
-        switch state.config.accentTintName {
-        case "purple": return .purple
-        case "green": return .green
-        case "pink": return .pink
-        case "orange": return .orange
-        case "teal": return .teal
-        default: return .blue
-        }
-    }
+    // The user's system accent color (System Settings › Appearance).
+    private var tint: Color { .accentColor }
 
     /// Scroll only when the selection crosses an edge of the visible window,
     /// pinning it there — so it can't run off the pane (Finder-style).
@@ -86,7 +78,11 @@ struct SuggestionListView: View {
         // compile time so older SDKs (CI runners) fall back to the material.
         #if compiler(>=6.2)
         if #available(macOS 26.0, *), state.config.glass {
-            content.glassEffect(.regular.tint(tint.opacity(0.12)), in: RoundedRectangle(cornerRadius: 12))
+            // Apple hosts glass in a container (perf + correct edge/blend rendering);
+            // the material draws its own edge, so we add no border of our own.
+            GlassEffectContainer {
+                content.glassEffect(in: RoundedRectangle(cornerRadius: 12))
+            }
         } else {
             materialContent
         }

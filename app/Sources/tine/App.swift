@@ -8,10 +8,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var specInstaller: SpecInstaller?
     private var panel: SuggestionPanel?
     private var server: SocketServer?
-    private var mainWindow: NSWindow?
+    /// The SwiftUI dashboard window, captured once it exists (WindowAccessor), so
+    /// AppKit can reopen it directly — independent of the menu-bar item, which the
+    /// user can hide.
+    weak var dashboardWindow: NSWindow?
     private let frecency = Frecency()
     private var idleHide: DispatchWorkItem?
-    private var statusItem: NSStatusItem?
     private var sockPath = ""
     // Latest shell positioning feed: prompt-anchor cell + grid + cell size (device
     // px), for computing the caret in canvas terminals (Ghostty) where AX can't.
@@ -26,7 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // running (reopen by launching the app again). Opening the window on
         // launch is opt-out via Settings.
         if state.config.openWindowAtStart {
-            DispatchQueue.main.async { self.showMainWindow() }
+            // Defer so the MenuBarExtra bridge is mounted to receive the open.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { self.openDashboard() }
         }
         let panel = SuggestionPanel(state: state)
         self.panel = panel
@@ -143,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 CommandRunner.setShellPath(req.buffer)
                 return "0"
             case "showDashboard":
-                self.showMainWindow()   // handler already runs on the main thread
+                self.openDashboard()
                 return "0"
             case "install":
                 // Kick the (conditional) download off the main thread; the shell
@@ -194,14 +197,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         AXCaret.ensureTrusted()
         tlog("listening on \(sockPath) (AX trusted: \(AXCaret.isTrusted))")
-        setupStatusItem()
-
-        // Show/hide the menu-bar item live when the setting changes.
-        state.$config
-            .map(\.showMenuBarIcon)
-            .removeDuplicates()
-            .sink { [weak self] visible in self?.statusItem?.isVisible = visible }
-            .store(in: &cancellables)
 
         // A background generator finished with new data — re-run the current
         // suggestion so late results appear without another keystroke.
@@ -228,43 +223,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.01, execute: work)
     }
-
-    /// Menu-bar item: shows which build is running (name + socket) and gives a
-    /// way to open the dashboard or quit — the app is otherwise invisible
-    /// (.accessory). Dev builds get a distinct icon so two menu-bar items (dev +
-    /// released) are tellable apart.
-    private func setupStatusItem() {
-        let name = (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
-            ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? "Tine"
-        let isDev = Bundle.main.bundleIdentifier?.hasSuffix(".dev") ?? false
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        // chevron.forward.2 echoes the app icon's forward-motion mark. Dev builds
-        // keep a distinct hammer so two menu-bar items are tellable apart.
-        item.button?.image = NSImage(
-            systemSymbolName: isDev ? "hammer.fill" : "chevron.forward.2", accessibilityDescription: name)
-        item.button?.toolTip = name
-        item.isVisible = state.config.showMenuBarIcon
-
-        let menu = NSMenu()
-        let header = NSMenuItem(title: name, action: nil, keyEquivalent: "")
-        header.isEnabled = false
-        menu.addItem(header)
-        let sock = NSMenuItem(title: "socket: \((sockPath as NSString).lastPathComponent)", action: nil, keyEquivalent: "")
-        sock.isEnabled = false
-        menu.addItem(sock)
-        menu.addItem(.separator())
-        let open = NSMenuItem(title: "Open Dashboard", action: #selector(statusOpenDashboard), keyEquivalent: "")
-        open.target = self
-        menu.addItem(open)
-        let quit = NSMenuItem(title: "Quit \(name)", action: #selector(statusQuit), keyEquivalent: "q")
-        quit.target = self
-        menu.addItem(quit)
-        item.menu = menu
-        statusItem = item
-    }
-
-    @objc private func statusOpenDashboard() { showMainWindow() }
-    @objc private func statusQuit() { NSApp.terminate(nil) }
 
     @objc private func appActivated(_ note: Notification) {
         let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
@@ -352,12 +310,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Relaunching the app (open again) re-shows the GUI.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        showMainWindow()
+        openDashboard()
         return true
     }
 
-    /// Show (or create) the settings window. Managed in AppKit because a menuless
-    /// (.accessory) app can't reliably drive SwiftUI's Settings scene.
+    /// Show the dashboard. Prefer the captured window (works even with the menu-bar
+    /// item hidden); fall back to the menu-bar bridge the first time, before the
+    /// window has ever been created.
+    func openDashboard() {
+        if let w = dashboardWindow {
+            w.makeKeyAndOrderFront(nil)
+        } else {
+            NotificationCenter.default.post(name: .tineOpenDashboard, object: nil)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     /// Distributable first-run: install the bundled shell integration to the fixed
     /// path the user sources, if it isn't there yet (dev-run copies it directly).
     private static func installShellIntegration() {
@@ -371,30 +339,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // to pick it up in already-running sessions.)
         try? data.write(to: URL(fileURLWithPath: dest))
     }
+}
 
-    private func showMainWindow() {
-        if mainWindow == nil {
-            let host = NSHostingController(rootView: SettingsView().environmentObject(state))
-            host.sizingOptions = [.preferredContentSize]
-            let win = NSWindow(contentViewController: host)
-            win.title = (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String) ?? "Tine"
-            win.styleMask = [.titled, .closable, .miniaturizable]
-            win.isReleasedWhenClosed = false
-            win.setContentSize(NSSize(width: 560, height: 600))
-            win.center()
-            mainWindow = win
-        }
-        mainWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
+extension Notification.Name {
+    /// Posted by AppKit (socket `tine dashboard`, launch, reopen) to open the
+    /// SwiftUI window — SwiftUI has no AppKit API to open a scene window, so the
+    /// menu-bar label bridges it to the `openWindow` action.
+    static let tineOpenDashboard = Notification.Name("tine.openDashboard")
 }
 
 @main
 struct TineApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    static let dashboardID = "dashboard"
 
-    // The window is managed in AppDelegate; this scene just satisfies `App`.
     var body: some Scene {
-        Settings { EmptyView() }
+        // SwiftUI owns the window, so it gets the native Liquid Glass sidebar with
+        // the traffic lights inset into it (no hand-built NSWindow).
+        Window("Tine", id: Self.dashboardID) {
+            SettingsView().environmentObject(delegate.state)
+        }
+        .windowToolbarStyle(.unified)
+        .windowResizability(.contentMinSize)
+
+        MenuBarExtra(isInserted: Binding(
+            get: { delegate.state.config.showMenuBarIcon },
+            set: { delegate.state.config.showMenuBarIcon = $0 }
+        )) {
+            DashboardMenu()
+        } label: {
+            MenuBarLabel()
+        }
+    }
+}
+
+/// Menu-bar icon. Also the AppKit→SwiftUI bridge: it's always present, so its
+/// `openWindow` can service open requests from the socket / launch / reopen.
+private struct MenuBarLabel: View {
+    @Environment(\.openWindow) private var openWindow
+    private var isDev: Bool { Bundle.main.bundleIdentifier?.hasSuffix(".dev") ?? false }
+    var body: some View {
+        Image(systemName: isDev ? "hammer.fill" : "chevron.forward.2")
+            .onReceive(NotificationCenter.default.publisher(for: .tineOpenDashboard)) { _ in
+                openWindow(id: TineApp.dashboardID)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+    }
+}
+
+private struct DashboardMenu: View {
+    @Environment(\.openWindow) private var openWindow
+    var body: some View {
+        Button("Open Dashboard") {
+            openWindow(id: TineApp.dashboardID)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        Divider()
+        Button("Quit tine") { NSApp.terminate(nil) }
+    }
+}
+
+/// Hands the hosting NSWindow to the delegate so AppKit can reopen the dashboard
+/// without depending on the menu-bar item (which the user can hide).
+struct WindowAccessor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView()
+        DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.dashboardWindow = v.window }
+        return v
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.dashboardWindow = nsView.window }
     }
 }

@@ -10,9 +10,25 @@ struct SettingsView: View {
     @State private var axTrusted = AXCaret.isTrusted
     @State private var selectedSpecDir: Int?
     @State private var startAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var pane: Pane? = .general
     private let refresh = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
 
-    private let tints = ["blue", "purple", "green", "pink", "orange", "teal"]
+    /// Sidebar sections of the settings window.
+    enum Pane: String, CaseIterable, Identifiable {
+        case general = "General", appearance = "Appearance", suggestions = "Suggestions"
+        case specs = "Specs", about = "About"
+        var id: String { rawValue }
+        var icon: String {
+            switch self {
+            case .general: return "gearshape"
+            case .appearance: return "paintbrush"
+            case .suggestions: return "text.and.command.macwindow"
+            case .specs: return "shippingbox"
+            case .about: return "info.circle"
+            }
+        }
+    }
+
     // (config value, display name). "" = the system monospaced font.
     private let fonts = [("", "System Monospaced"), ("Menlo", "Menlo"),
                          ("Monaco", "Monaco"), ("SF Mono", "SF Mono"),
@@ -25,112 +41,143 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        let specCount = SpecInstaller.installedCount()
-        Form {
-            Section("Setup") {
-                setupRow("Accessibility", ok: axTrusted,
-                         detail: "Positions the panel at your cursor (Terminal & iTerm).") {
-                    Button("Grant") {
-                        AXCaret.ensureTrusted()
-                        openPane("com.apple.preference.security?Privacy_Accessibility")
-                    }
-                }
-                setupRow("Shell integration", ok: shellInstalled,
-                         detail: shellLine) {
-                    Button("Copy line") { copy(shellLine) }
+        NavigationSplitView {
+            List(selection: $pane) {
+                ForEach(Pane.allCases) { p in
+                    Label(p.rawValue, systemImage: p.icon).tag(p)
                 }
             }
+            .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 220)
+            .navigationTitle("tine")
+        } detail: {
+            Form { paneBody }
+                .formStyle(.grouped)
+                .navigationTitle((pane ?? .general).rawValue)
+        }
+        .frame(minWidth: 440, idealWidth: 620, minHeight: 360, idealHeight: 480)
+        .background(WindowAccessor())
+        .onReceive(refresh) { _ in axTrusted = AXCaret.isTrusted }
+    }
 
-            Section("General") {
-                Toggle("Start at login", isOn: $startAtLogin)
-                    .onChange(of: startAtLogin) { _, on in setStartAtLogin(on) }
-                Toggle("Menu bar icon", isOn: bind(\.showMenuBarIcon))
-                Toggle("Open window at start", isOn: bind(\.openWindowAtStart))
-            }
+    @ViewBuilder private var paneBody: some View {
+        switch pane ?? .general {
+        case .general: generalPane
+        case .appearance: appearancePane
+        case .suggestions: suggestionsPane
+        case .specs: specsPane
+        case .about: aboutPane
+        }
+    }
 
-            Section("Appearance") {
-                Toggle("Liquid glass", isOn: bind(\.glass))
-                Picker("Accent", selection: bind(\.accentTintName)) {
-                    ForEach(tints, id: \.self) { Text($0.capitalized).tag($0) }
-                }
-                Picker("Font", selection: bind(\.fontName)) {
-                    ForEach(fonts, id: \.0) { Text($0.1).tag($0.0) }
-                }
-                LabeledContent("Font size") {
-                    HStack(spacing: 6) {
-                        TextField("", value: bind(\.fontSize), format: .number)
-                            .frame(width: 46).multilineTextAlignment(.trailing)
-                            .textFieldStyle(.roundedBorder)
-                        Stepper("", value: bind(\.fontSize), in: 8...28, step: 1).labelsHidden()
-                    }
-                }
-            }
-
-            Section {
-                LabeledContent("Max rows shown") {
-                    HStack(spacing: 6) {
-                        TextField("", value: bind(\.maxVisibleRows), format: .number)
-                            .frame(width: 46).multilineTextAlignment(.trailing)
-                            .textFieldStyle(.roundedBorder)
-                        Stepper("", value: bind(\.maxVisibleRows), in: 1...40).labelsHidden()
-                    }
-                }
-                Toggle("Complete command names", isOn: bind(\.firstTokenCompletion))
-            } header: {
-                Text("Suggestions")
-            } footer: {
-                Text("↑ ↓ move · Tab inserts the shared prefix · Enter accepts · Esc dismisses · **⌃K** toggles the detail pane")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-
-            Section("Specs") {
-                LabeledContent("Installed",
-                               value: specCount > 0 ? "\(specCount) commands" : "None")
-                HStack(spacing: 10) {
-                    Button("Install / Update Specs") { installer.install() }
-                        .disabled(installer.status == .running)
-                    if installer.status == .running { ProgressView().controlSize(.small) }
-                    installerStatus
+    @ViewBuilder private var generalPane: some View {
+        Section("Setup") {
+            setupRow("Accessibility", ok: axTrusted,
+                     detail: "Positions the panel at your cursor (Terminal & iTerm).") {
+                Button("Grant") {
+                    AXCaret.ensureTrusted()
+                    openPane("com.apple.preference.security?Privacy_Accessibility")
                 }
             }
-
-            Section("Your specs") {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("In each folder, drop Fig `.js` specs in `override/<cmd>.js` (replaces a spec) or `extend/<cmd>.js` (adds to it). Earlier folders win. Restart tine after changing.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    List(selection: $selectedSpecDir) {
-                        ForEach(state.config.localSpecsDirs.indices, id: \.self) { i in
-                            TextField("Spec folder", text: bindDir(i),
-                                      prompt: Text(verbatim: "~/.config/tine/specs"))
-                                .font(.caption.monospaced())
-                        }
-                    }
-                    .listStyle(.bordered(alternatesRowBackgrounds: true))
-                    .frame(height: 92)
-                    HStack(spacing: 2) {
-                        Button { addDir() } label: { Image(systemName: "plus") }
-                        Button { removeSelectedDir() } label: { Image(systemName: "minus") }
-                            .disabled(selectedSpecDir == nil || state.config.localSpecsDirs.count <= 1)
-                        Spacer()
-                        Button("Reveal") { revealSelectedDir() }
-                            .disabled(selectedSpecDir == nil)
-                    }
-                    .buttonStyle(.borderless)
-                }
-            }
-
-            Section {
-                Button("Quit tine", role: .destructive) { NSApplication.shared.terminate(nil) }
-            } footer: {
-                Text("tine \(Self.appVersion)")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
+            setupRow("Shell integration", ok: shellInstalled, detail: shellLine) {
+                Button("Copy line") { copy(shellLine) }
             }
         }
-        .formStyle(.grouped)
-        .frame(width: 560, height: 600)
-        .onReceive(refresh) { _ in
-            axTrusted = AXCaret.isTrusted
+        Section {
+            Toggle("Start at login", isOn: $startAtLogin)
+                .onChange(of: startAtLogin) { _, on in setStartAtLogin(on) }
+            Toggle("Menu bar icon", isOn: bind(\.showMenuBarIcon))
+            Toggle("Open window at start", isOn: bind(\.openWindowAtStart))
+        }
+    }
+
+    @ViewBuilder private var appearancePane: some View {
+        Section {
+            Toggle("Liquid glass", isOn: bind(\.glass))
+            Picker("Font", selection: bind(\.fontName)) {
+                ForEach(fonts, id: \.0) { Text($0.1).tag($0.0) }
+            }
+            LabeledContent("Font size") {
+                HStack(spacing: 6) {
+                    TextField("", value: bind(\.fontSize), format: .number)
+                        .frame(width: 46).multilineTextAlignment(.trailing)
+                        .textFieldStyle(.roundedBorder)
+                    Stepper("", value: bind(\.fontSize), in: 8...28, step: 1).labelsHidden()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var suggestionsPane: some View {
+        Section {
+            LabeledContent("Max rows shown") {
+                HStack(spacing: 6) {
+                    TextField("", value: bind(\.maxVisibleRows), format: .number)
+                        .frame(width: 46).multilineTextAlignment(.trailing)
+                        .textFieldStyle(.roundedBorder)
+                    Stepper("", value: bind(\.maxVisibleRows), in: 1...40).labelsHidden()
+                }
+            }
+            Toggle("Complete command names", isOn: bind(\.firstTokenCompletion))
+        } footer: {
+            Text("↑ ↓ move · Tab inserts the shared prefix · Enter accepts · Esc dismisses · **⌃K** toggles the detail pane")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder private var specsPane: some View {
+        Section("Specs") {
+            LabeledContent("Installed", value: {
+                let n = SpecInstaller.installedCount()
+                return n > 0 ? "\(n) commands" : "None"
+            }())
+            HStack(spacing: 10) {
+                Button("Install / Update Specs") { installer.install() }
+                    .disabled(installer.status == .running)
+                if installer.status == .running { ProgressView().controlSize(.small) }
+                installerStatus
+            }
+        }
+        Section("Your specs") {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("In each folder, drop Fig `.js` specs in `override/<cmd>.js` (replaces a spec) or `extend/<cmd>.js` (adds to it). Earlier folders win. Restart tine after changing.")
+                    .font(.caption).foregroundStyle(.secondary)
+                List(selection: $selectedSpecDir) {
+                    ForEach(state.config.localSpecsDirs.indices, id: \.self) { i in
+                        TextField("Spec folder", text: bindDir(i),
+                                  prompt: Text(verbatim: "~/.config/tine/specs"))
+                            .font(.caption.monospaced())
+                    }
+                }
+                .listStyle(.bordered(alternatesRowBackgrounds: true))
+                .frame(height: 92)
+                HStack(spacing: 2) {
+                    Button { addDir() } label: { Image(systemName: "plus") }
+                    Button { removeSelectedDir() } label: { Image(systemName: "minus") }
+                        .disabled(selectedSpecDir == nil || state.config.localSpecsDirs.count <= 1)
+                    Spacer()
+                    Button("Reveal") { revealSelectedDir() }
+                        .disabled(selectedSpecDir == nil)
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+    }
+
+    @ViewBuilder private var aboutPane: some View {
+        Section {
+            VStack(spacing: 8) {
+                if let icon = NSApp.applicationIconImage {
+                    Image(nsImage: icon).resizable().frame(width: 72, height: 72)
+                }
+                Text("tine").font(.title2.weight(.semibold))
+                Text("Version \(Self.appVersion)").font(.caption).foregroundStyle(.secondary)
+                Text("Native macOS terminal autocomplete")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity).padding(.vertical, 12)
+        }
+        Section {
+            Button("Quit tine", role: .destructive) { NSApplication.shared.terminate(nil) }
         }
     }
 
