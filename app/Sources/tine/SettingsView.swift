@@ -54,7 +54,7 @@ struct SettingsView: View {
                 .formStyle(.grouped)
                 .navigationTitle((pane ?? .general).rawValue)
         }
-        .frame(minWidth: 440, idealWidth: 620, minHeight: 360, idealHeight: 480)
+        .frame(minWidth: 440, idealWidth: 590, minHeight: 360, idealHeight: 520)
         .background(WindowAccessor())
         .onReceive(refresh) { _ in axTrusted = AXCaret.isTrusted }
     }
