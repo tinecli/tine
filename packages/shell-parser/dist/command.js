@@ -1,5 +1,5 @@
-import { NodeType, createTextNode, parse } from "./parser.js";
 import { ConvertCommandError, SubstituteAliasError } from "./errors.js";
+import { createTextNode, NodeType, parse } from "./parser.js";
 export * from "./errors.js";
 const descendantAtIndex = (node, index, type) => {
     if (node.startIndex <= index && index <= node.endIndex) {

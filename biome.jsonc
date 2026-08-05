@@ -1,0 +1,96 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.7/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/build",
+      "!**/coverage",
+      // Vendored fork of github.com/farzher/fuzzysort — not ours to restyle.
+      "!packages/fuzzysort/fuzzysort.js",
+      // Tailwind's @apply/@tailwind at-rules aren't valid CSS as far as
+      // Biome's CSS parser is concerned, so it can't even parse these.
+      "!packages/autocomplete/src/index.css",
+      "!packages/autocomplete-app/src/index.css",
+      // Logo/icon assets, not accessible content.
+      "!**/*.svg"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space"
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      // Pre-existing debt this migration surfaced but didn't introduce and
+      // isn't in scope to fix here (turbo's lint task has been broken since
+      // the org migration, so nothing has actually been linting this repo
+      // for a while). Each is tracked for a real follow-up pass rather than
+      // auto-fixed or silently ignored.
+      "correctness": {
+        // ~60 hits across autocomplete/autocomplete-app. Auto-fixing hook
+        // deps risks real behavioral bugs; needs a hook-by-hook review.
+        "useExhaustiveDependencies": "off",
+        // ~30 hits, mostly `function`/`var` declared inside blocks in
+        // existing generator/parser code predating this rule's availability.
+        "noInnerDeclarations": "off"
+      },
+      "suspicious": {
+        // ~55 hits: `let x;` without an initializer/annotation, relying on
+        // TS control-flow narrowing at the assignment site (tsc's own
+        // noImplicitAny already covers the real type-safety concern here).
+        "noImplicitAnyLet": "off",
+        // ~12 hits: .map/.forEach callbacks whose return value is unused
+        // is an existing pattern throughout the codebase.
+        "useIterableCallbackReturn": "off",
+        // Its own suggested fix rewrites to Object.hasOwn (ES2022), which
+        // doesn't exist under this app's declared target (browserslist:
+        // "Safari >= 11") — caught this only because rerunning `pnpm build`
+        // after an earlier --unsafe pass broke typecheck.
+        "noPrototypeBuiltins": "off"
+      },
+      "style": {
+        // ~21 hits of intentional `!` non-null assertions throughout.
+        "noNonNullAssertion": "off"
+      },
+      "complexity": {
+        "useOptionalChain": "off",
+        "useIndexOf": "off",
+        "noUselessSwitchCase": "off",
+        "noUselessFragments": "off"
+      },
+      "performance": {
+        "noAccumulatingSpread": "off"
+      }
+    },
+    "domains": {
+      "react": "recommended"
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  },
+  "json": {
+    "formatter": {
+      "indentStyle": "space"
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  }
+}

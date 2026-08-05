@@ -1,8 +1,8 @@
 import {
-  EditBufferChangedNotification,
+  type EditBufferChangedNotification,
   NotificationType,
 } from "@tine/proto/fig";
-import { _subscribe, NotificationResponse } from "./notifications.js";
+import { _subscribe, type NotificationResponse } from "./notifications.js";
 
 export function subscribe(
   handler: (

@@ -1,6 +1,4 @@
-import { AuthBuilderIdStartDeviceAuthorizationResponse, AuthCancelPkceAuthorizationResponse, AuthStartPkceAuthorizationResponse } from "@tine/proto/fig";
-import { AuthFinishPkceAuthorizationResponse } from "@tine/proto/fig";
-import { AuthFinishPkceAuthorizationRequest } from "@tine/proto/fig";
+import { type AuthBuilderIdStartDeviceAuthorizationResponse, type AuthCancelPkceAuthorizationResponse, type AuthFinishPkceAuthorizationRequest, type AuthFinishPkceAuthorizationResponse, type AuthStartPkceAuthorizationResponse } from "@tine/proto/fig";
 export declare function status(): Promise<{
     authed: boolean;
     authKind: "BuilderId" | "IamIdentityCenter" | undefined;

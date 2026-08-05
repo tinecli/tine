@@ -1,4 +1,4 @@
-import { Logger } from "loglevel";
+import { type Logger } from "loglevel";
 export type SpecFileImport = {
     default: Fig.Spec;
     getVersionCommand?: Fig.GetVersionCommand;

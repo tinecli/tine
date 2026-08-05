@@ -1,11 +1,10 @@
-import logger from "loglevel";
-
 import { executeCommand } from "@tine/api-bindings-wrappers";
+import logger from "loglevel";
 import { runPipingConsoleMethods } from "../utils";
 import {
-  runCachedGenerator,
-  GeneratorContext,
+  type GeneratorContext,
   haveContextForGenerator,
+  runCachedGenerator,
 } from "./helpers";
 
 export async function getCustomSuggestions(

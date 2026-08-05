@@ -1,4 +1,4 @@
-import { Subcommand } from "@tine/shared/internal";
+import type { Subcommand } from "@tine/shared/internal";
 
 /**
  * Merge name-keyed records. Keys only in `overlay` are added; keys in both are
@@ -11,7 +11,8 @@ function mergeRecords<T>(
 ): Record<string, T> {
   const out: Record<string, T> = { ...base };
   for (const key of Object.keys(overlay)) {
-    out[key] = key in base ? onCollision(base[key], overlay[key]) : overlay[key];
+    out[key] =
+      key in base ? onCollision(base[key], overlay[key]) : overlay[key];
   }
   return out;
 }
@@ -26,9 +27,20 @@ function mergeRecords<T>(
  * Neither argument is mutated: every level returns freshly built objects/records,
  * so a cached base spec is safe to merge into repeatedly.
  */
-export const mergeSubcommand = (base: Subcommand, overlay: Subcommand): Subcommand => ({
+export const mergeSubcommand = (
+  base: Subcommand,
+  overlay: Subcommand,
+): Subcommand => ({
   ...base,
-  subcommands: mergeRecords(base.subcommands, overlay.subcommands, mergeSubcommand),
+  subcommands: mergeRecords(
+    base.subcommands,
+    overlay.subcommands,
+    mergeSubcommand,
+  ),
   options: mergeRecords(base.options, overlay.options, (b) => b),
-  persistentOptions: mergeRecords(base.persistentOptions, overlay.persistentOptions, (b) => b),
+  persistentOptions: mergeRecords(
+    base.persistentOptions,
+    overlay.persistentOptions,
+    (b) => b,
+  ),
 });

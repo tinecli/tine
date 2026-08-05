@@ -1,7 +1,7 @@
 import { fs } from "@tine/api-bindings";
-// eslint-disable-next-line unicorn/prefer-node-protocol
-import util from "util";
 import { isInDevMode } from "@tine/api-bindings-wrappers";
+// "util" here is the npm browser-polyfill package, not Node's built-in — no node: prefix.
+import util from "util";
 
 // Logging functions
 const DEFAULT_CONSOLE = {

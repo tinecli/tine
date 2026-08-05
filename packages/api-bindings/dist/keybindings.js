@@ -1,7 +1,7 @@
-import { ActionListSchema, NotificationType, } from "@tine/proto/fig";
-import { sendUpdateApplicationPropertiesRequest } from "./requests.js";
-import { _subscribe } from "./notifications.js";
 import { create } from "@bufbuild/protobuf";
+import { ActionListSchema, NotificationType, } from "@tine/proto/fig";
+import { _subscribe } from "./notifications.js";
+import { sendUpdateApplicationPropertiesRequest } from "./requests.js";
 export function pressed(handler) {
     return _subscribe({ type: NotificationType.NOTIFY_ON_KEYBINDING_PRESSED }, (notification) => {
         switch (notification?.type?.case) {

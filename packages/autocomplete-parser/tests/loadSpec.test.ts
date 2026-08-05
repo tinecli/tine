@@ -1,25 +1,22 @@
+import { SETTINGS, updateSettings } from "@tine/api-bindings-wrappers";
+import { SpecLocationSource } from "@tine/shared/utils";
 import logger from "loglevel";
 import {
-  SETTINGS,
-  updateSettings,
-} from "@tine/api-bindings-wrappers";
-import { SpecLocationSource } from "@tine/shared/utils";
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type Mock,
+  vi,
+} from "vitest";
+import * as loadHelpers from "../src/loadHelpers";
 import {
   getSpecPath,
   loadFigSubcommand,
   loadSubcommandCached,
 } from "../src/loadSpec";
-import * as loadHelpers from "../src/loadHelpers";
-import {
-  expect,
-  it,
-  beforeAll,
-  describe,
-  beforeEach,
-  vi,
-  Mock,
-  afterEach,
-} from "vitest";
 
 const { importSpecFromFile } = loadHelpers;
 
@@ -32,9 +29,7 @@ vi.mock("../src/loadHelpers", () => ({
 }));
 
 vi.mock("@tine/api-bindings-wrappers", async () => ({
-  ...(await vi.importActual(
-    "@tine/api-bindings-wrappers",
-  )),
+  ...(await vi.importActual("@tine/api-bindings-wrappers")),
   executeCommand: vi.fn(),
 }));
 
@@ -194,6 +189,7 @@ describe("loadSubcommandCached", () => {
   // This is broken right now...
   it.todo("works", async () => {
     const oldLoadSpec = loadFigSubcommand;
+    // biome-ignore lint/suspicious/noImportAssign: it.todo above — known-broken, unreachable
     (loadFigSubcommand as Mock) = vi.fn();
     (loadFigSubcommand as Mock).mockResolvedValue({ name: "exampleSpec" });
     const context: Fig.ShellContext = {
@@ -218,6 +214,7 @@ describe("loadSubcommandCached", () => {
       context,
     );
     expect(loadFigSubcommand).toHaveBeenCalledTimes(2);
+    // biome-ignore lint/suspicious/noImportAssign: it.todo above — known-broken, unreachable
     (loadFigSubcommand as unknown) = oldLoadSpec;
   });
 });

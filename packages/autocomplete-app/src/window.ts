@@ -1,7 +1,4 @@
-import {
-  getSetting,
-  SETTINGS,
-} from "@tine/api-bindings-wrappers";
+import { getSetting, SETTINGS } from "@tine/api-bindings-wrappers";
 
 // Default settings values.
 export const MAX_WIDTH = 320;

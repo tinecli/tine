@@ -1,11 +1,11 @@
-import { Internal, Metadata } from "@fig/autocomplete-shared";
-import logger from "loglevel";
-import { Command } from "@tine/shell-parser";
+import type { Internal, Metadata } from "@fig/autocomplete-shared";
 import {
-  ArgumentParserResult,
-  BasicAnnotation,
+  type ArgumentParserResult,
+  type BasicAnnotation,
   TokenType,
 } from "@tine/autocomplete-parser";
+import type { Command } from "@tine/shell-parser";
+import logger from "loglevel";
 import { SuggestionNotFoundError } from "./errors";
 
 export type AnnotatedCommand = {

@@ -1,5 +1,5 @@
-import { LocalStateChangedNotification } from "@tine/proto/fig";
-import { NotificationResponse } from "./notifications.js";
+import { type LocalStateChangedNotification } from "@tine/proto/fig";
+import { type NotificationResponse } from "./notifications.js";
 export declare const didChange: {
     subscribe(handler: (notification: LocalStateChangedNotification) => NotificationResponse | undefined): Promise<import("./notifications.js").Subscription> | undefined;
 };

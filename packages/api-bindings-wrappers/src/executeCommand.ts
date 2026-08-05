@@ -4,14 +4,15 @@
  * If it gets bundled in the same file as the functions that call it
  * vitest is not able to mock it (because of esm restrictions).
  */
-import { withTimeout } from "@tine/shared/utils";
+
 import { Process } from "@tine/api-bindings";
+import { withTimeout } from "@tine/shared/utils";
 import logger from "loglevel";
 
 export const cleanOutput = (output: string) =>
   output
     .replace(/\r\n/g, "\n") // Replace carriage returns with just a normal return
-    // eslint-disable-next-line no-control-regex
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: matches the ANSI show-cursor escape sequence
     .replace(/\x1b\[\?25h/g, "") // removes cursor character if present
     .replace(/^\n+/, "") // strips new lines from start of output
     .replace(/\n+$/, ""); // strips new lines from end of output

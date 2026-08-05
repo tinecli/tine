@@ -1,18 +1,15 @@
-import logger from "loglevel";
-import { StoreApi } from "zustand";
+import { getSetting, SETTINGS } from "@tine/api-bindings-wrappers";
+import type { ArgumentParserResult } from "@tine/autocomplete-parser";
 import { sleep } from "@tine/shared/utils";
-import { ArgumentParserResult } from "@tine/autocomplete-parser";
-import {
-  SETTINGS,
-  getSetting,
-} from "@tine/api-bindings-wrappers";
-import { runPipingConsoleMethods } from "../utils";
-import { getTemplateSuggestions } from "../generators/templateSuggestionsGenerator";
-import { getScriptSuggestions } from "../generators/scriptSuggestionsGenerator";
+import logger from "loglevel";
+import type { StoreApi } from "zustand";
 import { getCustomSuggestions } from "../generators/customSuggestionsGenerator";
-import { NamedSetState, AutocompleteState } from "./types";
-import { GeneratorState, GeneratorContext } from "../generators/helpers";
+import type { GeneratorContext, GeneratorState } from "../generators/helpers";
+import { getScriptSuggestions } from "../generators/scriptSuggestionsGenerator";
+import { getTemplateSuggestions } from "../generators/templateSuggestionsGenerator";
 import { isTemplateSuggestion } from "../suggestions";
+import { runPipingConsoleMethods } from "../utils";
+import type { AutocompleteState, NamedSetState } from "./types";
 
 export const shellContextSelector = ({
   figState,

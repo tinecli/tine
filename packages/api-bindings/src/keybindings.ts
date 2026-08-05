@@ -1,12 +1,12 @@
+import { create } from "@bufbuild/protobuf";
 import {
-  Action,
+  type Action,
   ActionListSchema,
-  KeybindingPressedNotification,
+  type KeybindingPressedNotification,
   NotificationType,
 } from "@tine/proto/fig";
+import { _subscribe, type NotificationResponse } from "./notifications.js";
 import { sendUpdateApplicationPropertiesRequest } from "./requests.js";
-import { _subscribe, NotificationResponse } from "./notifications.js";
-import { create } from "@bufbuild/protobuf";
 
 export function pressed(
   handler: (

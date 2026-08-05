@@ -1,5 +1,5 @@
+import type { Subcommand } from "@tine/shared/internal";
 import { describe, expect, it } from "vitest";
-import { Subcommand } from "@tine/shared/internal";
 import { mergeSubcommand } from "../src/mergeSubcommand";
 
 // Minimal converted-shape builders (subcommands/options are name-keyed records).
@@ -18,11 +18,16 @@ const record = (...subs: Subcommand[]): Record<string, Subcommand> =>
 
 describe("mergeSubcommand", () => {
   it("adds a new top-level subcommand, keeping the base ones", () => {
-    const base = sub("aws", { subcommands: record(sub("s3")), description: "AWS CLI" } as never);
+    const base = sub("aws", {
+      subcommands: record(sub("s3")),
+      description: "AWS CLI",
+    } as never);
     const overlay = sub("aws", { subcommands: record(sub("sso")) });
     const merged = mergeSubcommand(base, overlay);
     expect(Object.keys(merged.subcommands).sort()).toEqual(["s3", "sso"]);
-    expect((merged as unknown as { description: string }).description).toBe("AWS CLI");
+    expect((merged as unknown as { description: string }).description).toBe(
+      "AWS CLI",
+    );
   });
 
   it("adds a nested subcommand under an existing one (aws sso login)", () => {
@@ -45,13 +50,19 @@ describe("mergeSubcommand", () => {
     });
     const overlay = sub("git", {
       options: {
-        "--verbose": { name: ["--verbose"], args: [], description: "OVERRIDE" } as never,
+        "--verbose": {
+          name: ["--verbose"],
+          args: [],
+          description: "OVERRIDE",
+        } as never,
         "--mine": { name: ["--mine"], args: [] } as never,
       },
     });
     const merged = mergeSubcommand(base, overlay);
     expect(Object.keys(merged.options).sort()).toEqual(["--mine", "--verbose"]);
-    expect((merged.options["--verbose"] as { description?: string }).description).toBeUndefined();
+    expect(
+      (merged.options["--verbose"] as { description?: string }).description,
+    ).toBeUndefined();
   });
 
   it("does not mutate the base", () => {

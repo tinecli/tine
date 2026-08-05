@@ -1,6 +1,6 @@
 import { InstallAction, InstallComponent, InstallResponse_InstallationStatus, NotificationType, Result_Result, } from "@tine/proto/fig";
-import { sendInstallRequest } from "./requests.js";
 import { _subscribe } from "./notifications.js";
+import { sendInstallRequest } from "./requests.js";
 function componentToProto(component) {
     switch (component) {
         case "dotfiles":

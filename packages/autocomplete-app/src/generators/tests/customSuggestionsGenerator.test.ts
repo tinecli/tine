@@ -1,16 +1,16 @@
-import { Annotation } from "@tine/autocomplete-parser";
+import type { Annotation } from "@tine/autocomplete-parser";
 import {
-  MockInstance,
   afterEach,
   beforeAll,
   describe,
   expect,
   it,
+  type MockInstance,
   vi,
 } from "vitest";
 import { getCustomSuggestions } from "../customSuggestionsGenerator";
+import type { GeneratorContext } from "../helpers";
 import * as helpers from "../helpers";
-import { GeneratorContext } from "../helpers";
 
 const context: GeneratorContext = {
   annotations: [] as Annotation[],

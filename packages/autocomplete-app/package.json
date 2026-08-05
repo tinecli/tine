@@ -2,7 +2,7 @@
   "name": "@tine/autocomplete-app",
   "private": true,
   "version": "1.0.0",
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
+  "repository": "https://github.com/tinecli/tine",
   "type": "module",
   "scripts": {
     "set-host": "fig settings developer.autocomplete.host http://localhost:3124",
@@ -12,8 +12,8 @@
     "preview": "vite preview",
     "serve": "vite preview --port 3124",
     "test": "vitest",
-    "lint": "eslint src --report-unused-disable-directives && prettier --check src",
-    "lint:fix": "eslint src --fix && prettier --write src",
+    "lint": "biome check src",
+    "lint:fix": "biome check --write src",
     "clean": "rm -rf dist"
   },
   "browserslist": [
@@ -41,7 +41,7 @@
     "zustand": "^4.5.6"
   },
   "devDependencies": {
-    "@tine/eslint-config": "workspace:^",
+    "@biomejs/biome": "2.5.7",
     "@tine/types": "workspace:^",
     "@tine/fuzzysort": "workspace:^",
     "@tine/shared": "workspace:^",
@@ -55,9 +55,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "@withfig/autocomplete-types": "^1.31.0",
     "autoprefixer": "^10.4.21",
-    "eslint": "^9.18.0",
     "postcss": "^8.5.3",
-    "prettier": "^3.4.2",
     "tailwindcss": "^3.4.17",
     "terser": "^5.39.0",
     "typescript": "^7.0.2",

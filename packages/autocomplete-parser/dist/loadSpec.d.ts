@@ -1,6 +1,6 @@
-import { Logger } from "loglevel";
-import { Subcommand, SpecLocation } from "@tine/shared/internal";
-import { SpecFileImport } from "./loadHelpers.js";
+import type { SpecLocation, Subcommand } from "@tine/shared/internal";
+import { type Logger } from "loglevel";
+import { type SpecFileImport } from "./loadHelpers.js";
 export declare const serializeSpecLocation: (location: SpecLocation) => string;
 export declare const getSpecPath: (name: string, cwd: string, isScript?: boolean) => Promise<SpecLocation>;
 type ResolvedSpecLocation = {

@@ -5,18 +5,19 @@
 //   globalThis.__tineReadFile(path)  -> file contents (string)   [sync ok]
 //   globalThis.__tineSpecsDir        -> path to the installed spec pack
 //   window / document shims (api-bindings touches them at import)
-import { getCommand } from "@tine/shell-parser";
+
 import { parseArguments } from "@tine/autocomplete-parser";
+import { getCommand } from "@tine/shell-parser";
+import { getCustomSuggestions } from "./src/generators/customSuggestionsGenerator.js";
+import { getScriptSuggestions } from "./src/generators/scriptSuggestionsGenerator.js";
+import { getTemplateSuggestions } from "./src/generators/templateSuggestionsGenerator.js";
+import { getQueryTermForSuggestion } from "./src/suggestions/helpers.js";
 import {
-  getAllSuggestions,
   filterSuggestions,
+  getAllSuggestions,
   isTemplateSuggestion,
 } from "./src/suggestions/index.js";
-import { getQueryTermForSuggestion } from "./src/suggestions/helpers.js";
 import { updatePriorities } from "./src/suggestions/sorting.js";
-import { getScriptSuggestions } from "./src/generators/scriptSuggestionsGenerator.js";
-import { getCustomSuggestions } from "./src/generators/customSuggestionsGenerator.js";
-import { getTemplateSuggestions } from "./src/generators/templateSuggestionsGenerator.js";
 
 type TineSuggestion = {
   name: string;
@@ -59,8 +60,9 @@ async function suggest(
   const upToCursor = line.slice(0, Math.max(0, cursor));
   // Shell aliases (set by the app from the user's `alias` output) so `pc ` →
   // `plug-cli ` expands to the aliased command's spec.
-  const aliases = (globalThis as { __tineAliases?: Record<string, string> })
-    .__tineAliases ?? {};
+  const aliases =
+    (globalThis as { __tineAliases?: Record<string, string> }).__tineAliases ??
+    {};
 
   // First token (no whitespace before the cursor yet): complete the command
   // name itself from known specs + aliases + history, ranked by frecency.
@@ -68,7 +70,11 @@ async function suggest(
   const firstTokenEnabled =
     (globalThis as { __tineFirstToken?: boolean }).__tineFirstToken !== false;
   const partial = upToCursor.trim();
-  if (firstTokenEnabled && partial.length > 0 && !/\s/.test(upToCursor.trimStart())) {
+  if (
+    firstTokenEnabled &&
+    partial.length > 0 &&
+    !/\s/.test(upToCursor.trimStart())
+  ) {
     return commandNameResult(partial, aliases);
   }
 
@@ -87,12 +93,17 @@ async function suggest(
 
   // Run the current arg's generators (git branches, folder/file listings, …)
   // via the Swift command bridge, and feed the results in as generator states.
-  const generators = (parsed.currentArg as { generators?: unknown[] })?.generators ?? [];
+  const generators =
+    (parsed.currentArg as { generators?: unknown[] })?.generators ?? [];
   const genContext = {
     ...context,
     annotations: parsed.annotations.slice(parsed.commandIndex),
-    tokenArray: (command.tokens ?? []).slice(parsed.commandIndex).map((t) => t.text),
-    isDangerous: Boolean((parsed.currentArg as { isDangerous?: boolean })?.isDangerous),
+    tokenArray: (command.tokens ?? [])
+      .slice(parsed.commandIndex)
+      .map((t) => t.text),
+    isDangerous: Boolean(
+      (parsed.currentArg as { isDangerous?: boolean })?.isDangerous,
+    ),
     searchTerm: parsed.searchTerm,
   };
   const generatorStates: unknown[] = [];
@@ -102,10 +113,18 @@ async function suggest(
       if (g.template) {
         result = await getTemplateSuggestions(g as never, genContext as never);
       } else if (g.script) {
-        result = await getScriptSuggestions(g as never, genContext as never, 5000);
+        result = await getScriptSuggestions(
+          g as never,
+          genContext as never,
+          5000,
+        );
       } else {
         result = await getCustomSuggestions(g as never, genContext as never);
-        if (g.filterTemplateSuggestions && result[0] && isTemplateSuggestion(result[0] as never)) {
+        if (
+          g.filterTemplateSuggestions &&
+          result[0] &&
+          isTemplateSuggestion(result[0] as never)
+        ) {
           result = g.filterTemplateSuggestions(result as never) as never;
         }
       }
@@ -136,22 +155,40 @@ async function suggest(
       ((b as { priority?: number }).priority ?? 0) -
       ((a as { priority?: number }).priority ?? 0),
   );
-  const filtered = filterSuggestions(ranked, parsed.searchTerm, true, false, undefined);
-  return { searchTerm: parsed.searchTerm ?? "", items: toItems(filtered, parsed.searchTerm ?? "") };
+  const filtered = filterSuggestions(
+    ranked,
+    parsed.searchTerm,
+    true,
+    false,
+    undefined,
+  );
+  return {
+    searchTerm: parsed.searchTerm ?? "",
+    items: toItems(filtered, parsed.searchTerm ?? ""),
+  };
 }
 
-function toItems(filtered: readonly unknown[], searchTerm: string): TineSuggestion[] {
+function toItems(
+  filtered: readonly unknown[],
+  searchTerm: string,
+): TineSuggestion[] {
   return filtered.map((s) => {
     const type = (s as { type?: string }).type ?? "";
     const isFolder = type === "folder";
-    const raw = (s as { insertValue?: string }).insertValue ?? firstName((s as { name: string | string[] }).name);
+    const raw =
+      (s as { insertValue?: string }).insertValue ??
+      firstName((s as { name: string | string[] }).name);
     // Matched chars for the displayed name (fuzzyMatchData[0] tracks name[0]).
-    const fuzzy = (s as { fuzzyMatchData?: Array<{ indexes?: number[] } | null> }).fuzzyMatchData;
+    const fuzzy = (
+      s as { fuzzyMatchData?: Array<{ indexes?: number[] } | null> }
+    ).fuzzyMatchData;
     return {
       name: firstName((s as { name: string | string[] }).name),
       description: (s as { description?: string }).description ?? "",
-      insertValue: isFolder || type === "file" ? escapeInsertion(raw, isFolder) : raw,
-      shouldAddSpace: (s as { shouldAddSpace?: boolean }).shouldAddSpace ?? false,
+      insertValue:
+        isFolder || type === "file" ? escapeInsertion(raw, isFolder) : raw,
+      shouldAddSpace:
+        (s as { shouldAddSpace?: boolean }).shouldAddSpace ?? false,
       type,
       queryTerm: getQueryTermForSuggestion(s as never, searchTerm),
       isDangerous: Boolean((s as { isDangerous?: boolean }).isDangerous),
@@ -167,8 +204,12 @@ function specNames(): string[] {
   // so re-read until the index has content (then it sticks).
   if (cachedSpecNames && cachedSpecNames.length) return cachedSpecNames;
   try {
-    const g = globalThis as { __tineSpecsDir?: string; __tineReadFile?: (p: string) => string };
-    const raw = g.__tineReadFile?.(`${g.__tineSpecsDir ?? ""}/index.json`) ?? "";
+    const g = globalThis as {
+      __tineSpecsDir?: string;
+      __tineReadFile?: (p: string) => string;
+    };
+    const raw =
+      g.__tineReadFile?.(`${g.__tineSpecsDir ?? ""}/index.json`) ?? "";
     cachedSpecNames = (JSON.parse(raw).completions ?? []) as string[];
   } catch {
     cachedSpecNames = [];
@@ -176,10 +217,18 @@ function specNames(): string[] {
   return cachedSpecNames;
 }
 
-function commandNameResult(partial: string, aliases: Record<string, string>): TineResult {
-  const frec = (globalThis as { __tineFrecency?: Record<string, Record<string, number>> })
-    .__tineFrecency ?? {};
-  const names = new Set<string>([...specNames(), ...Object.keys(aliases), ...Object.keys(frec)]);
+function commandNameResult(
+  partial: string,
+  aliases: Record<string, string>,
+): TineResult {
+  const frec =
+    (globalThis as { __tineFrecency?: Record<string, Record<string, number>> })
+      .__tineFrecency ?? {};
+  const names = new Set<string>([
+    ...specNames(),
+    ...Object.keys(aliases),
+    ...Object.keys(frec),
+  ]);
   const recencyOf = (name: string): number => {
     const params = frec[name];
     return params ? Math.max(0, ...Object.values(params)) : 0;
@@ -195,7 +244,13 @@ function commandNameResult(partial: string, aliases: Record<string, string>): Ti
       priority: r ? Math.min(100, 75 + r / 1e13) : 50,
     };
   });
-  const filtered = filterSuggestions(cmds as never, partial, true, false, undefined);
+  const filtered = filterSuggestions(
+    cmds as never,
+    partial,
+    true,
+    false,
+    undefined,
+  );
   return { searchTerm: partial, items: toItems(filtered, partial) };
 }
 

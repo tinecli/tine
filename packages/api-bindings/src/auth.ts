@@ -1,20 +1,20 @@
 import {
-  AuthBuilderIdStartDeviceAuthorizationResponse,
-  AuthCancelPkceAuthorizationResponse,
-  AuthStartPkceAuthorizationResponse,
+  type AuthBuilderIdStartDeviceAuthorizationResponse,
+  type AuthCancelPkceAuthorizationResponse,
+  type AuthFinishPkceAuthorizationRequest,
+  type AuthFinishPkceAuthorizationResponse,
+  type AuthStartPkceAuthorizationResponse,
   AuthStatusResponse_AuthKind,
   AuthBuilderIdPollCreateTokenResponse_PollStatus as PollStatus,
 } from "@tine/proto/fig";
 import {
-  sendAuthBuilderIdStartDeviceAuthorizationRequest,
   sendAuthBuilderIdPollCreateTokenRequest,
-  sendAuthFinishPkceAuthorizationRequest,
-  sendAuthStatusRequest,
-  sendAuthStartPkceAuthorizationRequest,
+  sendAuthBuilderIdStartDeviceAuthorizationRequest,
   sendAuthCancelPkceAuthorizationRequest,
+  sendAuthFinishPkceAuthorizationRequest,
+  sendAuthStartPkceAuthorizationRequest,
+  sendAuthStatusRequest,
 } from "./requests.js";
-import { AuthFinishPkceAuthorizationResponse } from "@tine/proto/fig";
-import { AuthFinishPkceAuthorizationRequest } from "@tine/proto/fig";
 
 export function status() {
   return sendAuthStatusRequest({}).then((res) => {

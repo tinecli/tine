@@ -1,11 +1,11 @@
+import type { Annotation } from "@tine/autocomplete-parser";
 import { sleep } from "@tine/shared/utils";
-import { Annotation } from "@tine/autocomplete-parser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  type GeneratorContext,
   generatorCache,
-  runCachedGenerator,
   haveContextForGenerator,
-  GeneratorContext,
+  runCachedGenerator,
 } from "../helpers";
 
 const context: GeneratorContext = {

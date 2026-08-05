@@ -1,14 +1,13 @@
 import {
   InstallAction,
   InstallComponent,
-  InstallResponse,
+  type InstallResponse,
   InstallResponse_InstallationStatus,
   NotificationType,
   Result_Result,
 } from "@tine/proto/fig";
-
+import { _subscribe, type NotificationResponse } from "./notifications.js";
 import { sendInstallRequest } from "./requests.js";
-import { NotificationResponse, _subscribe } from "./notifications.js";
 
 export type Component =
   | "dotfiles"

@@ -1,60 +1,54 @@
-import {
-  WindowPosition,
-  Settings,
-} from "@tine/api-bindings";
-import { SETTINGS } from "@tine/api-bindings-wrappers";
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  useMemo,
-  MutableRefObject,
-} from "react";
-
-import logger from "loglevel";
-import { getCWDForFilesAndFolders } from "@tine/shared/utils";
-import * as jsxRuntime from "react/jsx-runtime";
 import * as figApiBindings from "@tine/api-bindings";
-import { getMaxHeight, getMaxWidth, POPOUT_WIDTH } from "./window";
-import { useParseArgumentsEffect } from "./parser/hooks";
+import { Settings, WindowPosition } from "@tine/api-bindings";
+import { SETTINGS } from "@tine/api-bindings-wrappers";
+import { getCWDForFilesAndFolders } from "@tine/shared/utils";
+import logger from "loglevel";
+import React, {
+  type MutableRefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import * as jsxRuntime from "react/jsx-runtime";
 import { loadHistory } from "./history";
+import { useParseArgumentsEffect } from "./parser/hooks";
+import { getMaxHeight, getMaxWidth, POPOUT_WIDTH } from "./window";
 import "./index.css";
-import AutoSizedList, { AutoSizedHandleRef } from "./components/AutoSizedList";
-
+import AutoSizedList, {
+  type AutoSizedHandleRef,
+} from "./components/AutoSizedList";
+import Description, {
+  type DescriptionPosition,
+} from "./components/Description";
+import LoadingIcon from "./components/LoadingIcon";
+import Suggestion from "./components/Suggestion";
 import {
-  useFigKeypress,
   useFigAutocomplete,
-  useFigSettings,
   useFigClearCache,
+  useFigKeypress,
+  useFigSettings,
 } from "./fig/hooks";
-
-import { getCommonSuggestionPrefix } from "./suggestions/helpers";
-
-import { useAutocompleteStore } from "./state";
-import { Visibility } from "./state/types";
+import { setFontFamily, setFontSize, setTheme } from "./fig/themes";
 import {
-  useAutocompleteKeypressCallback,
-  setInterceptKeystrokes,
-  Direction,
-} from "./hooks/keypress";
-import {
-  useShake,
   useDynamicResizeObserver,
+  useShake,
   useSystemTheme,
 } from "./hooks/helpers";
+import {
+  Direction,
+  setInterceptKeystrokes,
+  useAutocompleteKeypressCallback,
+} from "./hooks/keypress";
+import { useAutocompleteStore } from "./state";
+import { Visibility } from "./state/types";
+import { getCommonSuggestionPrefix } from "./suggestions/helpers";
 
-import Suggestion from "./components/Suggestion";
-import Description, { DescriptionPosition } from "./components/Description";
-import { setFontFamily, setFontSize, setTheme } from "./fig/themes";
-import LoadingIcon from "./components/LoadingIcon";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+// @ts-expect-error
 window.jsxRuntime = jsxRuntime;
 window.React = React;
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+// @ts-expect-error
 window.figApiBindings = figApiBindings;
 
 const getIconPath = (cwd: string): string => {
@@ -274,7 +268,7 @@ function App() {
 
     if (
       windowState.isDescriptionSeparate ||
-      Boolean(suggestions[selectedIndex]?.previewComponent)
+      suggestions[selectedIndex]?.previewComponent
     ) {
       WindowPosition.isValidFrame({
         height: size.maxHeight,
@@ -285,7 +279,7 @@ function App() {
           if (isMostRecentEffect) {
             setWindowState((state) =>
               state.isDescriptionSeparate ||
-              Boolean(suggestions[selectedIndex]?.previewComponent)
+              suggestions[selectedIndex]?.previewComponent
                 ? {
                     ...state,
                     descriptionPosition: isClipped ? "left" : "right",
@@ -337,7 +331,7 @@ function App() {
             setWindowState((state) =>
               state.isDescriptionSeparate ||
               devMode ||
-              Boolean(suggestions[selectedIndex]?.previewComponent)
+              suggestions[selectedIndex]?.previewComponent
                 ? {
                     ...state,
                     descriptionPosition: isClipped ? "left" : "right",

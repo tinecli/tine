@@ -1,15 +1,5 @@
-import logger from "loglevel";
-import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
 import { filepaths, folders } from "@fig/autocomplete-generators";
-import * as Internal from "@tine/shared/internal";
-import {
-  firstMatchingToken,
-  makeArray,
-  SpecLocationSource,
-  SuggestionFlag,
-  SuggestionFlags,
-  withTimeout,
-} from "@tine/shared/utils";
+import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
 import {
   executeCommand,
   executeLoginShell,
@@ -17,21 +7,28 @@ import {
   isInDevMode,
   SETTINGS,
 } from "@tine/api-bindings-wrappers";
+import type * as Internal from "@tine/shared/internal";
 import {
-  Command,
-  substituteAlias,
-} from "@tine/shell-parser";
-import {
-  getSpecPath,
-  loadSubcommandCached,
-  serializeSpecLocation,
-} from "./loadSpec.js";
+  firstMatchingToken,
+  makeArray,
+  SpecLocationSource,
+  SuggestionFlag,
+  type SuggestionFlags,
+  withTimeout,
+} from "@tine/shared/utils";
+import { type Command, substituteAlias } from "@tine/shell-parser";
+import logger from "loglevel";
+import { createCache, generateSpecCache } from "./caches.js";
 import {
   ParseArgumentsError,
   ParsingHistoryError,
   UpdateStateError,
 } from "./errors.js";
-import { createCache, generateSpecCache } from "./caches.js";
+import {
+  getSpecPath,
+  loadSubcommandCached,
+  serializeSpecLocation,
+} from "./loadSpec.js";
 
 type ArgArrayState = {
   args: Array<Internal.Arg> | null;

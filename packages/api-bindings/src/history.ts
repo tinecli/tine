@@ -1,10 +1,10 @@
+import { create } from "@bufbuild/protobuf";
 import {
-  HistoryQueryRequest_Param,
+  type HistoryQueryRequest_Param,
   HistoryQueryRequest_ParamSchema,
 } from "@tine/proto/fig";
-import { sendHistoryQueryRequest } from "./requests.js";
-import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@tine/proto/fig_common";
+import { sendHistoryQueryRequest } from "./requests.js";
 
 export type Param = string | number | Uint8Array | null;
 

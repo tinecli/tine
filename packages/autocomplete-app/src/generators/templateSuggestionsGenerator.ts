@@ -1,11 +1,8 @@
+import { type Annotation, TokenType } from "@tine/autocomplete-parser";
+import { findLast, makeArray } from "@tine/shared/utils";
 import logger from "loglevel";
-import {
-  Annotation,
-  TokenType,
-} from "@tine/autocomplete-parser";
-import { makeArray, findLast } from "@tine/shared/utils";
-import { GeneratorContext } from "./helpers";
 import { getHistoryArgSuggestions } from "../history";
+import type { GeneratorContext } from "./helpers";
 
 const getHelpSuggestions = (annotations: Annotation[]) => {
   const helpSuggestions: Fig.TemplateSuggestion[] = [];

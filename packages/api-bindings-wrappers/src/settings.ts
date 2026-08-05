@@ -57,7 +57,7 @@ export const updateSettings = (newSettings: SettingsMap) => {
   settings = newSettings;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: generic fallback value, caller-typed via T
 export const getSetting = <T = unknown>(key: SETTINGS, defaultValue?: any): T =>
   settings[key] ?? defaultValue;
 

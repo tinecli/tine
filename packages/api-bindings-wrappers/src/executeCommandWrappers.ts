@@ -1,6 +1,6 @@
 import { Process } from "@tine/api-bindings";
-import { withTimeout } from "@tine/shared/utils";
 import { createErrorInstance } from "@tine/shared/errors";
+import { withTimeout } from "@tine/shared/utils";
 import logger from "loglevel";
 import { cleanOutput, executeCommandTimeout } from "./executeCommand.js";
 import { fread } from "./fs.js";

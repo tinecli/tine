@@ -1,13 +1,13 @@
-import logger from "loglevel";
-import { Settings } from "@tine/api-bindings";
 import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
-import { withTimeout, SpecLocationSource, splitPath, ensureTrailingSlash, } from "@tine/shared/utils";
-import { SETTINGS, getSetting, executeCommand, isInDevMode, } from "@tine/api-bindings-wrappers";
-import { importFromPublicCDN, publicSpecExists, importSpecFromFile, isDiffVersionedSpec, importFromLocalhost, } from "./loadHelpers.js";
-import { DisabledSpecError, MissingSpecError } from "./errors.js";
+import { Settings } from "@tine/api-bindings";
+import { executeCommand, getSetting, isInDevMode, SETTINGS, } from "@tine/api-bindings-wrappers";
+import { ensureTrailingSlash, SpecLocationSource, splitPath, withTimeout, } from "@tine/shared/utils";
+import logger from "loglevel";
 import { specCache } from "./caches.js";
-import { tryResolveSpecToSubcommand } from "./tryResolveSpecToSubcommand.js";
+import { DisabledSpecError, MissingSpecError } from "./errors.js";
+import { importFromLocalhost, importFromPublicCDN, importSpecFromFile, isDiffVersionedSpec, publicSpecExists, } from "./loadHelpers.js";
 import { mergeSubcommand } from "./mergeSubcommand.js";
+import { tryResolveSpecToSubcommand } from "./tryResolveSpecToSubcommand.js";
 /**
  * This searches for the first directory containing a .fig/ folder in the parent directories
  */
@@ -173,7 +173,8 @@ export const loadSubcommandCached = async (specLocation, context, localLogger = 
     // Locations are in priority order: the first with an override wins; every
     // location's extend is merged (earlier/higher-priority wins name collisions).
     if (source === SpecLocationSource.GLOBAL) {
-        const dirs = globalThis.__tineLocalSpecsDirs ?? [];
+        const dirs = globalThis
+            .__tineLocalSpecsDirs ?? [];
         for (const dir of dirs) {
             const override = (await loadUserSpec(specLocation, `${dir}/override`, localLogger)) ??
                 (await loadUserSpec(specLocation, dir, localLogger));

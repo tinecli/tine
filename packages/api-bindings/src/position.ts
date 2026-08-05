@@ -1,9 +1,9 @@
+import { create } from "@bufbuild/protobuf";
 import { PointSchema, SizeSchema } from "@tine/proto/fig";
 import {
-  sendPositionWindowRequest,
   sendDragWindowRequest,
+  sendPositionWindowRequest,
 } from "./requests.js";
-import { create } from "@bufbuild/protobuf";
 
 // Developer Facing API
 export async function isValidFrame(frame: {

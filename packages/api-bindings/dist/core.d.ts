@@ -1,4 +1,4 @@
-import { type ServerOriginatedMessage, type ClientOriginatedMessage } from "@tine/proto/fig";
+import { type ClientOriginatedMessage, type ServerOriginatedMessage } from "@tine/proto/fig";
 type shouldKeepListening = boolean;
 export type APIResponseHandler = (response: ServerOriginatedMessage["submessage"]) => shouldKeepListening | void;
 export declare function setHandlerForId(handler: APIResponseHandler, id: string): void;

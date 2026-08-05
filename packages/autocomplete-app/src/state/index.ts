@@ -1,42 +1,38 @@
-import React from "react";
-import logger from "loglevel";
-import { Mutate, StateCreator, StoreApi } from "zustand";
-import { createWithEqualityFn } from "zustand/traditional";
-
-import { Suggestion } from "@tine/shared/internal";
-import {
-  fieldsAreEqual,
-  makeArray,
-  memoizeOne,
-} from "@tine/shared/utils";
-import { AliasMap, getCommand } from "@tine/shell-parser";
-import {
-  ArgumentParserResult,
-  initialParserState,
-} from "@tine/autocomplete-parser";
+import type { Types } from "@tine/api-bindings";
 import {
   getSetting,
   SETTINGS,
-  SettingsMap,
+  type SettingsMap,
 } from "@tine/api-bindings-wrappers";
-import { type Types } from "@tine/api-bindings";
+import {
+  type ArgumentParserResult,
+  initialParserState,
+} from "@tine/autocomplete-parser";
+import type { Suggestion } from "@tine/shared/internal";
+import { fieldsAreEqual, makeArray, memoizeOne } from "@tine/shared/utils";
+import { type AliasMap, getCommand } from "@tine/shell-parser";
 import { detailedDiff } from "deep-object-diff";
-import { trackEvent } from "../telemetry.js";
-import { FigState, initialFigState } from "../fig/hooks";
-import { AutocompleteState, NamedSetState, Visibility } from "./types";
-
-import { updatePriorities } from "../suggestions/sorting";
+import logger from "loglevel";
+import type React from "react";
+import type { Mutate, StateCreator, StoreApi } from "zustand";
+import { createWithEqualityFn } from "zustand/traditional";
+import { type FigState, initialFigState } from "../fig/hooks";
+import type { GeneratorState } from "../generators/helpers";
+import { getFullHistorySuggestions } from "../history";
 import {
   deduplicateSuggestions,
   filterSuggestions,
   getAllSuggestions,
 } from "../suggestions";
-
-import { GeneratorState } from "../generators/helpers";
-
-import { getFullHistorySuggestions } from "../history";
+import { updatePriorities } from "../suggestions/sorting";
+import { trackEvent } from "../telemetry.js";
 import { createGeneratorState } from "./generators";
 import { createInsertionState } from "./insertion";
+import {
+  type AutocompleteState,
+  type NamedSetState,
+  Visibility,
+} from "./types";
 
 const initialState: Partial<AutocompleteState> = {
   figState: initialFigState,

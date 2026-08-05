@@ -5,14 +5,14 @@ global.fig = {
 
 const originalGlobalFig = global.fig;
 
-import { Suggestion } from "@tine/shared/internal";
+import type { Suggestion } from "@tine/shared/internal";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  getNameMatch,
-  getExactNameMatch,
-  getCommonSuggestionPrefix,
-  getQueryTermForSuggestion,
   bestScoreMatch,
+  getCommonSuggestionPrefix,
+  getExactNameMatch,
+  getNameMatch,
+  getQueryTermForSuggestion,
 } from "../helpers";
 
 const foo: Suggestion = {
