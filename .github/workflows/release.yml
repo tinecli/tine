@@ -44,6 +44,9 @@ jobs:
       # No spec pack here — the app downloads it at runtime from
       # tinecli/autocomplete's `specs` release (built by that repo's workflow).
 
+      - name: Build workspace packages
+        run: corepack pnpm run build
+
       - name: Import signing certificate
         env:
           APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}

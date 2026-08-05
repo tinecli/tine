@@ -64,7 +64,7 @@ specs-pack/
 # Swift build output
 .build/
 
-# Packaged artifacts (root only — NOT packages/*/dist, which the engine bundles)
+# Packaged artifacts
 /dist/
 
 # Vendored amazon-q monorepo kept locally as reference only (not published)

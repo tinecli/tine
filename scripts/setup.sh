@@ -91,7 +91,15 @@ setup_mise() {
 
 setup_precommit() {
   echo "Installing pre-commit hooks..."
-  pnpm install --ignore-scripts
+  # No --ignore-scripts: pnpm.onlyBuiltDependencies in package.json already
+  # allowlists just @bufbuild/buf's postinstall (downloads the buf binary,
+  # needed to build @tine/proto) and blocks everything else.
+  pnpm install
+}
+
+build_workspace() {
+  echo "Building workspace packages (packages/*/dist)..."
+  pnpm run build
 }
 
 echo "Setting up project dependencies..."
@@ -108,5 +116,6 @@ fi
 install_rust
 setup_mise
 setup_precommit
+build_workspace
 
 echo "✅ Setup complete! Follow the instructions in the README to get started."
