@@ -7,7 +7,7 @@ OS="$(uname -s)"
 install_macos_deps() {
   echo "Detected macOS"
   xcode-select --install || true
-  brew install bun zsh
+  brew install bun
 }
 
 install_js_deps() {

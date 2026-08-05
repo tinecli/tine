@@ -17,7 +17,6 @@ final class AppState: ObservableObject {
         }
     }
 
-    private var searchTerm = ""
     var engine: JSEngine?
 
     var hasSuggestions: Bool { !suggestions.isEmpty }
@@ -46,9 +45,7 @@ final class AppState: ObservableObject {
         buffer = msg.buffer
         cursor = msg.cursor
         cwd = msg.cwd
-        let result = engine?.suggest(line: msg.buffer, cursor: msg.cursor, cwd: msg.cwd)
-        suggestions = result?.items ?? []
-        searchTerm = result?.searchTerm ?? ""
+        suggestions = engine?.suggest(line: msg.buffer, cursor: msg.cursor, cwd: msg.cwd) ?? []
         selectedIndex = 0
         isLoading = CommandRunner.isLoading
         return true
@@ -60,11 +57,9 @@ final class AppState: ObservableObject {
     @discardableResult
     func recompute() -> Bool {
         guard !buffer.isEmpty else { return false }
-        let result = engine?.suggest(line: buffer, cursor: cursor, cwd: cwd)
-        let items = result?.items ?? []
+        let items = engine?.suggest(line: buffer, cursor: cursor, cwd: cwd) ?? []
         let changed = items.count != suggestions.count
         suggestions = items
-        searchTerm = result?.searchTerm ?? ""
         if selectedIndex >= suggestions.count { selectedIndex = 0 }
         isLoading = CommandRunner.isLoading
         return changed

@@ -9,9 +9,9 @@ APPDIR="$ROOT/app"
 # grant (no TCC conflict), own display name + menu-bar icon, and own executable
 # name so pkill below never touches the production app.
 BUNDLE="$ROOT/.build/Tine-dev.app"
-# Default to the same socket the installed tine.zsh uses, so your real terminals
-# connect with no extra env. Override with TINE_SOCK for an isolated instance.
-SOCK="${TINE_SOCK:-$HOME/.local/share/tine/tine.sock}"
+# `open` starts the app with a clean environment, so the app can't be pointed at
+# another socket from here — it always uses the fixed path tine.zsh defaults to.
+SOCK="$HOME/.local/share/tine/tine.sock"
 
 echo "› building"
 (cd "$APPDIR" && swift build -c debug)
@@ -34,7 +34,7 @@ cat > "$BUNDLE/Contents/Info.plist" <<PLIST
   <key>CFBundleShortVersionString</key><string>0.0.1</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>LSUIElement</key><true/>
-  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
 </dict>
 </plist>
 PLIST
@@ -60,7 +60,7 @@ codesign --force --deep --sign "$SIGN_ID" "$BUNDLE"
 echo "› stopping any running dev build (leaves the production app alone)"
 pkill -x tine-dev 2>/dev/null || true
 
-echo "› TINE_SOCK=$SOCK"
+echo "› socket: $SOCK"
 echo "› launching (logs: /tmp/tine.log)"
-TINE_SOCK="$SOCK" open -n "$BUNDLE"
+open -n "$BUNDLE"
 echo "done. In your terminal, reload the integration: source ~/.local/share/tine/tine.zsh"

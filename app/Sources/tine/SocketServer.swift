@@ -10,7 +10,7 @@ let TINE_US = "\u{1f}"
 /// terminals (Ghostty) whose Accessibility can't report the caret — the app
 /// derives the caret cell from the buffer/cursor it already holds.
 struct Request {
-    let type: String   // update | up | down | accept | dismiss
+    let type: String   // dispatched by AppDelegate's socket handler (App.swift)
     let cursor: Int
     let cwd: String
     let anchorRow: Int

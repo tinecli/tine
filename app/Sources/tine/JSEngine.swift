@@ -56,11 +56,6 @@ final class JSEngine {
         tlog("engine ready=\(ready) specsDir=\(specsDir)")
     }
 
-    struct Result {
-        let searchTerm: String
-        let items: [Suggestion]
-    }
-
     /// Cache the shell's aliases so the parser can expand them (e.g. `pc` → `plug-cli`).
     func setAliases(_ aliases: [String: String]) {
         guard ready else { return }
@@ -81,19 +76,18 @@ final class JSEngine {
 
     /// Synchronous because the spec read hook is synchronous, so the engine's
     /// promise chain drains within JSC's microtask flush before this returns.
-    func suggest(line: String, cursor: Int, cwd: String) -> Result {
-        guard ready else { return Result(searchTerm: "", items: []) }
+    func suggest(line: String, cursor: Int, cwd: String) -> [Suggestion] {
+        guard ready else { return [] }
         ctx.setObject(line as NSString, forKeyedSubscript: "__q_line" as NSString)
         ctx.setObject(cwd as NSString, forKeyedSubscript: "__q_cwd" as NSString)
         ctx.evaluateScript(
             "globalThis.__out=null; tineSuggest(__q_line, \(cursor), __q_cwd, function(r){ globalThis.__out=r; });"
         )
         guard let out = ctx.objectForKeyedSubscript("__out"), !out.isNull, !out.isUndefined else {
-            return Result(searchTerm: "", items: [])
+            return []
         }
-        let searchTerm = out.objectForKeyedSubscript("searchTerm")?.toString() ?? ""
         let arr = out.objectForKeyedSubscript("items")?.toArray() as? [[String: Any]] ?? []
-        let items = arr.map { d in
+        return arr.map { d in
             Suggestion(
                 name: d["name"] as? String ?? "",
                 description: d["description"] as? String ?? "",
@@ -105,6 +99,5 @@ final class JSEngine {
                 matchIndices: (d["matchIndices"] as? [Any])?.compactMap { ($0 as? NSNumber)?.intValue } ?? []
             )
         }
-        return Result(searchTerm: searchTerm, items: items)
     }
 }

@@ -8,7 +8,7 @@
 // KNOWN gaps, add when a spec needs them:
 //   - fetch: network-based custom generators (npm search, some cloud APIs). Needs
 //     a Swift URLSession bridge; fails gracefully until then.
-//   - URL:   full parser; 1 guarded reference today, so unshimmed.
+//   - URL:   full parser; no engine code constructs one, so unshimmed.
 
 if (typeof globalThis.self === "undefined") globalThis.self = globalThis;
 if (typeof globalThis.global === "undefined") globalThis.global = globalThis;

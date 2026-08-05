@@ -3,7 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var state: AppState
-    @StateObject private var installer = SpecInstaller()
+    @EnvironmentObject var installer: SpecInstaller
 
     // Re-read externally-owned state (Accessibility grant, login item) so the UI
     // reflects changes made outside the app without needing a relaunch.

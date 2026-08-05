@@ -5,7 +5,10 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let state = AppState()
     private var cancellables = Set<AnyCancellable>()
-    private var specInstaller: SpecInstaller?
+    /// The app's only installer — injected into the dashboard, so its "Install /
+    /// Update Specs" button shares this instance's status guard and onInstalled
+    /// refresh instead of installing behind the app's back.
+    @MainActor let specInstaller = SpecInstaller()
     private var panel: SuggestionPanel?
     private var server: SocketServer?
     /// The SwiftUI dashboard window, captured once it exists (WindowAccessor), so
@@ -55,17 +58,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // run (or a wiped pack): download in the background — suggestions are just
         // empty until it lands, nothing blocks. Otherwise, quietly check whether
         // the fork has a newer pack so doctor can flag it.
-        let installer = SpecInstaller()
-        installer.onInstalled = { [weak self] in self?.scheduleRefresh() }
+        specInstaller.onInstalled = { [weak self] in self?.scheduleRefresh() }
         if SpecInstaller.isInstalled() {
             // Keep the app's built-in specs current with this app version, then
             // check whether the fork has a newer pack.
             SpecInstaller.refreshBuiltins()
-            installer.checkForUpdate()
+            specInstaller.checkForUpdate()
         } else {
-            installer.install()
+            specInstaller.install()
         }
-        specInstaller = installer
 
         state.engine?.setFirstTokenEnabled(state.config.firstTokenCompletion)
 
@@ -151,16 +152,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "install":
                 // Kick the (conditional) download off the main thread; the shell
                 // polls `installStatus` for progress. Never blocks this handler.
-                self.specInstaller?.install()
+                self.specInstaller.install()
                 return "started"
             case "installStatus":
-                return self.specInstaller?.statusLine ?? "idle"
+                return self.specInstaller.statusLine
             case "version":
                 return (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
             case "doctor":
                 // Health report for `tine doctor` (semicolon-joined key=value).
                 let v = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
-                let update = self.specInstaller?.updateAvailable == true ? 1 : 0
+                let update = self.specInstaller.updateAvailable ? 1 : 0
                 return "ax=\(AXCaret.isTrusted ? 1 : 0);specs=\(SpecInstaller.installedCount());version=\(v);update=\(update)"
             case "aliases":
                 // buffer = the shell's `alias` output, lines joined by US.
@@ -357,7 +358,9 @@ struct TineApp: App {
         // SwiftUI owns the window, so it gets the native Liquid Glass sidebar with
         // the traffic lights inset into it (no hand-built NSWindow).
         Window("Tine", id: Self.dashboardID) {
-            SettingsView().environmentObject(delegate.state)
+            SettingsView()
+                .environmentObject(delegate.state)
+                .environmentObject(delegate.specInstaller)
         }
         .windowToolbarStyle(.unified)
         .windowResizability(.contentMinSize)
