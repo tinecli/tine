@@ -9,7 +9,6 @@ import type {
   SuggestionType,
 } from "../shared/internal";
 import { logger } from "../shared/log";
-import { getSetting, SETTINGS, type SettingsMap } from "../shared/settings";
 import {
   compareNamedObjectsAlphabetically,
   fieldsAreEqual,
@@ -387,35 +386,9 @@ export const filterSuggestions = (
   searchTerm: string,
   fuzzySearchEnabled: boolean,
   suggestCurrentToken: boolean,
-  settings: SettingsMap | undefined = undefined,
 ): Suggestion[] => {
-  const shouldHideAutoExecute =
-    getSetting<boolean>(SETTINGS.HIDE_AUTO_EXECUTE_SUGGESTION, false) ||
-    getSetting<boolean>(SETTINGS.ONLY_SHOW_ON_TAB, false);
-  const execDangerous = settings?.[
-    SETTINGS.IMMEDIATELY_RUN_DANGEROUS_COMMANDS
-  ] as boolean;
-
   if (!searchTerm) {
-    const filteredSuggestions = suggestions.filter(
-      (suggestion) => !suggestion.hidden,
-    );
-    const execAfterSpace = settings?.[
-      SETTINGS.IMMEDIATELY_EXEC_AFTER_SPACE
-    ] as boolean;
-    if (
-      execAfterSpace &&
-      filteredSuggestions.length > 0 &&
-      !shouldHideAutoExecute
-    ) {
-      filteredSuggestions.unshift({
-        name: "↪",
-        type: "auto-execute" as SuggestionType,
-        insertValue: "\n",
-        description: "Immediately execute",
-      });
-    }
-    return filteredSuggestions;
+    return suggestions.filter((suggestion) => !suggestion.hidden);
   }
 
   const caseSensitiveMatchArr: Suggestion[] = [];
@@ -431,31 +404,16 @@ export const filterSuggestions = (
     const exactNameMatch = getExactNameMatch(suggestion, exactMatchQueryTerm);
     const names = makeArray(name ?? []);
 
-    const pushNonExactMatch = (searchTerms: string[]) => {
-      const displayNameMatch = getPartialMatch(
-        searchTerms,
-        queryTerm,
-        fuzzySearchEnabled,
-      );
-      if (displayNameMatch) {
-        const { fuzzyMatchData, score } = displayNameMatch;
-        nonExactMatches.push({
-          suggestion: { ...suggestion, fuzzyMatchData },
-          score,
-        });
-      }
-    };
-
     if (exactNameMatch) {
       const suggestionsToAdd: Suggestion[] = [suggestion];
 
       const arg = suggestion.args?.[0];
       const shouldAddAutoExecute =
         (!names[0] || !insertValue || names[0] === insertValue) &&
-        (!suggestion.isDangerous || execDangerous) &&
+        !suggestion.isDangerous &&
         (!arg || arg.isOptional);
 
-      if (shouldAddAutoExecute && !shouldHideAutoExecute && !autoExecuteAdded) {
+      if (shouldAddAutoExecute && !autoExecuteAdded) {
         // replace the current suggestion with an autoexecute suggestion and add it
         suggestionsToAdd.unshift({
           ...suggestion,
@@ -472,12 +430,29 @@ export const filterSuggestions = (
       } else {
         nonCaseSensitiveMatchArr.push(...suggestionsToAdd);
       }
-    } else if (!suggestion.hidden) {
-      pushNonExactMatch(makeArray(name ?? []));
+      continue;
     }
 
-    if (displayName) {
-      pushNonExactMatch([displayName]);
+    // Score the suggestion against its names and its displayName, but enter it
+    // at most once under its best score. Matching on both used to queue the
+    // same row twice, so `--format` with displayName `--format` showed up as
+    // two identical rows.
+    const termGroups = [
+      ...(suggestion.hidden ? [] : [names]),
+      ...(displayName ? [[displayName]] : []),
+    ];
+    let bestMatch: ReturnType<typeof getPartialMatch>;
+    for (const terms of termGroups) {
+      const match = getPartialMatch(terms, queryTerm, fuzzySearchEnabled);
+      if (match && (!bestMatch || match.score > bestMatch.score)) {
+        bestMatch = match;
+      }
+    }
+    if (bestMatch) {
+      nonExactMatches.push({
+        suggestion: { ...suggestion, fuzzyMatchData: bestMatch.fuzzyMatchData },
+        score: bestMatch.score,
+      });
     }
   }
 
@@ -494,11 +469,7 @@ export const filterSuggestions = (
     ...nonExactMatches.map(({ suggestion }) => suggestion),
   ];
 
-  if (
-    filteredSuggestions.length > 0 &&
-    !autoExecuteAdded &&
-    !shouldHideAutoExecute
-  ) {
+  if (filteredSuggestions.length > 0 && !autoExecuteAdded) {
     // Eventually add suggest current token suggestion
     filteredSuggestions = addAutoExecuteSuggestion(
       filteredSuggestions,

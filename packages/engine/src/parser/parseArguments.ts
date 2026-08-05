@@ -1,8 +1,7 @@
 import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
-import { executeCommand, executeLoginShell } from "../shared/execShell.js";
+import { executeCommand } from "../shared/execShell.js";
 import type * as Internal from "../shared/internal.js";
 import { type Logger, logger } from "../shared/log.js";
-import { getSetting, isInDevMode, SETTINGS } from "../shared/settings.js";
 import {
   firstMatchingToken,
   makeArray,
@@ -13,11 +12,7 @@ import {
 } from "../shared/utils.js";
 import { type Command, substituteAlias } from "../shell-parser/index.js";
 import { createCache, generateSpecCache } from "./caches.js";
-import {
-  ParseArgumentsError,
-  ParsingHistoryError,
-  UpdateStateError,
-} from "./errors.js";
+import { ParseArgumentsError, UpdateStateError } from "./errors.js";
 import { filepaths, folders } from "./filepaths.js";
 import {
   getSpecPath,
@@ -585,15 +580,6 @@ const getInitialState = (
   isEndOfOptions: false,
 });
 
-const historyExecuteShellCommand: Fig.ExecuteCommandFunction = async () => {
-  throw new ParsingHistoryError(
-    "Cannot run shell command while parsing history",
-  );
-};
-
-const getExecuteShellCommandFunction = (isParsingHistory = false) =>
-  isParsingHistory ? historyExecuteShellCommand : executeCommand;
-
 const getGenerateSpecCacheKey = (
   completionObj: Internal.Subcommand,
   tokenArray: string[],
@@ -616,10 +602,6 @@ const getGenerateSpecCacheKey = (
     }
   }
 
-  // Return this late to ensure any generateSpecCacheKey side effects still happen
-  if (isInDevMode()) {
-    return undefined;
-  }
   if (typeof cacheKey === "string") {
     // Prepend the spec name to the cacheKey to avoid collisions between specs.
     return `${tokenArray[0]}:${cacheKey}`;
@@ -630,7 +612,6 @@ const getGenerateSpecCacheKey = (
 const generateSpecForState = async (
   state: ArgumentParserState,
   tokenArray: string[],
-  isParsingHistory = false,
   localLogger: Logger = logger,
 ): Promise<ArgumentParserState> => {
   localLogger.debug("generateSpec", { state, tokenArray });
@@ -646,9 +627,8 @@ const generateSpecForState = async (
     if (cacheKey && generateSpecCache.has(cacheKey)) {
       newSpec = generateSpecCache.get(cacheKey)!;
     } else {
-      const exec = getExecuteShellCommandFunction(isParsingHistory);
       newSpec = convertSubcommand(
-        await generateSpec(tokenArray, exec),
+        await generateSpec(tokenArray, executeCommand),
         initializeDefault,
       );
       if (cacheKey) generateSpecCache.set(cacheKey, newSpec);
@@ -673,14 +653,12 @@ const generateSpecForState = async (
         : createArgState(newSpec.args),
     };
   } catch (err) {
-    if (!(err instanceof ParsingHistoryError)) {
-      localLogger.error(
-        `There was an error with spec (generator owner: ${
-          completionObj.name
-        }, tokens: ${tokenArray.join(", ")}) generateSpec function`,
-        err,
-      );
-    }
+    localLogger.error(
+      `There was an error with spec (generator owner: ${
+        completionObj.name
+      }, tokens: ${tokenArray.join(", ")}) generateSpec function`,
+      err,
+    );
   }
   return state;
 };
@@ -774,12 +752,9 @@ const parseArgumentsCached = async (
   context: Fig.ShellContext,
   // authClient: AuthClient,
   specLocations?: Internal.SpecLocation[],
-  isParsingHistory?: boolean,
   startIndex = 0,
   localLogger: Logger = logger,
 ): Promise<ArgumentParserState> => {
-  const exec = getExecuteShellCommandFunction(isParsingHistory);
-
   let currentCommand = command;
   let tokens = currentCommand.tokens.slice(startIndex);
   const tokenText = tokens.map((token) => token.text);
@@ -793,9 +768,8 @@ const parseArgumentsCached = async (
   for (let i = 0; i < locations.length; i += 1) {
     cacheKey = getCacheKey(tokenText, context, locations[i]);
     if (
-      !isInDevMode() &&
-      (parseArgumentsCache.has(cacheKey) ||
-        parseArgumentsGenerateSpecCache.has(cacheKey))
+      parseArgumentsCache.has(cacheKey) ||
+      parseArgumentsGenerateSpecCache.has(cacheKey)
     ) {
       return (
         (parseArgumentsGenerateSpecCache.get(
@@ -810,10 +784,6 @@ const parseArgumentsCached = async (
   let specPath: Internal.SpecLocation | undefined;
   for (let i = 0; i < locations.length; i += 1) {
     specPath = locations[i];
-    if (isParsingHistory && specPath.type === SpecLocationSource.LOCAL) {
-      continue;
-    }
-
     spec = await withTimeout(
       5000,
       loadSubcommandCached(specPath, context, localLogger),
@@ -855,7 +825,7 @@ const parseArgumentsCached = async (
     const loadSpecResult =
       typeof loadSpec === "function"
         ? token !== undefined
-          ? await loadSpec(token, exec)
+          ? await loadSpec(token, executeCommand)
           : undefined
         : loadSpec;
 
@@ -866,7 +836,6 @@ const parseArgumentsCached = async (
         context,
         // authClient,
         loadSpecResult,
-        isParsingHistory,
         startIndex + index,
       );
       state = {
@@ -916,7 +885,6 @@ const parseArgumentsCached = async (
       state = await generateSpecForState(
         state,
         tokens.map((token) => token.text),
-        isParsingHistory,
         localLogger,
       );
       generatedSpec = true;
@@ -954,7 +922,9 @@ const parseArgumentsCached = async (
       const { alias } = lastArgObject.parserDirectives;
       try {
         const aliasValue =
-          typeof alias === "string" ? alias : await alias(token, exec);
+          typeof alias === "string"
+            ? alias
+            : await alias(token, executeCommand);
         try {
           currentCommand = substituteAlias(command, tokens[i], aliasValue);
           // tokens[...i] should be the same, but tokens[i+1...] may be different.
@@ -1030,65 +1000,15 @@ const parseArgumentsCached = async (
   return state;
 };
 
+// Command-name completion for a lone first token is the host's job
+// (tine-engine.ts reads the spec index directly), so this spec carries no args.
 const firstTokenSpec: Internal.Subcommand = {
   name: ["firstTokenSpec"],
   subcommands: {},
   options: {},
   persistentOptions: {},
   loadSpec: undefined,
-  args: [
-    {
-      name: "command",
-      generators: [
-        {
-          custom: async (_tokens, _exec, context) => {
-            let result: Fig.Suggestion[] = [];
-            if (context?.currentProcess.includes("fish")) {
-              const commands = await executeLoginShell({
-                command: 'complete -C ""',
-                executable: context.currentProcess,
-              });
-              result = commands.split("\n").map((commandString) => {
-                const splitIndex = commandString.indexOf("\t");
-                const name = commandString.slice(0, splitIndex + 1);
-                const description = commandString.slice(splitIndex + 1);
-                return { name, description, type: "subcommand" };
-              });
-            } else if (context?.currentProcess.includes("bash")) {
-              const commands = await executeLoginShell({
-                command: "compgen -c",
-                executable: context.currentProcess,
-              });
-              result = commands
-                .split("\n")
-                .map((name) => ({ name, type: "subcommand" }));
-            } else if (context?.currentProcess.includes("zsh")) {
-              const commands = await executeLoginShell({
-                command: `for key in \${(k)commands}; do echo $key; done && alias +r`,
-                executable: context.currentProcess,
-              });
-              result = commands
-                .split("\n")
-                .map((name) => ({ name, type: "subcommand" }));
-            }
-
-            const names = new Set();
-            return result.filter((suggestion) => {
-              if (names.has(suggestion.name)) {
-                return false;
-              }
-              names.add(suggestion.name);
-              return true;
-            });
-          },
-          cache: {
-            strategy: "stale-while-revalidate",
-            ttl: 10 * 1000, // 10s
-          },
-        },
-      ],
-    },
-  ],
+  args: [],
   parserDirectives: {},
 };
 
@@ -1096,7 +1016,6 @@ export const parseArguments = async (
   command: Command | null,
   context: Fig.ShellContext,
   // authClient: AuthClient,
-  isParsingHistory = false,
   localLogger: Logger = logger,
 ): Promise<ArgumentParserResult> => {
   const tokens = command?.tokens ?? [];
@@ -1105,12 +1024,7 @@ export const parseArguments = async (
   }
 
   if (tokens.length === 1) {
-    const showFirstCommandCompletion = getSetting(
-      SETTINGS.FIRST_COMMAND_COMPLETION,
-    );
-    let spec = showFirstCommandCompletion
-      ? firstTokenSpec
-      : { ...firstTokenSpec, args: [] };
+    let spec = firstTokenSpec;
     let specPath = { name: "firstTokenSpec", type: SpecLocationSource.GLOBAL };
     if (tokens[0].text.includes("/")) {
       // special-case: Symfony has "bin/console" which can be invoked directly
@@ -1130,7 +1044,6 @@ export const parseArguments = async (
     context,
     // authClient,
     undefined,
-    isParsingHistory,
     0,
     localLogger,
   );

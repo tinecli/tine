@@ -155,13 +155,7 @@ async function suggest(
       ((b as { priority?: number }).priority ?? 0) -
       ((a as { priority?: number }).priority ?? 0),
   );
-  const filtered = filterSuggestions(
-    ranked,
-    parsed.searchTerm,
-    true,
-    false,
-    undefined,
-  );
+  const filtered = filterSuggestions(ranked, parsed.searchTerm, true, false);
   return {
     searchTerm: parsed.searchTerm ?? "",
     items: toItems(filtered, parsed.searchTerm ?? ""),
@@ -244,13 +238,7 @@ function commandNameResult(
       priority: r ? Math.min(100, 75 + r / 1e13) : 50,
     };
   });
-  const filtered = filterSuggestions(
-    cmds as never,
-    partial,
-    true,
-    false,
-    undefined,
-  );
+  const filtered = filterSuggestions(cmds as never, partial, true, false);
   return { searchTerm: partial, items: toItems(filtered, partial) };
 }
 

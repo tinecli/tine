@@ -2,7 +2,6 @@ import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
 import { executeCommand } from "../shared/execShell.js";
 import type { SpecLocation, Subcommand } from "../shared/internal.js";
 import { type Logger, logger } from "../shared/log.js";
-import { getSetting, isInDevMode, SETTINGS } from "../shared/settings.js";
 import {
   ensureTrailingSlash,
   SpecLocationSource,
@@ -10,9 +9,8 @@ import {
   withTimeout,
 } from "../shared/utils.js";
 import { specCache } from "./caches.js";
-import { DisabledSpecError, MissingSpecError } from "./errors.js";
+import { MissingSpecError } from "./errors.js";
 import {
-  importFromLocalhost,
   importFromPublicCDN,
   importSpecFromFile,
   isDiffVersionedSpec,
@@ -62,9 +60,7 @@ export const getSpecPath = async (
     return { name: "_shortcuts", type: SpecLocationSource.LOCAL, path };
   }
 
-  const personalShortcutsToken =
-    getSetting(SETTINGS.PERSONAL_SHORTCUTS_TOKEN) || "+";
-  if (name === personalShortcutsToken) {
+  if (name === "+") {
     return { name: "+", type: SpecLocationSource.LOCAL, path: "~/" };
   }
 
@@ -109,42 +105,10 @@ export const importSpecFromLocation = async (
   specFile: SpecFileImport;
   resolvedLocation?: ResolvedSpecLocation;
 }> => {
-  // Try loading spec from `devCompletionsFolder` first.
-  const devPath = isInDevMode()
-    ? (getSetting(SETTINGS.DEV_COMPLETIONS_FOLDER) as string)
-    : undefined;
-
-  const devPort = isInDevMode()
-    ? getSetting(SETTINGS.DEV_COMPLETIONS_SERVER_PORT)
-    : undefined;
-
   let specFile: SpecFileImport | undefined;
   let resolvedLocation: ResolvedSpecLocation | undefined;
 
-  if (typeof devPort === "string" || typeof devPort === "number") {
-    const { diffVersionedFile, name } = specLocation;
-    specFile = await importFromLocalhost(
-      diffVersionedFile ? `${name}/${diffVersionedFile}` : name,
-      devPort,
-    );
-  }
-
-  if (!specFile && devPath) {
-    try {
-      const { diffVersionedFile, name } = specLocation;
-      const spec = await importSpecFromFile(
-        diffVersionedFile ? `${name}/${diffVersionedFile}` : name,
-        devPath,
-        localLogger,
-      );
-      specFile = spec;
-    } catch {
-      // fallback to loading other specs in dev mode.
-    }
-  }
-
-  if (!specFile && specLocation.type === SpecLocationSource.LOCAL) {
-    // If we couldn't successfully load a dev spec try loading from specPath.
+  if (specLocation.type === SpecLocationSource.LOCAL) {
     const { name, path } = specLocation;
     const [dirname, basename] = splitPath(`${path || "~/"}${name}`);
 
@@ -153,7 +117,7 @@ export const importSpecFromLocation = async (
       `${dirname}.fig/autocomplete/build/`,
       localLogger,
     );
-  } else if (!specFile) {
+  } else {
     const { name, diffVersionedFile: versionFileName } = specLocation;
 
     // The pack is the base; the user's own specs (~/.tine/specs) are merged on
@@ -214,18 +178,8 @@ export const loadSubcommandCached = async (
   const path =
     specLocation.type === SpecLocationSource.LOCAL ? specLocation.path : "";
 
-  // Do not load completion spec for commands that are 'disabled' by user
-  const disabledSpecs =
-    <string[]>getSetting(SETTINGS.DISABLE_FOR_COMMANDS) || [];
-  if (disabledSpecs.includes(name)) {
-    localLogger.info(`Not getting path for disabled spec ${name}`);
-    throw new DisabledSpecError("Command requested disabled completion spec");
-  }
-
   const key = [source, path || "", name].join(",");
-  if (getSetting(SETTINGS.DEV_MODE_NPM_INVALIDATE_CACHE)) {
-    specCache.clear();
-  } else if (!getSetting(SETTINGS.DEV_MODE_NPM) && specCache.has(key)) {
+  if (specCache.has(key)) {
     return specCache.get(key) as Subcommand;
   }
 

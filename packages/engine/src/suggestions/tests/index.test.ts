@@ -1,15 +1,5 @@
-import {
-  afterAll,
-  beforeAll,
-  describe,
-  expect,
-  it,
-  type Mock,
-  vi,
-} from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type { Suggestion } from "../../shared/internal";
-import * as settings from "../../shared/settings";
-import { SETTINGS } from "../../shared/settings";
 import {
   deduplicateSuggestions,
   filterSuggestions,
@@ -186,65 +176,39 @@ describe("filterSuggestions", () => {
     });
   });
 
-  describe("should not add auto-execute when setting disables it", () => {
-    // export declare const getSetting: <T = unknown>(
-    //   key: SETTINGS,
-    //   defaultValue?: any,
-    // ) => T;
-    let spy: Mock<(key: SETTINGS) => unknown>;
-    beforeAll(() => {
-      spy = vi.spyOn(settings, "getSetting") as Mock<
-        (key: SETTINGS) => unknown
-      >;
-      spy.mockImplementation((key) =>
-        key === SETTINGS.HIDE_AUTO_EXECUTE_SUGGESTION ? true : undefined,
-      );
-    });
-
-    afterAll(() => {
-      spy.mockRestore();
-    });
-
-    it("to the matching suggestion", () => {
-      const suggestions: Suggestion[] = [
-        { name: "foo", description: "Some description" },
-        { name: "foobar" },
-        { name: "bar" },
-      ];
-      const result = filterSuggestions(suggestions, "foo", false, false);
-      expect(result).toEqual([
-        expect.not.objectContaining({
-          type: "auto-execute",
-        }),
-        { name: "foobar" },
-      ]);
-    });
-
-    it("when `suggestCurrentToken: false`", () => {
-      const suggestions: Suggestion[] = [{ name: "foo" }, { name: "bar" }];
-      const result = filterSuggestions(suggestions, "fo", false, false);
-      expect(result).toEqual([
-        {
-          name: "foo",
-        },
-      ]);
-    });
-
-    it("when searchTerm is `.`", () => {
-      const suggestions: Suggestion[] = [{ name: "..", type: "folder" }];
-      const result = filterSuggestions(suggestions, ".", false, false);
-      expect(result).toEqual([
-        expect.objectContaining({
-          name: "..",
-        }),
-      ]);
-    });
-  });
-
   it("should remove suggestions when searchTerm does not match any of the suggestions", () => {
     const suggestions: Suggestion[] = [{ name: "foo" }, { name: "bar" }];
     const result = filterSuggestions(suggestions, "bo", false, false);
     expect(result).toEqual([]);
+  });
+
+  describe("a suggestion with a displayName enters the list once", () => {
+    it("when its name and its displayName both partially match", () => {
+      const suggestions: Suggestion[] = [
+        { name: "--format", displayName: "--format" },
+      ];
+      const result = filterSuggestions(suggestions, "form", true, false);
+      expect(result.map(({ name }) => name)).toEqual(["--format"]);
+    });
+
+    it("when its name and a different displayName both partially match", () => {
+      const suggestions: Suggestion[] = [
+        { name: "--format", displayName: "formatting" },
+      ];
+      const result = filterSuggestions(suggestions, "form", true, false);
+      expect(result.map(({ name }) => name)).toEqual(["--format"]);
+    });
+
+    it("when its name matches exactly and its displayName also matches", () => {
+      const suggestions: Suggestion[] = [
+        { name: "--format", displayName: "--format" },
+      ];
+      const result = filterSuggestions(suggestions, "--format", true, false);
+      expect(result.map(({ type }) => type)).toEqual([
+        "auto-execute",
+        undefined,
+      ]);
+    });
   });
 });
 
