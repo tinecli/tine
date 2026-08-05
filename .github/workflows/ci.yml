@@ -14,20 +14,23 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # node stays the runtime for tsc; bun is only the package manager.
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
       - name: Install tools
-        run: |
-          corepack enable
-          brew install librsvg
+        run: brew install librsvg
 
       - name: Install JS deps
-        run: corepack pnpm install
+        run: bun install --frozen-lockfile
 
       - name: Build workspace packages
-        run: corepack pnpm run build
+        run: bun run build
 
       - name: Build engine
         run: bash scripts/build-engine.sh

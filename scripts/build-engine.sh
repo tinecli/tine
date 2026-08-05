@@ -6,7 +6,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 AC="$ROOT/packages/autocomplete"
-ESBUILD="$ROOT/node_modules/.pnpm/@esbuild+darwin-arm64@0.25.3/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+ESBUILD="$ROOT/node_modules/.bin/esbuild"
 STUB="$AC/tine-stub-api-bindings.mjs"
 OUT="$ROOT/app/engine/tine-engine.js"
 

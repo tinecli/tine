@@ -25,7 +25,7 @@ brew install protobuf
 
 | Client     | Command        |
 | ---------- | -------------- |
-| typescript | `pnpm install` |
+| typescript | `bun install`  |
 | rust       | N/A\*          |
 
 \* The rust build process handles the installation of the proto toolchain.

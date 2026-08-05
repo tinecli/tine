@@ -4,7 +4,7 @@ Build and run tine from source.
 
 ## Prerequisites
 
-macOS 14+, zsh, Swift 6, and Node 22 + pnpm.
+macOS 14+, zsh, Swift 6, and Node 22 + bun.
 
 ## Run
 
