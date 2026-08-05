@@ -1,6 +1,6 @@
+import { describe, expect, it } from "bun:test";
 import { type Annotation, TokenType } from "@tine/autocomplete-parser";
 import type { Subcommand } from "@tine/shared/internal";
-import { describe, expect, it } from "vitest";
 import type { GeneratorContext } from "../helpers";
 import { getTemplateSuggestions } from "../templateSuggestionsGenerator";
 

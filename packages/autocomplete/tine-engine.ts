@@ -6,6 +6,7 @@
 //   globalThis.__tineSpecsDir        -> path to the installed spec pack
 //   window / document shims (api-bindings touches them at import)
 
+import "../../app/engine/shims.js";
 import { parseArguments } from "@tine/autocomplete-parser";
 import { getCommand } from "@tine/shell-parser";
 import { getCustomSuggestions } from "./src/generators/customSuggestionsGenerator.js";

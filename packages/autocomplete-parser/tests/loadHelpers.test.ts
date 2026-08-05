@@ -1,5 +1,5 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as wrappers from "@tine/api-bindings-wrappers";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as loadHelpers from "../src/loadHelpers";
 
 const { getVersionFromFullFile } = loadHelpers;

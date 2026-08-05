@@ -14,8 +14,6 @@
   "scripts": {
     "dev": "tsc --watch",
     "build": "tsc",
-    "test": "vitest",
-    "coverage": "vitest run --coverage",
     "lint": "biome check src tests",
     "lint:fix": "biome check --write src tests",
     "clean": "rm -rf dist"
@@ -26,9 +24,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.7",
     "@tine/tsconfig": "workspace:^",
-    "@vitest/coverage-v8": "^3.0.8",
-    "typescript": "^7.0.2",
-    "vitest": "^3.0.8"
+    "typescript": "^7.0.2"
   },
   "publishConfig": {
     "access": "public"
