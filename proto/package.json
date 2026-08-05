@@ -30,6 +30,6 @@
     "@tine/tsconfig": "workspace:^",
     "@bufbuild/buf": "^1.54.0",
     "@bufbuild/protoc-gen-es": "^2.2.5",
-    "typescript": "^5.8.3"
+    "typescript": "^7.0.2"
   }
 }

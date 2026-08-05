@@ -21,6 +21,7 @@ export declare const TimeoutError: {
         stack?: string;
         cause?: unknown;
     };
+    isError(error: unknown): error is Error;
 };
 export declare function withTimeout<T>(time: number, promise: Promise<T>): Promise<T>;
 export declare const longestCommonPrefix: (strings: string[]) => string;

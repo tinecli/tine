@@ -5,4 +5,5 @@ export declare const createErrorInstance: (name: string) => {
         stack?: string;
         cause?: unknown;
     };
+    isError(error: unknown): error is Error;
 };

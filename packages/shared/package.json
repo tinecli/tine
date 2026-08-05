@@ -31,7 +31,7 @@
     "@tine/fuzzysort": "workspace:^",
     "@withfig/autocomplete-types": "^1.31.0",
     "eslint": "^9.18.0",
-    "typescript": "^5.8.3",
+    "typescript": "^7.0.2",
     "vitest": "^3.0.8"
   }
 }
