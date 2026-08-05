@@ -14,10 +14,6 @@
       "!**/coverage",
       // Vendored fork of github.com/farzher/fuzzysort — not ours to restyle.
       "!packages/fuzzysort/fuzzysort.js",
-      // Tailwind's @apply/@tailwind at-rules aren't valid CSS as far as
-      // Biome's CSS parser is concerned, so it can't even parse these.
-      "!packages/autocomplete/src/index.css",
-      "!packages/autocomplete-app/src/index.css",
       // Logo/icon assets, not accessible content.
       "!**/*.svg"
     ]
@@ -36,9 +32,6 @@
       // for a while). Each is tracked for a real follow-up pass rather than
       // auto-fixed or silently ignored.
       "correctness": {
-        // ~60 hits across autocomplete/autocomplete-app. Auto-fixing hook
-        // deps risks real behavioral bugs; needs a hook-by-hook review.
-        "useExhaustiveDependencies": "off",
         // ~30 hits, mostly `function`/`var` declared inside blocks in
         // existing generator/parser code predating this rule's availability.
         "noInnerDeclarations": "off"
@@ -52,9 +45,7 @@
         // is an existing pattern throughout the codebase.
         "useIterableCallbackReturn": "off",
         // Its own suggested fix rewrites to Object.hasOwn (ES2022), which
-        // doesn't exist under this app's declared target (browserslist:
-        // "Safari >= 11") — caught this only because rerunning `pnpm build`
-        // after an earlier --unsafe pass broke typecheck.
+        // isn't in the ES2020 target the engine bundle compiles against.
         "noPrototypeBuiltins": "off"
       },
       "style": {
@@ -64,15 +55,11 @@
       "complexity": {
         "useOptionalChain": "off",
         "useIndexOf": "off",
-        "noUselessSwitchCase": "off",
-        "noUselessFragments": "off"
+        "noUselessSwitchCase": "off"
       },
       "performance": {
         "noAccumulatingSpread": "off"
       }
-    },
-    "domains": {
-      "react": "recommended"
     }
   },
   "javascript": {

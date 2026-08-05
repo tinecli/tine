@@ -18,8 +18,6 @@
     "lint": "turbo lint --parallel",
     "lint:fix": "turbo lint:fix --parallel",
     "dev": "turbo dev",
-    "dev:autocomplete": "pnpm -C packages/autocomplete dev",
-    "preview:autocomplete": "pnpm -C packages/autocomplete preview",
     "clean": "turbo clean --parallel",
     "setup": "bash scripts/setup.sh"
   },
