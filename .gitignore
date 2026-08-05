@@ -1,101 +1,36 @@
-## User settings
-xcuserdata/
-
-## gcc Patch
-/*.gcno
-
-# Misc
+# macOS
 .DS_Store
-node_modules/
-.eslintcache
-yarn-error.log
-yarn.lock
-package-lock.json
-*.info
-*.swp
-*.swo
-*.pending-snap
-*.sig
-*.asc
-coverage/
-.turbo
 
-# Python
-__pycache__
-.venv
-
-# Ignore all compiled protobuf artifacts
-**/*.pb.ts
-
-target/
-build
-book/
-.vscode-test/
-
-# ide folders
+# Editors / IDEs
 .vscode/
 .fleet/
 .idea/
+xcuserdata/
+*.swp
+*.swo
 
-# yarn v2
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/sdks
-!.yarn/versions
+# Dependencies
+node_modules/
 
+# stray lockfiles from a package manager other than pnpm
+yarn.lock
+package-lock.json
+
+# Build and test output
+.build/
+/dist/
+.turbo
+coverage/
+*.pending-snap
+
+# Secrets
 .env*
-
-run-build.sh
-# Amazon Q CLI files
-.amazonq/
-
-# generated spec pack (downloaded/converted at build/install time)
-specs/
 
 # generated engine bundle
 app/engine/tine-engine.js
 
+# generated spec pack (downloaded/converted at build/install time)
+specs/
+
 # generated full spec pack (160M)
 specs-pack/
-
-# Swift build output
-.build/
-
-# Packaged artifacts
-/dist/
-
-# Vendored amazon-q monorepo kept locally as reference only (not published)
-# (proto/ IS a JS workspace package — @tine/proto — so it stays tracked)
-/crates/
-/models/
-/build-config/
-/build-scripts/
-/bundle/
-/ops-scripts/
-/rfcs/
-/tests/
-/spike/
-/.cargo/
-/.github/
-
-# Root tooling for the vendored Rust workspace (reference only, not published)
-/Cargo.toml
-/Cargo.lock
-/Cross.toml
-/deny.toml
-/rust-toolchain.toml
-/.rustfmt.toml
-/typos.toml
-/feed.json
-/feed-schema.json
-
-# Stale amazon-q leftovers (docs describe Amazon Q, health files are AWS-branded)
-/AmazonQ.md
-/codebase-summary.md
-/CODEOWNERS
-/CODE_OF_CONDUCT.md
-/CONTRIBUTING.md
-/SECURITY.md

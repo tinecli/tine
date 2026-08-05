@@ -7,10 +7,10 @@ Copyright Amazon.com, Inc. or its affiliates, and dual-licensed under the
 MIT and Apache License 2.0.
 
 tine retains only the local, terminal-autocomplete functionality (the native
-macOS suggestion window, the pseudo-terminal edit-buffer intercept, the macOS
-input method, and the Fig-spec autocomplete engine). The Amazon Q AI/chat,
-cloud service clients, authentication, telemetry, dashboard, and non-macOS
-platform support have been removed.
+macOS suggestion window and the Fig-spec autocomplete engine). The Amazon Q
+AI/chat, cloud service clients, authentication, telemetry, dashboard,
+pseudo-terminal, input method, and non-macOS platform support have been
+removed.
 
 The original MIT and Apache 2.0 license texts are retained in LICENSE.MIT and
 LICENSE.APACHE. Fig autocomplete specs are sourced from
