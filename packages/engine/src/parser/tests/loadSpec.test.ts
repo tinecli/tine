@@ -1,0 +1,204 @@
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type Mock,
+  vi,
+} from "bun:test";
+import * as execShell from "../../shared/execShell";
+import { logger } from "../../shared/log";
+import { SETTINGS, updateSettings } from "../../shared/settings";
+import { SpecLocationSource } from "../../shared/utils";
+import * as loadHelpers from "../loadHelpers";
+import { getSpecPath, loadFigSubcommand } from "../loadSpec";
+
+vi.mock("../loadHelpers", () => ({
+  importSpecFromFile: vi
+    .fn()
+    .mockResolvedValue({ default: { name: "loadFromFile" } }),
+  getPrivateSpec: vi.fn().mockReturnValue(undefined),
+  isDiffVersionedSpec: vi.fn(),
+}));
+
+vi.mock("../../shared/execShell", () => ({
+  ...execShell,
+  executeCommand: vi.fn(),
+}));
+
+// TODO: remove this statement and move fig dir to shared
+const FIG_DIR = "~/.fig";
+
+beforeAll(() => {
+  updateSettings({});
+});
+
+describe("getSpecPath", () => {
+  const cwd = "test_cwd";
+
+  it("works", async () => {
+    expect(await getSpecPath("git", cwd)).toEqual({
+      type: SpecLocationSource.GLOBAL,
+      name: "git",
+    });
+  });
+
+  it("works for specs containing a slash in the name", async () => {
+    expect(
+      await getSpecPath("@withfig/autocomplete-tools", cwd, false),
+    ).toEqual({
+      type: SpecLocationSource.GLOBAL,
+      name: "@withfig/autocomplete-tools",
+    });
+  });
+
+  it("works for scripts containing a slash in the name", async () => {
+    expect(await getSpecPath("@withfig/autocomplete-tools", cwd)).toEqual({
+      type: SpecLocationSource.LOCAL,
+      name: "autocomplete-tools",
+      path: `${cwd}/@withfig/`,
+    });
+  });
+
+  it("works properly with local commands", async () => {
+    expect(await getSpecPath("./test", cwd)).toEqual({
+      type: SpecLocationSource.LOCAL,
+      name: "test",
+      path: `${cwd}/`,
+    });
+    expect(await getSpecPath("~/test", cwd)).toEqual({
+      type: SpecLocationSource.LOCAL,
+      path: `~/`,
+      name: "test",
+    });
+    expect(await getSpecPath("/test", cwd)).toEqual({
+      type: SpecLocationSource.LOCAL,
+      path: `/`,
+      name: "test",
+    });
+    expect(await getSpecPath("/dir/test", cwd)).toEqual({
+      type: SpecLocationSource.LOCAL,
+      path: `/dir/`,
+      name: "test",
+    });
+    expect(await getSpecPath("~/dir/test", cwd)).toEqual({
+      type: SpecLocationSource.LOCAL,
+      path: `~/dir/`,
+      name: "test",
+    });
+    expect(await getSpecPath("./dir/test", cwd)).toEqual({
+      type: SpecLocationSource.LOCAL,
+      path: `${cwd}/dir/`,
+      name: "test",
+    });
+  });
+
+  it("works properly with ? commands", async () => {
+    expect(await getSpecPath("?", cwd)).toEqual({
+      type: SpecLocationSource.LOCAL,
+      path: `${cwd}/`,
+      name: "_shortcuts",
+    });
+  });
+
+  it("works properly with + commands", async () => {
+    expect(await getSpecPath("+", cwd)).toEqual({
+      type: SpecLocationSource.LOCAL,
+      name: "+",
+      path: "~/",
+    });
+  });
+});
+
+describe("loadFigSubcommand", () => {
+  beforeEach(() => {
+    (
+      loadHelpers.isDiffVersionedSpec as Mock<
+        typeof loadHelpers.isDiffVersionedSpec
+      >
+    ).mockResolvedValue(false);
+    updateSettings({});
+  });
+
+  afterEach(() => {
+    (
+      loadHelpers.isDiffVersionedSpec as Mock<
+        typeof loadHelpers.isDiffVersionedSpec
+      >
+    ).mockClear();
+  });
+
+  it("works with expected input", async () => {
+    const result = await loadFigSubcommand({
+      name: "path",
+      type: SpecLocationSource.LOCAL,
+    });
+    expect(loadHelpers.isDiffVersionedSpec).toHaveBeenCalledTimes(1);
+    expect(result.name).toBe("loadFromFile");
+  });
+
+  it("works in dev mode", async () => {
+    const devPath = "~/some-folder/";
+    const specLocation: Fig.SpecLocation = {
+      name: "git",
+      type: SpecLocationSource.LOCAL,
+    };
+
+    updateSettings({
+      [SETTINGS.DEV_COMPLETIONS_FOLDER]: devPath,
+      [SETTINGS.DEV_MODE_NPM]: false,
+      [SETTINGS.DEV_MODE]: false,
+    });
+    await loadFigSubcommand(specLocation);
+    expect(loadHelpers.importSpecFromFile).toHaveBeenLastCalledWith(
+      "git",
+      `${FIG_DIR}/autocomplete/build/`,
+      logger,
+    );
+
+    updateSettings({
+      [SETTINGS.DEV_COMPLETIONS_FOLDER]: devPath,
+      [SETTINGS.DEV_MODE_NPM]: true,
+      [SETTINGS.DEV_MODE]: false,
+    });
+    await loadFigSubcommand(specLocation);
+    expect(loadHelpers.importSpecFromFile).toHaveBeenLastCalledWith(
+      "git",
+      devPath,
+      logger,
+    );
+
+    updateSettings({
+      [SETTINGS.DEV_COMPLETIONS_FOLDER]: devPath,
+      [SETTINGS.DEV_MODE_NPM]: false,
+      [SETTINGS.DEV_MODE]: true,
+    });
+    await loadFigSubcommand(specLocation);
+    expect(loadHelpers.importSpecFromFile).toHaveBeenLastCalledWith(
+      "git",
+      devPath,
+      logger,
+    );
+
+    updateSettings({
+      [SETTINGS.DEV_COMPLETIONS_FOLDER]: "~/some-folder/",
+      [SETTINGS.DEV_MODE_NPM]: false,
+      [SETTINGS.DEV_MODE]: true,
+    });
+    await loadFigSubcommand(specLocation);
+    expect(loadHelpers.importSpecFromFile).toHaveBeenLastCalledWith(
+      "git",
+      devPath,
+      logger,
+    );
+
+    expect(loadHelpers.isDiffVersionedSpec).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe("loadSubcommandCached", () => {
+  // Needs loadFigSubcommand to be injectable before it can be mocked.
+  it.todo("caches by spec name", () => {});
+});

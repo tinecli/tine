@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/app/engine/tine-engine.js"
 
 echo "› bundling engine → $OUT"
-cd "$ROOT/packages/autocomplete"
+cd "$ROOT/packages/engine"
 bun build tine-engine.ts \
   --format=iife --target=browser \
   --outfile="$OUT"

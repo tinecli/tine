@@ -122,12 +122,7 @@ test("a nested path lists that directory and replaces only the basename", async 
 test("a tilde path expands to HOME", async () => {
   // A search term ending in "/" also offers the auto-execute "enter this
   // directory" entry ahead of the listing.
-  expect(await names("cd ~/")).toEqual([
-    "↪",
-    "Documents/",
-    ".config/",
-    "../",
-  ]);
+  expect(await names("cd ~/")).toEqual(["↪", "Documents/", ".config/", "../"]);
 });
 
 test("a folder with a space is escaped on insert", async () => {

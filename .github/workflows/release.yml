@@ -47,7 +47,7 @@ jobs:
       # No spec pack here — the app downloads it at runtime from
       # tinecli/autocomplete's `specs` release (built by that repo's workflow).
 
-      - name: Build workspace packages
+      - name: Typecheck the engine
         run: bun run build
 
       - name: Import signing certificate

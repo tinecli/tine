@@ -48,8 +48,8 @@ install_js_deps() {
   bun install
 }
 
-build_workspace() {
-  echo "Building workspace packages (packages/*/dist)..."
+typecheck() {
+  echo "Typechecking the engine..."
   bun run build
 }
 
@@ -63,6 +63,6 @@ fi
 install_macos_deps
 setup_mise
 install_js_deps
-build_workspace
+typecheck
 
 echo "✅ Setup complete! Follow the instructions in the README to get started."

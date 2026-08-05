@@ -4,82 +4,15 @@
   "workspaces": {
     "": {
       "name": "tine",
+      "dependencies": {
+        "@fig/autocomplete-shared": "^1.1.2",
+      },
       "devDependencies": {
         "@biomejs/biome": "2.5.7",
         "@types/bun": "^1.3.14",
-      },
-    },
-    "packages/autocomplete": {
-      "name": "@tine/autocomplete",
-      "version": "1.0.0",
-      "dependencies": {
-        "@tine/autocomplete-parser": "workspace:^",
-        "@tine/fuzzysort": "workspace:^",
-        "@tine/shared": "workspace:^",
-        "@tine/shell-parser": "workspace:^",
-      },
-      "devDependencies": {
-        "@biomejs/biome": "2.5.7",
         "@types/node": "^22.15.20",
         "@withfig/autocomplete-types": "^1.31.0",
         "typescript": "^7.0.2",
-      },
-    },
-    "packages/autocomplete-parser": {
-      "name": "@tine/autocomplete-parser",
-      "version": "0.2.0",
-      "dependencies": {
-        "@fig/autocomplete-shared": "^1.1.2",
-        "@tine/shared": "workspace:^",
-        "@tine/shell-parser": "workspace:^",
-      },
-      "devDependencies": {
-        "@biomejs/biome": "2.5.7",
-        "@tine/tsconfig": "workspace:^",
-        "@withfig/autocomplete-types": "^1.31.0",
-        "typescript": "^7.0.2",
-      },
-    },
-    "packages/fuzzysort": {
-      "name": "@tine/fuzzysort",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@biomejs/biome": "2.5.7",
-        "@tine/tsconfig": "workspace:^",
-        "typescript": "^7.0.2",
-      },
-    },
-    "packages/shared": {
-      "name": "@tine/shared",
-      "version": "0.1.0",
-      "dependencies": {
-        "@fig/autocomplete-shared": "^1.1.2",
-        "@tine/fuzzysort": "workspace:^",
-      },
-      "devDependencies": {
-        "@biomejs/biome": "2.5.7",
-        "@tine/tsconfig": "workspace:^",
-        "@withfig/autocomplete-types": "^1.31.0",
-        "typescript": "^7.0.2",
-      },
-    },
-    "packages/shell-parser": {
-      "name": "@tine/shell-parser",
-      "version": "0.1.0",
-      "dependencies": {
-        "@tine/shared": "workspace:^",
-      },
-      "devDependencies": {
-        "@biomejs/biome": "2.5.7",
-        "@tine/tsconfig": "workspace:^",
-        "typescript": "^7.0.2",
-      },
-    },
-    "packages/tsconfig": {
-      "name": "@tine/tsconfig",
-      "version": "0.1.0",
-      "peerDependencies": {
-        "typescript": "*",
       },
     },
   },
@@ -103,18 +36,6 @@
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.5.7", "", { "os": "win32", "cpu": "x64" }, "sha512-V+0wu/nrj2S+MhP4EQ0uHNolP0IALEsz45pg0WoKkHfDeh0+ItHwP/p7bX5RPoMOl9NkpHYWdYPhIcy2mACHvQ=="],
 
     "@fig/autocomplete-shared": ["@fig/autocomplete-shared@1.1.2", "", {}, "sha512-RUdSGkxv6+RkZJPD8B6Yq4i6qKHBym4VL8noLOscn1n8o6DXkZAmJtg5MEdMMUwBAZO04eTo1+xKQ0YkPs9w2Q=="],
-
-    "@tine/autocomplete": ["@tine/autocomplete@workspace:packages/autocomplete"],
-
-    "@tine/autocomplete-parser": ["@tine/autocomplete-parser@workspace:packages/autocomplete-parser"],
-
-    "@tine/fuzzysort": ["@tine/fuzzysort@workspace:packages/fuzzysort"],
-
-    "@tine/shared": ["@tine/shared@workspace:packages/shared"],
-
-    "@tine/shell-parser": ["@tine/shell-parser@workspace:packages/shell-parser"],
-
-    "@tine/tsconfig": ["@tine/tsconfig@workspace:packages/tsconfig"],
 
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 
