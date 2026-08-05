@@ -7,39 +7,7 @@ OS="$(uname -s)"
 install_macos_deps() {
   echo "Detected macOS"
   xcode-select --install || true
-  brew install mise bun zsh jq
-}
-
-add_mise_to_shell() {
-  echo "Adding mise integration to shell..."
-
-  SHELL_NAME=$(basename "$SHELL")
-
-  case "$SHELL_NAME" in
-    zsh)
-      ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"
-      grep -qxF 'eval "$(mise activate zsh)"' "$ZSHRC" || echo 'eval "$(mise activate zsh)"' >> "$ZSHRC"
-      ;;
-    bash)
-      BASHRC="$HOME/.bashrc"
-      grep -qxF 'eval "$(mise activate bash)"' "$BASHRC" || echo 'eval "$(mise activate bash)"' >> "$BASHRC"
-      ;;
-    fish)
-      FISH_CONFIG="$HOME/.config/fish/config.fish"
-      mkdir -p "$(dirname "$FISH_CONFIG")"
-      grep -qxF 'mise activate fish | source' "$FISH_CONFIG" || echo 'mise activate fish | source' >> "$FISH_CONFIG"
-      ;;
-    *)
-      echo "⚠️  Unknown shell '$SHELL_NAME'. Please add mise manually to your shell config."
-      ;;
-  esac
-}
-
-setup_mise() {
-  echo "Installing Node with mise..."
-  add_mise_to_shell
-  mise trust
-  mise install
+  brew install bun zsh
 }
 
 install_js_deps() {
@@ -61,7 +29,6 @@ if [[ "$OS" != "Darwin" ]]; then
 fi
 
 install_macos_deps
-setup_mise
 install_js_deps
 typecheck
 

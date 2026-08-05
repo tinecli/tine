@@ -29,39 +29,32 @@
     "enabled": true,
     "rules": {
       "preset": "recommended",
-      // Pre-existing debt this migration surfaced but didn't introduce and
-      // isn't in scope to fix here (turbo's lint task has been broken since
-      // the org migration, so nothing has actually been linting this repo
-      // for a while). Each is tracked for a real follow-up pass rather than
-      // auto-fixed or silently ignored.
-      "correctness": {
-        // ~30 hits, mostly `function`/`var` declared inside blocks in
-        // existing generator/parser code predating this rule's availability.
-        "noInnerDeclarations": "off"
-      },
+      // The five rules below are still off. Counts are exact as of 2026-08-05,
+      // measured with `biome check --only=<group>/<rule> .` — re-measure before
+      // you claim a number. None has a fix `biome check --write` will apply on
+      // its own, so each needs a deliberate pass over the source.
+      // (The rest of the original debt list is now enabled: noInnerDeclarations,
+      // useIndexOf, noUselessSwitchCase and noAccumulatingSpread all measure
+      // zero hits against the current tree.)
       "suspicious": {
-        // ~55 hits: `let x;` without an initializer/annotation, relying on
-        // TS control-flow narrowing at the assignment site (tsc's own
+        // 2 hits: `let x;` without an initializer/annotation, relying on TS
+        // control-flow narrowing at the assignment site (tsc's own
         // noImplicitAny already covers the real type-safety concern here).
         "noImplicitAnyLet": "off",
-        // ~12 hits: .map/.forEach callbacks whose return value is unused
-        // is an existing pattern throughout the codebase.
+        // 5 hits: .map/.forEach callbacks whose return value is unused.
         "useIterableCallbackReturn": "off",
-        // Its own suggested fix rewrites to Object.hasOwn (ES2022), which
-        // isn't in the ES2020 target the engine bundle compiles against.
+        // 1 hit, and the code there already uses the safe
+        // `Object.prototype.hasOwnProperty.call` form. The rule only wants
+        // Object.hasOwn (ES2022), which the engine's ES2020 lib lacks.
         "noPrototypeBuiltins": "off"
       },
       "style": {
-        // ~21 hits of intentional `!` non-null assertions throughout.
+        // 13 hits of intentional `!` non-null assertions.
         "noNonNullAssertion": "off"
       },
       "complexity": {
-        "useOptionalChain": "off",
-        "useIndexOf": "off",
-        "noUselessSwitchCase": "off"
-      },
-      "performance": {
-        "noAccumulatingSpread": "off"
+        // 6 hits; every fix is flagged unsafe, so it needs review per site.
+        "useOptionalChain": "off"
       }
     }
   },
