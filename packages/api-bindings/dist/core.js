@@ -45,6 +45,7 @@ export function sendMessage(submessage, handler) {
             headers: {
                 "content-type": "application/fig-api",
             },
+            // toBinary always allocates a fresh, non-shared Uint8Array; its .d.ts just predates generic typed arrays.
             body: buffer,
         }).then(async (res) => {
             const body = new Uint8Array(await res.arrayBuffer());

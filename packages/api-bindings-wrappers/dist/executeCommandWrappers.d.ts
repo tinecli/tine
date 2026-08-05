@@ -1,8 +1,11 @@
-export declare const LoginShellError: new (message?: string) => {
-    name: string;
-    message: string;
-    stack?: string;
-    cause?: unknown;
+export declare const LoginShellError: {
+    new (message?: string): {
+        name: string;
+        message: string;
+        stack?: string;
+        cause?: unknown;
+    };
+    isError(error: unknown): error is Error;
 };
 export declare const executeLoginShell: ({ command, executable, shell, timeout, }: {
     command: string;
