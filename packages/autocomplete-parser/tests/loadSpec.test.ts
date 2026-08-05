@@ -8,10 +8,10 @@ import {
   type Mock,
   vi,
 } from "bun:test";
-import * as wrappers from "@tine/api-bindings-wrappers";
-import { SETTINGS, updateSettings } from "@tine/api-bindings-wrappers";
+import * as execShell from "@tine/shared/execShell";
+import { logger } from "@tine/shared/log";
+import { SETTINGS, updateSettings } from "@tine/shared/settings";
 import { SpecLocationSource } from "@tine/shared/utils";
-import logger from "loglevel";
 import * as loadHelpers from "../src/loadHelpers";
 import { getSpecPath, loadFigSubcommand } from "../src/loadSpec";
 
@@ -25,8 +25,8 @@ vi.mock("../src/loadHelpers", () => ({
   isDiffVersionedSpec: vi.fn(),
 }));
 
-vi.mock("@tine/api-bindings-wrappers", () => ({
-  ...wrappers,
+vi.mock("@tine/shared/execShell", () => ({
+  ...execShell,
   executeCommand: vi.fn(),
 }));
 
@@ -115,8 +115,6 @@ describe("getSpecPath", () => {
 });
 
 describe("loadFigSubcommand", () => {
-  window.URL.createObjectURL = vi.fn();
-
   beforeEach(() => {
     (loadHelpers.isDiffVersionedSpec as Mock<AnyFn>).mockResolvedValue(false);
     updateSettings({});

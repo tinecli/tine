@@ -1,19 +1,14 @@
 import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
-import { Settings } from "@tine/api-bindings";
-import {
-  executeCommand,
-  getSetting,
-  isInDevMode,
-  SETTINGS,
-} from "@tine/api-bindings-wrappers";
+import { executeCommand } from "@tine/shared/execShell";
 import type { SpecLocation, Subcommand } from "@tine/shared/internal";
+import { type Logger, logger } from "@tine/shared/log";
+import { getSetting, isInDevMode, SETTINGS } from "@tine/shared/settings";
 import {
   ensureTrailingSlash,
   SpecLocationSource,
   splitPath,
   withTimeout,
 } from "@tine/shared/utils";
-import logger, { type Logger } from "loglevel";
 import { specCache } from "./caches.js";
 import { DisabledSpecError, MissingSpecError } from "./errors.js";
 import {
@@ -230,7 +225,6 @@ export const loadSubcommandCached = async (
   const key = [source, path || "", name].join(",");
   if (getSetting(SETTINGS.DEV_MODE_NPM_INVALIDATE_CACHE)) {
     specCache.clear();
-    Settings.set(SETTINGS.DEV_MODE_NPM_INVALIDATE_CACHE, false);
   } else if (!getSetting(SETTINGS.DEV_MODE_NPM) && specCache.has(key)) {
     return specCache.get(key) as Subcommand;
   }

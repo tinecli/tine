@@ -1,5 +1,5 @@
-import { getSetting, SETTINGS } from "@tine/api-bindings-wrappers";
 import type { Suggestion } from "@tine/shared/internal";
+import { getSetting, SETTINGS } from "@tine/shared/settings";
 import { makeArray } from "@tine/shared/utils";
 
 // { command: { commandParam: count/lastUsedDate } }

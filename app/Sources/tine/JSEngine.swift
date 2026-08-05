@@ -44,8 +44,8 @@ final class JSEngine {
         // HOME so the path generators expand `~` (e.g. `cd ~/`).
         ctx.setObject(NSHomeDirectory() as NSString, forKeyedSubscript: "__tineHome" as NSString)
 
-        // Shims are baked into the bundle via esbuild --inject, so this is the
-        // single self-contained artifact.
+        // Shims are baked into the bundle (tine-engine.ts imports them), so this
+        // is the single self-contained artifact.
         let path = "\(resourcesDir)/tine-engine.js"
         guard let src = try? String(contentsOfFile: path, encoding: .utf8) else {
             tlog("engine: missing \(path)")

@@ -1,5 +1,16 @@
-# Shared utils
+# @tine/shared
 
-## ⚠️ This package SHOULDN'T contain states but only effects
+Code every other package needs.
 
-Why? This package is not published to a registry and when we require some of its exports in the other packages the required functions/constants are bundled in the requiring package. Bundling COPIES exports in the requiring packages (instead of `node_modules` that "reference" exports). For this reason if we create a shared state in this package and we consume it in two different packages that should work simultaneously it won't work correctly because two different states would be created.
+- `host.ts`: the two hooks the host (Swift, or Node in tests) injects —
+  `runProcess` and `readFile`. `runProcess` settles within one microtask flush,
+  which `JSEngine.swift` depends on; never add a `.then` hop to it.
+- `exec.ts` / `execShell.ts`: run a shell command through `host.runProcess`,
+  either directly or via a login shell.
+- `settings.ts`: the `SETTINGS` keys and the in-memory settings map.
+- `log.ts`: the logger. `debug` and `info` are dropped; `warn` and `error` reach
+  the console.
+- `utils.ts`, `errors.ts`, `internal.ts`: helpers, error factory, spec types.
+
+Everything is bundled into one IIFE by `scripts/build-engine.sh`, so a module
+here holds exactly one instance of its state at runtime.

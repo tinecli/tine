@@ -1,9 +1,8 @@
-import { Process } from "@tine/api-bindings";
 import { createErrorInstance } from "@tine/shared/errors";
+import { cleanOutput, executeCommandTimeout } from "@tine/shared/exec";
+import { readFile, runProcess } from "@tine/shared/host";
+import { logger } from "@tine/shared/log";
 import { withTimeout } from "@tine/shared/utils";
-import logger from "loglevel";
-import { cleanOutput, executeCommandTimeout } from "./executeCommand.js";
-import { fread } from "./fs.js";
 
 export const LoginShellError = createErrorInstance("LoginShellError");
 
@@ -13,7 +12,7 @@ let etcShells: Promise<string[]> | undefined;
 
 const getShellExecutable = async (shellName: string) => {
   if (!etcShells) {
-    etcShells = fread("/etc/shells").then((shells) =>
+    etcShells = readFile("/etc/shells").then((shells) =>
       shells
         .split("\n")
         .map((line) => line.trim())
@@ -57,18 +56,14 @@ export const executeLoginShell = async ({
       throw new LoginShellError(`Could not find executable for ${shell}`);
     }
   }
-  const flags = window.fig.constants?.os === "linux" ? "-lc" : "-lic";
-
-  const process = Process.run({
+  const process = runProcess({
     executable: exe,
-    args: [flags, command],
-    terminalSessionId: window.globalTerminalSessionId,
+    args: ["-lic", command],
     timeout,
   });
 
   try {
     logger.info(`About to run login shell command '${command}'`, {
-      separateProcess: Boolean(window.f.Process),
       shell: exe,
     });
     const start = performance.now();

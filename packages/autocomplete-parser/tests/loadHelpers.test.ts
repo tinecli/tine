@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
-import * as wrappers from "@tine/api-bindings-wrappers";
+import * as execShell from "@tine/shared/execShell";
 import * as loadHelpers from "../src/loadHelpers";
 
 const { getVersionFromFullFile } = loadHelpers;
@@ -17,7 +17,7 @@ describe("test `getVersionFromFullFile`", () => {
     vi.clearAllMocks();
   });
   it("missing `getVersionCommand` and working `command --version`", async () => {
-    vi.spyOn(wrappers, "executeCommand").mockReturnValue(
+    vi.spyOn(execShell, "executeCommand").mockReturnValue(
       Promise.resolve({
         status: 0,
         stdout: "2.0.0",
@@ -30,7 +30,7 @@ describe("test `getVersionFromFullFile`", () => {
   });
 
   it("missing `getVersionCommand` and not working `command --version`", async () => {
-    vi.spyOn(wrappers, "executeCommand").mockReturnValue(
+    vi.spyOn(execShell, "executeCommand").mockReturnValue(
       Promise.resolve({
         status: 1,
         stdout: "",
@@ -43,14 +43,14 @@ describe("test `getVersionFromFullFile`", () => {
   });
 
   it("missing `getVersionCommand` and throwing `command --version`", async () => {
-    vi.spyOn(wrappers, "executeCommand").mockReturnValue(Promise.reject());
+    vi.spyOn(execShell, "executeCommand").mockReturnValue(Promise.reject());
     const newSpecData = { ...specData, getVersionCommand: undefined };
     const version = await getVersionFromFullFile(newSpecData, "npm");
     expect(version).toBeUndefined();
   });
 
   it("working `getVersionCommand`", async () => {
-    vi.spyOn(wrappers, "executeCommand").mockReturnValue(
+    vi.spyOn(execShell, "executeCommand").mockReturnValue(
       Promise.resolve({
         status: 0,
         stdout: "",

@@ -1,14 +1,11 @@
-import {
-  executeCommand,
-  fread,
-  isInDevMode,
-} from "@tine/api-bindings-wrappers";
+import { executeCommand } from "@tine/shared/execShell";
+import { readFile } from "@tine/shared/host";
+import { type Logger, logger } from "@tine/shared/log";
+import { isInDevMode } from "@tine/shared/settings";
 import { ensureTrailingSlash, withTimeout } from "@tine/shared/utils";
-import logger, { type Logger } from "loglevel";
-import * as semver from "semver";
-import z from "zod";
 import { MOST_USED_SPECS } from "./constants.js";
 import { LoadLocalSpecError } from "./errors.js";
+import { clean } from "./semver.js";
 
 export type SpecFileImport =
   | {
@@ -101,7 +98,7 @@ export async function importSpecFromFile(
 ): Promise<SpecFileImport> {
   const importFromPath = async (fullPath: string) => {
     localLogger.info(`Loading spec from ${fullPath}`);
-    const contents = await fread(fullPath);
+    const contents = await readFile(fullPath);
     if (!contents) {
       throw new LoadLocalSpecError(`Failed to read file: ${fullPath}`);
     }
@@ -119,12 +116,6 @@ export async function importSpecFromFile(
   return importString(result);
 }
 
-/**
- * Specs can only be loaded from non "secure" contexts, so we can't load from https
- */
-export const canLoadSpecProtocol = () =>
-  typeof window !== "undefined" ? window.location.protocol !== "https:" : true;
-
 // tine: load specs from the locally-installed spec pack (downloaded by the app
 // to __tineSpecsDir), not a CDN. Keeps runtime fully local + offline.
 export async function importFromPublicCDN<T = SpecFileImport>(
@@ -139,7 +130,7 @@ export async function importFromPublicCDN<T = SpecFileImport>(
 async function jsonFromPublicCDN(path: string): Promise<unknown> {
   // tine: read JSON (e.g. the spec index) from the local spec pack.
   const dir = (globalThis as { __tineSpecsDir?: string }).__tineSpecsDir ?? "";
-  const contents = await fread(`${ensureTrailingSlash(dir)}${path}.json`);
+  const contents = await readFile(`${ensureTrailingSlash(dir)}${path}.json`);
   return JSON.parse(contents);
 }
 
@@ -181,7 +172,7 @@ export async function getVersionFromFullFile(
         return newVersion;
       }
 
-      const newVersion = semver.clean(
+      const newVersion = clean(
         (
           await executeCommand({
             command: name,
@@ -212,15 +203,27 @@ export function clearSpecIndex() {
   publicSpecsRequest = undefined;
 }
 
-const INDEX_ZOD = z.object({
-  completions: z.array(z.string()),
-  diffVersionedCompletions: z.array(z.string()),
-});
+type SpecIndex = {
+  completions: string[];
+  diffVersionedCompletions: string[];
+};
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === "string");
+
+const parseSpecIndex = (value: unknown): SpecIndex => {
+  const { completions, diffVersionedCompletions } = (value ??
+    {}) as Partial<SpecIndex>;
+  if (!isStringArray(completions) || !isStringArray(diffVersionedCompletions)) {
+    throw new LoadLocalSpecError("Malformed spec index");
+  }
+  return { completions, diffVersionedCompletions };
+};
 
 const createPublicSpecsRequest = async () => {
   if (publicSpecsRequest === undefined) {
     publicSpecsRequest = jsonFromPublicCDN("index")
-      .then(INDEX_ZOD.parse)
+      .then(parseSpecIndex)
       .then((index) => ({
         completions: new Set(index.completions),
         diffVersionedSpecs: new Set(index.diffVersionedCompletions),

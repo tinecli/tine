@@ -1,6 +1,5 @@
 import {
   afterEach,
-  beforeAll,
   beforeEach,
   describe,
   expect,
@@ -8,13 +7,13 @@ import {
   type Mock,
   vi,
 } from "bun:test";
-import { filepaths, folders } from "@fig/autocomplete-generators";
 import {
   convertSubcommand,
   initializeDefault,
   type Metadata,
 } from "@fig/autocomplete-shared";
 import type * as Internal from "@tine/shared/internal";
+import { type Logger, logger } from "@tine/shared/log";
 import {
   makeArray,
   SpecLocationSource,
@@ -22,8 +21,8 @@ import {
   type SuggestionFlags,
 } from "@tine/shared/utils";
 import { type Command, getCommand } from "@tine/shell-parser";
-import logger from "loglevel";
 import { resetCaches } from "../src/caches";
+import { filepaths, folders } from "../src/filepaths";
 import * as loadSpec from "../src/loadSpec";
 import { loadSubcommandCached } from "../src/loadSpec";
 import {
@@ -49,15 +48,8 @@ const parseArguments = (
   command: Command | null,
   context: Fig.ShellContext,
   isParsingHistory?: boolean,
-  localLogger?: logger.Logger,
+  localLogger?: Logger,
 ) => defaultParseArguments(command, context, isParsingHistory, localLogger);
-
-beforeAll(() => {
-  global.fig = {
-    ...global.fig,
-    settings: {},
-  };
-});
 
 beforeEach(() => {
   resetCaches();

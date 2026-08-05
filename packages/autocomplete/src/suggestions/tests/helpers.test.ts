@@ -1,11 +1,4 @@
-global.fig = {
-  ...global.fig,
-  settings: {},
-};
-
-const originalGlobalFig = global.fig;
-
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type { Suggestion } from "@tine/shared/internal";
 import {
   bestScoreMatch,
@@ -26,17 +19,6 @@ const fooOrFoobar: Suggestion = {
 };
 
 describe("getNameMatch", () => {
-  beforeEach(() => {
-    global.fig = {
-      ...global.fig,
-      settings: {},
-    };
-  });
-
-  afterEach(() => {
-    global.fig = originalGlobalFig;
-  });
-
   it("should match", () => {
     expect(getNameMatch(foo, "foo", false, false)).toEqual("foo");
     expect(getNameMatch(foo, "", false, false)).toEqual("foo");
@@ -61,19 +43,6 @@ describe("getNameMatch", () => {
   });
 
   describe("with fuzzy search", () => {
-    beforeEach(() => {
-      global.fig = {
-        ...global.fig,
-        settings: {
-          "autocomplete.fuzzySearch": true,
-        },
-      };
-    });
-
-    afterEach(() => {
-      global.fig = originalGlobalFig;
-    });
-
     it("should match", () => {
       expect(getNameMatch(foo, "foo", true, false)).toEqual("foo");
       expect(getNameMatch(fooOrFoobar, "foo", true, false)).toEqual("foo");
@@ -100,18 +69,6 @@ describe("getNameMatch", () => {
   });
 
   describe("with verbose suggestion preferred", () => {
-    beforeEach(() => {
-      global.fig = {
-        ...global.fig,
-        settings: {
-          "autocomplete.preferVerboseSuggestions": true,
-        },
-      };
-    });
-
-    afterEach(() => {
-      global.fig = originalGlobalFig;
-    });
     it("should match with array", () => {
       expect(getNameMatch(fooOrFoobar, "fo", false, true)).toEqual("FooBar");
       expect(getNameMatch(fooOrFoobar, "foob", false, true)).toEqual("FooBar");

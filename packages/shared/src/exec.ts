@@ -1,13 +1,8 @@
-/**
- * NOTE: this is intended to be separate because executeCommand
- * will often be mocked during testing of functions that call it.
- * If it gets bundled in the same file as the functions that call it
- * the test runner is not able to mock it (because of esm restrictions).
- */
-
-import { Process } from "@tine/api-bindings";
+// Separate from execShell so a test can mock executeCommandTimeout without also
+// mocking the callers that live beside it.
+import { runProcess } from "@tine/shared/host";
+import { logger } from "@tine/shared/log";
 import { withTimeout } from "@tine/shared/utils";
-import logger from "loglevel";
 
 export const cleanOutput = (output: string) =>
   output
@@ -19,7 +14,7 @@ export const cleanOutput = (output: string) =>
 
 export const executeCommandTimeout = async (
   input: Fig.ExecuteCommandInput,
-  timeout = window.fig.constants?.os === "windows" ? 20000 : 5000,
+  timeout = 5000,
 ): Promise<Fig.ExecuteCommandOutput> => {
   const command = [input.command, ...input.args].join(" ");
   try {
@@ -27,12 +22,11 @@ export const executeCommandTimeout = async (
     const start = performance.now();
     const result = await withTimeout(
       Math.max(timeout, input.timeout ?? 0),
-      Process.run({
+      runProcess({
         executable: input.command,
         args: input.args,
         environment: input.env,
         workingDirectory: input.cwd,
-        terminalSessionId: window.globalTerminalSessionId,
         timeout: input.timeout,
       }),
     );

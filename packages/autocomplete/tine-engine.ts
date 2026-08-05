@@ -4,7 +4,6 @@
 // The host (Swift, or Node for tests) must first provide:
 //   globalThis.__tineReadFile(path)  -> file contents (string)   [sync ok]
 //   globalThis.__tineSpecsDir        -> path to the installed spec pack
-//   window / document shims (api-bindings touches them at import)
 
 import "../../app/engine/shims.js";
 import { parseArguments } from "@tine/autocomplete-parser";

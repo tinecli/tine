@@ -7,9 +7,9 @@ import {
   type Mock,
   vi,
 } from "bun:test";
-import * as settings from "@tine/api-bindings-wrappers";
-import { SETTINGS } from "@tine/api-bindings-wrappers";
 import type { Suggestion } from "@tine/shared/internal";
+import * as settings from "@tine/shared/settings";
+import { SETTINGS } from "@tine/shared/settings";
 import {
   deduplicateSuggestions,
   filterSuggestions,

@@ -26,12 +26,6 @@ if (typeof globalThis.document === "undefined") {
     removeEventListener: () => {},
   };
 }
-// The command path reads these.
-globalThis.window.fig = globalThis.window.fig || { constants: { os: "macos" } };
-globalThis.window.f = globalThis.window.f || {};
-if (globalThis.window.globalTerminalSessionId === undefined)
-  globalThis.window.globalTerminalSessionId = "";
-
 if (typeof globalThis.process === "undefined") {
   globalThis.process = {
     env: {},

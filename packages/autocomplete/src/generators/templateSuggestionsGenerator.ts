@@ -1,7 +1,5 @@
 import { type Annotation, TokenType } from "@tine/autocomplete-parser";
 import { findLast, makeArray } from "@tine/shared/utils";
-import logger from "loglevel";
-import { getHistoryArgSuggestions } from "../history";
 import type { GeneratorContext } from "./helpers";
 
 const getHelpSuggestions = (annotations: Annotation[]) => {
@@ -54,25 +52,13 @@ export async function getTemplateSuggestions(
   context: GeneratorContext,
 ): Promise<Fig.Suggestion[]> {
   const { template, filterTemplateSuggestions } = generator;
-  const { currentProcess, annotations } = context;
+  const { annotations } = context;
   if (!template) {
     return [];
   }
 
   const suggestions: Fig.TemplateSuggestion[] = [];
   const typesToInclude = new Set(makeArray(template));
-
-  if (typesToInclude.has("history")) {
-    try {
-      const historySuggestions = getHistoryArgSuggestions(
-        annotations,
-        currentProcess,
-      );
-      suggestions.push(...historySuggestions);
-    } catch (_err) {
-      logger.error("template suggestion did not work for template: history");
-    }
-  }
 
   if (typesToInclude.has("help")) {
     suggestions.push(...getHelpSuggestions(annotations));

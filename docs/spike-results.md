@@ -5,6 +5,10 @@ inside JavaScriptCore (so a native Swift app can use it with no webview)?
 
 **Answer: yes.** Proven 2026-07-06.
 
+Historical record. The commands below are what was run at the time; the repo has
+since moved to bun (package manager, bundler and test runner) and dropped the
+`proto`, `api-bindings` and `api-bindings-wrappers` packages.
+
 ## What was verified
 1. **Engine logic is headless JS** — 87 tests pass in plain Node (vitest):
    `parseArguments` (107), `loadSpec` (9), `loadHelpers` (4), suggestions (42),

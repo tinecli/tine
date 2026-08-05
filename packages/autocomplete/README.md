@@ -10,7 +10,6 @@ into JavaScriptCore. The Swift app is the only frontend; there is no web build.
   custom functions) through the host's command bridge
 - `suggestions/`: computes, sorts, and filters the suggestion list from parser
   results and completed generators
-- `history/`: history-backed argument suggestions
 
 `tine-engine.ts` wires these together and exposes
 `globalThis.tineSuggest(line, cursor, cwd, callback)`.
