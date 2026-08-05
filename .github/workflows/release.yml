@@ -1,17 +1,16 @@
 name: Release
 
-# On a version tag (v1.2.3): build the spec pack + app, package a Developer ID
-# signed + notarized dmg, attach it to a GitHub Release, and bump the Homebrew
-# cask in tinecli/homebrew-tap.
+# On a version tag (v1.2.3) that lives on main: build the app, package a
+# Developer ID signed + notarized dmg, attach it to a GitHub Release, and bump
+# the Homebrew cask in tinecli/homebrew-tap.
 #
-# Secrets:
+# All of these secrets are required — the preflight step fails the run if any is
+# empty, so a release is never silently ad-hoc signed or left un-bumped:
 #   APPLE_CERT_P12        base64 of the exported "Developer ID Application" cert (.p12)
 #   APPLE_CERT_PASSWORD   password used when exporting that .p12
 #   NOTARY_APPLE_ID       Apple ID email for notarytool
 #   NOTARY_PASSWORD       app-specific password for that Apple ID
-#   TAP_GITHUB_TOKEN      PAT with write access to tinecli/homebrew-tap
-# If the Apple secrets are unset the build falls back to ad-hoc signing (no
-# notarization); if TAP_GITHUB_TOKEN is unset the cask bump is skipped.
+#   TAP_GITHUB_TOKEN      token with write access to tinecli/homebrew-tap
 on:
   push:
     tags: [ 'v*' ]
@@ -19,36 +18,56 @@ on:
 permissions:
   contents: write   # create the GitHub Release
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Build & release
-    runs-on: macos-26   # preview image: builds on the macOS 26 SDK so releases ship Liquid Glass
+    runs-on: macos-26   # builds on the macOS 26 SDK so releases ship Liquid Glass
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # the tag-on-main guard needs history
+
+      - name: Preflight — every release secret is set
+        env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for name in APPLE_CERT_P12 APPLE_CERT_PASSWORD NOTARY_APPLE_ID NOTARY_PASSWORD TAP_GITHUB_TOKEN; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::secret $name is empty — refusing to release"
+              exit 1
+            fi
+          done
+
+      - name: Require the tag to be on main
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main — refusing to release"
+            exit 1
+          fi
 
       - name: Resolve version from tag
         id: ver
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      # node stays the runtime for tsc; bun is only the package manager.
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
 
-      - name: Install tools
-        run: brew install librsvg
-
-      - name: Install JS deps
-        run: bun install --frozen-lockfile
-      # No spec pack here — the app downloads it at runtime from
-      # tinecli/autocomplete's `specs` release (built by that repo's workflow).
-
-      - name: Typecheck the engine
-        run: bun run build
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run build
+      - run: bun test
 
       - name: Import signing certificate
         env:
@@ -56,11 +75,6 @@ jobs:
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -z "${APPLE_CERT_P12:-}" ]; then
-            echo "APPLE_CERT_P12 unset — falling back to ad-hoc signing."
-            echo "TINE_SIGN_ID=-" >> "$GITHUB_ENV"
-            exit 0
-          fi
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
           KEYCHAIN_PW="$(openssl rand -base64 24)"
           echo "$APPLE_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
@@ -74,6 +88,10 @@ jobs:
           rm -f "$RUNNER_TEMP/cert.p12"
           ID="$(security find-identity -v -p codesigning "$KEYCHAIN" \
             | awk -F '"' '/Developer ID Application/{print $2; exit}')"
+          if [ -z "$ID" ]; then
+            echo "::error::no Developer ID Application identity in the imported keychain"
+            exit 1
+          fi
           echo "Imported: $ID"
           echo "TINE_SIGN_ID=$ID" >> "$GITHUB_ENV"
 
@@ -85,6 +103,23 @@ jobs:
           NOTARY_TEAM_ID: "82K3YC8HVF"
           NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
         run: bash scripts/package.sh
+
+      - name: Verify the artifacts are signed, notarized and stapled
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          APP="dist/Tine.app"
+          DMG="dist/Tine-$VERSION.dmg"
+          codesign --verify --strict --deep --verbose=2 "$APP"
+          codesign -dvv "$APP" > "$RUNNER_TEMP/codesign.txt" 2>&1
+          grep -q 'Authority=Developer ID Application' "$RUNNER_TEMP/codesign.txt"
+          spctl -a -vvv "$APP" > "$RUNNER_TEMP/spctl-app.txt" 2>&1
+          grep -q 'source=Notarized Developer ID' "$RUNNER_TEMP/spctl-app.txt"
+          spctl -a -vvv -t install "$DMG" > "$RUNNER_TEMP/spctl-dmg.txt" 2>&1
+          grep -q 'source=Notarized Developer ID' "$RUNNER_TEMP/spctl-dmg.txt"
+          xcrun stapler validate "$APP"
+          xcrun stapler validate "$DMG"
 
       - name: Compute sha256
         id: sha
@@ -107,13 +142,12 @@ jobs:
           SHA256: ${{ steps.sha.outputs.sha256 }}
         run: |
           set -euo pipefail
-          if [ -z "${TAP_TOKEN:-}" ]; then
-            echo "TAP_GITHUB_TOKEN not set — skipping cask bump."; exit 0
-          fi
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/tinecli/homebrew-tap.git" tap
           cd tap
           sed -i '' -E "s/^  version \".*\"/  version \"$VERSION\"/" Casks/tine.rb
           sed -i '' -E "s/^  sha256 \".*\"/  sha256 \"$SHA256\"/" Casks/tine.rb
+          grep -q "^  version \"$VERSION\"$" Casks/tine.rb
+          grep -q "^  sha256 \"$SHA256\"$" Casks/tine.rb
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -am "tine $VERSION"
