@@ -557,10 +557,21 @@ specLocations, isParsingHistory, startIndex = 0, localLogger = logger) => {
                 : undefined
             : loadSpec;
         if (Array.isArray(loadSpecResult)) {
+            const parentPersistentOptions = state.completionObj.persistentOptions;
             state = await parseArgumentsCached(currentCommand, context, 
             // authClient,
             loadSpecResult, isParsingHistory, startIndex + index);
-            state = { ...state, commandIndex: state.commandIndex + index };
+            state = {
+                ...state,
+                commandIndex: state.commandIndex + index,
+                completionObj: {
+                    ...state.completionObj,
+                    persistentOptions: {
+                        ...parentPersistentOptions,
+                        ...state.completionObj.persistentOptions,
+                    },
+                },
+            };
             return true;
         }
         if (loadSpecResult) {
@@ -568,6 +579,10 @@ specLocations, isParsingHistory, startIndex = 0, localLogger = logger) => {
                 ...state,
                 completionObj: {
                     ...loadSpecResult,
+                    persistentOptions: {
+                        ...state.completionObj.persistentOptions,
+                        ...loadSpecResult.persistentOptions,
+                    },
                     parserDirectives: {
                         ...state.completionObj.parserDirectives,
                         ...loadSpecResult.parserDirectives,
