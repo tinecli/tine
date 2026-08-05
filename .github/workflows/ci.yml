@@ -26,6 +26,9 @@ jobs:
       - name: Install JS deps
         run: corepack pnpm install
 
+      - name: Build workspace packages
+        run: corepack pnpm run build
+
       - name: Build engine
         run: bash scripts/build-engine.sh
 
