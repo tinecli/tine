@@ -118,7 +118,7 @@ if (typeof globalThis.setTimeout === "undefined") {
 
 // UTF-8 TextEncoder/Decoder.
 if (typeof globalThis.TextEncoder === "undefined") {
-  globalThis.TextEncoder = () => {};
+  globalThis.TextEncoder = function TextEncoder() {};
   globalThis.TextEncoder.prototype.encode = (str) => {
     var u = [];
     for (var i = 0; i < str.length; i++) {
@@ -139,7 +139,7 @@ if (typeof globalThis.TextEncoder === "undefined") {
     }
     return new Uint8Array(u);
   };
-  globalThis.TextDecoder = () => {};
+  globalThis.TextDecoder = function TextDecoder() {};
   globalThis.TextDecoder.prototype.decode = (buf) => {
     var a = new Uint8Array(buf.buffer || buf),
       s = "",
