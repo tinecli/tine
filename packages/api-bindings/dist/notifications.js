@@ -1,6 +1,6 @@
+import { create } from "@bufbuild/protobuf";
 import { NotificationRequestSchema, NotificationType, } from "@tine/proto/fig";
 import { sendMessage } from "./core.js";
-import { create } from "@bufbuild/protobuf";
 const handlers = {};
 export function _unsubscribe(type, handler) {
     if (handler && handlers[type] !== undefined) {

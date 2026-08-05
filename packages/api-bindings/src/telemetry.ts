@@ -1,12 +1,12 @@
+import { create } from "@bufbuild/protobuf";
 import {
-  TelemetryProperty,
+  type TelemetryProperty,
   TelemetryPropertySchema,
 } from "@tine/proto/fig";
 import {
   sendTelemetryPageRequest,
   sendTelemetryTrackRequest,
 } from "./requests.js";
-import { create } from "@bufbuild/protobuf";
 
 type Property = string | boolean | number | null;
 

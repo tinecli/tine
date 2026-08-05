@@ -1,4 +1,4 @@
-import { Subcommand } from "@tine/shared/internal";
+import type { Subcommand } from "@tine/shared/internal";
 
 const allCaches: Array<Map<string, unknown>> = [];
 

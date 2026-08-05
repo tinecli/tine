@@ -1,11 +1,10 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
 import { ResizeObserver } from "@juggle/resize-observer";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import useResizeObserver from "use-resize-observer";
 
 if ("ResizeObserver" in window === false) {
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
+  // @ts-expect-error
   window.ResizeObserver = ResizeObserver;
 }
 

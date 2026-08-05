@@ -1,5 +1,5 @@
-import { SettingsChangedNotification } from "@tine/proto/fig";
-import { NotificationResponse } from "./notifications.js";
+import { type SettingsChangedNotification } from "@tine/proto/fig";
+import { type NotificationResponse } from "./notifications.js";
 export declare const didChange: {
     subscribe(handler: (notification: SettingsChangedNotification) => NotificationResponse | undefined): Promise<import("./notifications.js").Subscription> | undefined;
 };

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isBuiltInTheme, setTheme, builtInThemes, mapColor } from "../themes";
+import { builtInThemes, isBuiltInTheme, mapColor, setTheme } from "../themes";
 
 describe("isBuiltInTheme", () => {
   it("returns whether a theme is built into fig", () => {

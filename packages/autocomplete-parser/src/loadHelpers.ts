@@ -1,18 +1,14 @@
-import logger, { Logger } from "loglevel";
-import * as semver from "semver";
-import {
-  ensureTrailingSlash,
-  withTimeout,
-  exponentialBackoff,
-} from "@tine/shared/utils";
 import {
   executeCommand,
   fread,
   isInDevMode,
 } from "@tine/api-bindings-wrappers";
+import { ensureTrailingSlash, withTimeout } from "@tine/shared/utils";
+import logger, { type Logger } from "loglevel";
+import * as semver from "semver";
 import z from "zod";
 import { MOST_USED_SPECS } from "./constants.js";
-import { LoadLocalSpecError, SpecCDNError } from "./errors.js";
+import { LoadLocalSpecError } from "./errors.js";
 
 export type SpecFileImport =
   | {
@@ -29,7 +25,7 @@ const makeCdnUrlFactory =
   (specName: string, ext: string = "js") =>
     `${baseUrl}${specName}.${ext}`;
 
-const cdnUrlFactory = makeCdnUrlFactory(
+const _cdnUrlFactory = makeCdnUrlFactory(
   "https://specs.q.us-east-1.amazonaws.com/",
 );
 
@@ -42,26 +38,40 @@ function esmToCjs(str: string): string {
   // Specs are often minified to one line, so anchor on statement boundaries
   // (start / newline / ; / }) rather than line starts.
   const B = "(^|[\\n;}])";
-  return str
-    // drop imports (unsupported; simple specs don't need them)
-    .replace(new RegExp(`${B}\\s*import\\s[^\\n;]*;?`, "g"), "$1")
-    // export { a as default, b as c }  ->  module.exports.default = a; …
-    .replace(new RegExp(`${B}\\s*export\\s*\\{([^}]*)\\}\\s*;?`, "g"), (_m, lead, inner) => {
-      const assigns = inner
-        .split(",")
-        .map((part: string) => part.trim())
-        .filter(Boolean)
-        .map((part: string) => {
-          const [name, alias] = part.split(/\s+as\s+/).map((s) => s.trim());
-          return `module.exports[${JSON.stringify(alias || name)}] = ${name};`;
-        })
-        .join(" ");
-      return `${lead}${assigns}`;
-    })
-    // export default <expr>  ->  module.exports.default = <expr>
-    .replace(new RegExp(`${B}\\s*export\\s+default\\s+`, "g"), "$1module.exports.default = ")
-    // export const/let/var/function/class/async X  ->  strip `export `
-    .replace(new RegExp(`${B}(\\s*)export\\s+(const|let|var|function|class|async)\\b`, "g"), "$1$2$3");
+  return (
+    str
+      // drop imports (unsupported; simple specs don't need them)
+      .replace(new RegExp(`${B}\\s*import\\s[^\\n;]*;?`, "g"), "$1")
+      // export { a as default, b as c }  ->  module.exports.default = a; …
+      .replace(
+        new RegExp(`${B}\\s*export\\s*\\{([^}]*)\\}\\s*;?`, "g"),
+        (_m, lead, inner) => {
+          const assigns = inner
+            .split(",")
+            .map((part: string) => part.trim())
+            .filter(Boolean)
+            .map((part: string) => {
+              const [name, alias] = part.split(/\s+as\s+/).map((s) => s.trim());
+              return `module.exports[${JSON.stringify(alias || name)}] = ${name};`;
+            })
+            .join(" ");
+          return `${lead}${assigns}`;
+        },
+      )
+      // export default <expr>  ->  module.exports.default = <expr>
+      .replace(
+        new RegExp(`${B}\\s*export\\s+default\\s+`, "g"),
+        "$1module.exports.default = ",
+      )
+      // export const/let/var/function/class/async X  ->  strip `export `
+      .replace(
+        new RegExp(
+          `${B}(\\s*)export\\s+(const|let|var|function|class|async)\\b`,
+          "g",
+        ),
+        "$1$2$3",
+      )
+  );
 }
 
 export const importString = async (str: string): Promise<SpecFileImport> => {

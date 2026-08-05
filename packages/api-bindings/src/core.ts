@@ -1,12 +1,11 @@
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
-  type ServerOriginatedMessage,
   type ClientOriginatedMessage,
   ClientOriginatedMessageSchema,
+  type ServerOriginatedMessage,
   ServerOriginatedMessageSchema,
 } from "@tine/proto/fig";
-
 import { b64ToBytes, bytesToBase64 } from "./utils.js";
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 
 interface GlobalAPIError {
   error: string;
@@ -19,6 +18,7 @@ type shouldKeepListening = boolean;
 
 export type APIResponseHandler = (
   response: ServerOriginatedMessage["submessage"],
+  // biome-ignore lint/suspicious/noConfusingVoidType: intentional — false unsubscribes, void/undefined means "no opinion"
 ) => shouldKeepListening | void;
 
 let messageId = 0;
@@ -51,10 +51,11 @@ export function sendMessage(
   submessage: ClientOriginatedMessage["submessage"],
   handler?: APIResponseHandler,
 ) {
+  messageId += 1;
   const request: ClientOriginatedMessage = create(
     ClientOriginatedMessageSchema,
     {
-      id: BigInt((messageId += 1)),
+      id: BigInt(messageId),
       submessage,
     },
   );

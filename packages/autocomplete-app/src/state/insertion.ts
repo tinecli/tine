@@ -1,26 +1,27 @@
-import logger from "loglevel";
-import { StoreApi } from "zustand";
-import { Shell } from "@tine/api-bindings";
 import { SpecLocationSource } from "@fig/autocomplete-shared";
-import {
-  SpecLocation,
-  Suggestion,
-} from "@tine/shared/internal";
-import {
-  makeArray,
-  longestCommonPrefix,
-  ensureTrailingSlash,
-} from "@tine/shared/utils";
+import { Shell } from "@tine/api-bindings";
 import { SETTINGS } from "@tine/api-bindings-wrappers";
-import { trackEvent } from "../telemetry";
-import { NamedSetState, AutocompleteState, Visibility } from "./types";
+import type { SpecLocation, Suggestion } from "@tine/shared/internal";
 import {
-  isMatchingType,
+  ensureTrailingSlash,
+  longestCommonPrefix,
+  makeArray,
+} from "@tine/shared/utils";
+import logger from "loglevel";
+import type { StoreApi } from "zustand";
+import {
   getNameMatch,
   getQueryTermForSuggestion,
+  isMatchingType,
 } from "../suggestions/helpers";
 import { updateAutocompleteIndexFromUserInsert } from "../suggestions/sorting";
+import { trackEvent } from "../telemetry";
 import { InsertPrefixError } from "./errors";
+import {
+  type AutocompleteState,
+  type NamedSetState,
+  Visibility,
+} from "./types";
 
 const sendTextToTerminal = (
   state: AutocompleteState,

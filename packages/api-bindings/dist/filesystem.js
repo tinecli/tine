@@ -1,6 +1,6 @@
 import { create } from "@bufbuild/protobuf";
-import { sendWriteFileRequest, sendReadFileRequest, sendDestinationOfSymbolicLinkRequest, sendContentsOfDirectoryRequest, sendAppendToFileRequest, sendCreateDirectoryRequest, } from "./requests.js";
-import { FilePathSchema, } from "@tine/proto/fig";
+import { FilePathSchema } from "@tine/proto/fig";
+import { sendAppendToFileRequest, sendContentsOfDirectoryRequest, sendCreateDirectoryRequest, sendDestinationOfSymbolicLinkRequest, sendReadFileRequest, sendWriteFileRequest, } from "./requests.js";
 function filePath(options) {
     return create(FilePathSchema, options);
 }

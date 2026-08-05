@@ -6,6 +6,7 @@ export var States;
     States["DEVELOPER_AE_API_HOST"] = "developer.autocomplete-engine.apiHost";
     States["IS_FIG_PRO"] = "user.account.is-fig-pro";
 })(States || (States = {}));
+// biome-ignore lint/complexity/noStaticOnlyClass: kept as a class for the private static fields; converting to a module would touch every call site
 export class State {
 }
 _a = State;

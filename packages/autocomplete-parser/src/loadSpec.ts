@@ -1,34 +1,31 @@
-import logger, { Logger } from "loglevel";
-import { Settings } from "@tine/api-bindings";
 import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
+import { Settings } from "@tine/api-bindings";
 import {
-  withTimeout,
+  executeCommand,
+  getSetting,
+  isInDevMode,
+  SETTINGS,
+} from "@tine/api-bindings-wrappers";
+import type { SpecLocation, Subcommand } from "@tine/shared/internal";
+import {
+  ensureTrailingSlash,
   SpecLocationSource,
   splitPath,
-  ensureTrailingSlash,
+  withTimeout,
 } from "@tine/shared/utils";
+import logger, { type Logger } from "loglevel";
+import { specCache } from "./caches.js";
+import { DisabledSpecError, MissingSpecError } from "./errors.js";
 import {
-  Subcommand,
-  SpecLocation,
-} from "@tine/shared/internal";
-import {
-  SETTINGS,
-  getSetting,
-  executeCommand,
-  isInDevMode,
-} from "@tine/api-bindings-wrappers";
-import {
+  importFromLocalhost,
   importFromPublicCDN,
-  publicSpecExists,
-  SpecFileImport,
   importSpecFromFile,
   isDiffVersionedSpec,
-  importFromLocalhost,
+  publicSpecExists,
+  type SpecFileImport,
 } from "./loadHelpers.js";
-import { DisabledSpecError, MissingSpecError } from "./errors.js";
-import { specCache } from "./caches.js";
-import { tryResolveSpecToSubcommand } from "./tryResolveSpecToSubcommand.js";
 import { mergeSubcommand } from "./mergeSubcommand.js";
+import { tryResolveSpecToSubcommand } from "./tryResolveSpecToSubcommand.js";
 
 /**
  * This searches for the first directory containing a .fig/ folder in the parent directories
@@ -260,7 +257,8 @@ export const loadSubcommandCached = async (
   // location's extend is merged (earlier/higher-priority wins name collisions).
   if (source === SpecLocationSource.GLOBAL) {
     const dirs =
-      (globalThis as { __tineLocalSpecsDirs?: string[] }).__tineLocalSpecsDirs ?? [];
+      (globalThis as { __tineLocalSpecsDirs?: string[] })
+        .__tineLocalSpecsDirs ?? [];
     for (const dir of dirs) {
       const override =
         (await loadUserSpec(specLocation, `${dir}/override`, localLogger)) ??
@@ -271,8 +269,13 @@ export const loadSubcommandCached = async (
       }
     }
     for (const dir of dirs) {
-      const extension = await loadUserSpec(specLocation, `${dir}/extend`, localLogger);
-      if (extension) merged = merged ? mergeSubcommand(merged, extension) : extension;
+      const extension = await loadUserSpec(
+        specLocation,
+        `${dir}/extend`,
+        localLogger,
+      );
+      if (extension)
+        merged = merged ? mergeSubcommand(merged, extension) : extension;
     }
   }
 
@@ -288,7 +291,11 @@ const loadUserSpec = async (
   localLogger: Logger,
 ): Promise<Subcommand | undefined> => {
   try {
-    const specFile = await importSpecFromFile(specLocation.name, dir, localLogger);
+    const specFile = await importSpecFromFile(
+      specLocation.name,
+      dir,
+      localLogger,
+    );
     const subcommand = await tryResolveSpecToSubcommand(specFile, specLocation);
     return convertSubcommand(subcommand, initializeDefault);
   } catch {

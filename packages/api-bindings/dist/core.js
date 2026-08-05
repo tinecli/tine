@@ -1,6 +1,6 @@
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { ClientOriginatedMessageSchema, ServerOriginatedMessageSchema, } from "@tine/proto/fig";
 import { b64ToBytes, bytesToBase64 } from "./utils.js";
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 const FigGlobalErrorOccurred = "FigGlobalErrorOccurred";
 const FigProtoMessageReceived = "FigProtoMessageReceived";
 let messageId = 0;
@@ -23,8 +23,9 @@ const receivedMessage = (response) => {
     }
 };
 export function sendMessage(submessage, handler) {
+    messageId += 1;
     const request = create(ClientOriginatedMessageSchema, {
-        id: BigInt((messageId += 1)),
+        id: BigInt(messageId),
         submessage,
     });
     if (handler && request.id) {

@@ -1,7 +1,7 @@
+import type * as Internal from "@tine/shared/internal";
+import { type SuggestionFlags } from "@tine/shared/utils";
+import { type Command } from "@tine/shell-parser";
 import logger from "loglevel";
-import * as Internal from "@tine/shared/internal";
-import { SuggestionFlags } from "@tine/shared/utils";
-import { Command } from "@tine/shell-parser";
 type ArgArrayState = {
     args: Array<Internal.Arg> | null;
     index: number;

@@ -1,4 +1,4 @@
-import { Subcommand } from "@tine/shared/internal";
+import type { Subcommand } from "@tine/shared/internal";
 export declare const createCache: <T>() => Map<string, T>;
 export declare const resetCaches: () => void;
 export declare const specCache: Map<string, Subcommand>;

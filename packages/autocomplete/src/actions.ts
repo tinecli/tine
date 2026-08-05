@@ -1,10 +1,7 @@
-import { SettingsMap } from "@tine/api-bindings-wrappers";
-import * as app from "./fig.json";
 import { create } from "@bufbuild/protobuf";
-import {
-  ActionAvailability,
-  ActionSchema,
-} from "@tine/proto/fig";
+import type { SettingsMap } from "@tine/api-bindings-wrappers";
+import { ActionAvailability, ActionSchema } from "@tine/proto/fig";
+import * as app from "./fig.json";
 
 const SELECT_SUGGESTION_ACTION_PREFIX = "selectSuggestion";
 

@@ -1,7 +1,7 @@
-import { NotificationType, TextUpdateSchema, } from "@tine/proto/fig";
-import { sendInsertTextRequest } from "./requests.js";
-import { _subscribe } from "./notifications.js";
 import { create } from "@bufbuild/protobuf";
+import { NotificationType, TextUpdateSchema, } from "@tine/proto/fig";
+import { _subscribe } from "./notifications.js";
+import { sendInsertTextRequest } from "./requests.js";
 export const processDidChange = {
     subscribe(handler) {
         return _subscribe({ type: NotificationType.NOTIFY_ON_PROCESS_CHANGED }, (notification) => {

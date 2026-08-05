@@ -1,39 +1,39 @@
+import { filepaths, folders } from "@fig/autocomplete-generators";
 import {
-  Metadata,
   convertSubcommand,
   initializeDefault,
+  type Metadata,
 } from "@fig/autocomplete-shared";
-import logger from "loglevel";
-import { folders, filepaths } from "@fig/autocomplete-generators";
-import * as Internal from "@tine/shared/internal";
+import type * as Internal from "@tine/shared/internal";
 import {
-  SuggestionFlag,
-  SuggestionFlags,
   makeArray,
   SpecLocationSource,
+  SuggestionFlag,
+  type SuggestionFlags,
 } from "@tine/shared/utils";
-import { Command, getCommand } from "@tine/shell-parser";
-import {
-  findOption,
-  getCurrentArg,
-  parseArguments as defaultParseArguments,
-  updateArgState,
-  findSubcommand,
-  createArgState,
-} from "../src/parseArguments";
-import { loadSubcommandCached } from "../src/loadSpec";
-import { cmdSpec } from "./mocks/spec";
-import { resetCaches } from "../src/caches";
+import { type Command, getCommand } from "@tine/shell-parser";
+import logger from "loglevel";
 import {
   afterEach,
-  beforeEach,
   beforeAll,
+  beforeEach,
   describe,
-  it,
   expect,
-  Mock,
+  it,
+  type Mock,
   vi,
 } from "vitest";
+import { resetCaches } from "../src/caches";
+import { loadSubcommandCached } from "../src/loadSpec";
+import {
+  createArgState,
+  parseArguments as defaultParseArguments,
+  findOption,
+  findSubcommand,
+  getCurrentArg,
+  updateArgState,
+} from "../src/parseArguments";
+import { cmdSpec } from "./mocks/spec";
 
 vi.mock("../src/loadSpec", () => ({
   ...vi.importActual("../src/loadSpec.ts"),

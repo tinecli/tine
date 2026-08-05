@@ -1,10 +1,7 @@
-import { useCallback } from "react";
-import logger from "loglevel";
 import { Keybindings, Shell } from "@tine/api-bindings";
-import {
-  SETTINGS,
-  getSetting,
-} from "@tine/api-bindings-wrappers";
+import { getSetting, SETTINGS } from "@tine/api-bindings-wrappers";
+import logger from "loglevel";
+import { useCallback } from "react";
 import { ACTIONS, AutocompleteAction } from "../actions";
 import { useAutocompleteStore } from "../state";
 import { Visibility } from "../state/types";

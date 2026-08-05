@@ -1,8 +1,8 @@
-import { useEffect, useCallback, useRef, useMemo } from "react";
-import { Suggestion, Arg } from "@tine/shared/internal";
-import { getMaxHeight, POPOUT_WIDTH } from "../window";
-import { useAutocompleteStore } from "../state";
+import type { Arg, Suggestion } from "@tine/shared/internal";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { AutocompleteAction } from "../actions";
+import { useAutocompleteStore } from "../state";
+import { getMaxHeight, POPOUT_WIDTH } from "../window";
 
 export type DescriptionPosition = "unknown" | "left" | "right";
 

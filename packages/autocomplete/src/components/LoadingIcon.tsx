@@ -15,6 +15,7 @@ const LoadingIcon = ({ className }: { className?: string }) => (
         "left-[16px] animate-[spinShrink_0.66s_cubic-bezier(0,1,1,0)_infinite]",
       ].map((style, i) => (
         <div
+          // biome-ignore lint/suspicious/noArrayIndexKey: static, hardcoded list — never reordered/filtered
           key={i}
           className={`absolute h-1 w-1 rounded-full bg-current ${style}`}
         />

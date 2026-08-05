@@ -1,8 +1,8 @@
-import React from "react";
-import logger from "loglevel";
-import ReactDOM from "react-dom/client";
 import { State } from "@tine/api-bindings-wrappers";
 import { preloadSpecs } from "@tine/autocomplete-parser";
+import logger from "loglevel";
+import React from "react";
+import ReactDOM from "react-dom/client";
 import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";
 

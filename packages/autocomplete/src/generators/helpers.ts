@@ -1,10 +1,7 @@
-import { Annotation } from "@tine/autocomplete-parser";
-import { Suggestion } from "@tine/shared/internal";
+import { getSetting, SETTINGS } from "@tine/api-bindings-wrappers";
+import type { Annotation } from "@tine/autocomplete-parser";
+import type { Suggestion } from "@tine/shared/internal";
 import { getCWDForFilesAndFolders } from "@tine/shared/utils";
-import {
-  getSetting,
-  SETTINGS,
-} from "@tine/api-bindings-wrappers";
 import { Cache } from "./cache";
 
 export type GeneratorContext = Fig.ShellContext & {

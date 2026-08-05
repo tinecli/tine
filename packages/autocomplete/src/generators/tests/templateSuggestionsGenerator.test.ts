@@ -1,11 +1,8 @@
-import {
-  Annotation,
-  TokenType,
-} from "@tine/autocomplete-parser";
-import { Subcommand } from "@tine/shared/internal";
+import { type Annotation, TokenType } from "@tine/autocomplete-parser";
+import type { Subcommand } from "@tine/shared/internal";
 import { describe, expect, it } from "vitest";
+import type { GeneratorContext } from "../helpers";
 import { getTemplateSuggestions } from "../templateSuggestionsGenerator";
-import { GeneratorContext } from "../helpers";
 
 const defaultContext: GeneratorContext = {
   annotations: [] as Annotation[],

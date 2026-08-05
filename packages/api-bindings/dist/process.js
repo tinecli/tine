@@ -1,6 +1,6 @@
 import { create } from "@bufbuild/protobuf";
-import { sendRunProcessRequest } from "./requests.js";
 import { DurationSchema, EnvironmentVariableSchema, } from "@tine/proto/fig_common";
+import { sendRunProcessRequest } from "./requests.js";
 export async function run({ executable, args, environment, workingDirectory, terminalSessionId, timeout, }) {
     const env = environment ?? {};
     return sendRunProcessRequest({

@@ -1,6 +1,6 @@
+import { create } from "@bufbuild/protobuf";
 import { TelemetryPropertySchema, } from "@tine/proto/fig";
 import { sendTelemetryPageRequest, sendTelemetryTrackRequest, } from "./requests.js";
-import { create } from "@bufbuild/protobuf";
 export function track(event, properties) {
     // convert to internal type 'TelemetryProperty'
     const props = Object.keys(properties).reduce((array, key) => {

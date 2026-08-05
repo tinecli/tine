@@ -1,9 +1,9 @@
-import { Suggestion } from "@tine/shared/internal";
-import { ArgumentParserResult } from "@tine/autocomplete-parser";
-import { Command } from "@tine/shell-parser";
-import { SettingsMap } from "@tine/api-bindings-wrappers";
-import { FigState } from "../fig/hooks";
-import { GeneratorState } from "../generators/helpers";
+import type { SettingsMap } from "@tine/api-bindings-wrappers";
+import type { ArgumentParserResult } from "@tine/autocomplete-parser";
+import type { Suggestion } from "@tine/shared/internal";
+import type { Command } from "@tine/shell-parser";
+import type { FigState } from "../fig/hooks";
+import type { GeneratorState } from "../generators/helpers";
 
 export enum Visibility {
   VISIBLE = "visible",
@@ -71,10 +71,8 @@ export type AutocompleteState = {
   settings: SettingsMap;
 } & AutocompleteActions;
 
-export declare type NamedSetState<T> = {
-  (
-    name: string,
-    partial: Partial<T> | ((s: T) => Partial<T>),
-    replace?: boolean,
-  ): void;
-};
+export declare type NamedSetState<T> = (
+  name: string,
+  partial: Partial<T> | ((s: T) => Partial<T>),
+  replace?: boolean,
+) => void;

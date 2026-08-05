@@ -39,7 +39,7 @@ function isObj(x) {
  * // <b>F</b>uzzy <b>S</b>earch
  */
 export const fuzzysort = {
-  single: function (search, target) {
+  single: (search, target) => {
     if (!search) return null;
     if (!isObj(search)) search = fuzzysort.getPreparedSearch(search);
 
@@ -48,7 +48,7 @@ export const fuzzysort = {
     return fuzzysort.algorithm(search, target, search[0]);
   },
 
-  highlight: function (result, hOpen, hClose) {
+  highlight: (result, hOpen, hClose) => {
     if (result === null) return null;
     if (hOpen === undefined) hOpen = "<b>";
     if (hClose === undefined) hClose = "</b>";
@@ -83,7 +83,7 @@ export const fuzzysort = {
     return highlighted;
   },
 
-  prepare: function (target) {
+  prepare: (target) => {
     if (!target) return;
     return {
       target: target,
@@ -94,12 +94,12 @@ export const fuzzysort = {
       obj: null,
     }; // hidden
   },
-  prepareSearch: function (search) {
+  prepareSearch: (search) => {
     if (!search) return;
     return fuzzysort.prepareLowerCodes(search);
   },
 
-  getPrepared: function (target) {
+  getPrepared: (target) => {
     if (target.length > 999) return fuzzysort.prepare(target); // don't cache huge targets
     var targetPrepared = preparedCache.get(target);
     if (targetPrepared !== undefined) return targetPrepared;
@@ -107,7 +107,7 @@ export const fuzzysort = {
     preparedCache.set(target, targetPrepared);
     return targetPrepared;
   },
-  getPreparedSearch: function (search) {
+  getPreparedSearch: (search) => {
     if (search.length > 999) return fuzzysort.prepareSearch(search); // don't cache huge searches
     var searchPrepared = preparedSearchCache.get(search);
     if (searchPrepared !== undefined) return searchPrepared;
@@ -116,7 +116,7 @@ export const fuzzysort = {
     return searchPrepared;
   },
 
-  algorithm: function (searchLowerCodes, prepared, searchLowerCode) {
+  algorithm: (searchLowerCodes, prepared, searchLowerCode) => {
     var targetLowerCodes = prepared._targetLowerCodes;
     var searchLen = searchLowerCodes.length;
     var targetLen = targetLowerCodes.length;
@@ -177,43 +177,40 @@ export const fuzzysort = {
           }
         }
       }
-
-    {
-      // tally up the score & keep track of matches for highlighting later
-      if (successStrict) {
-        var matchesBest = matchesStrict;
-        var matchesBestLen = matchesStrictLen;
-      } else {
-        var matchesBest = matchesSimple;
-        var matchesBestLen = matchesSimpleLen;
-      }
-      var score = 0;
-      var lastTargetI = -1;
-      for (var i = 0; i < searchLen; ++i) {
-        var targetI = matchesBest[i];
-        // score only goes down if they're not consecutive
-        if (lastTargetI !== targetI - 1) score -= targetI;
-        lastTargetI = targetI;
-      }
-      if (!successStrict) score *= 1000;
-      score -= targetLen - searchLen;
-      prepared.score = score;
-      prepared.indexes = new Array(matchesBestLen);
-      for (var i = matchesBestLen - 1; i >= 0; --i)
-        prepared.indexes[i] = matchesBest[i];
-
-      return prepared;
+    // tally up the score & keep track of matches for highlighting later
+    if (successStrict) {
+      var matchesBest = matchesStrict;
+      var matchesBestLen = matchesStrictLen;
+    } else {
+      var matchesBest = matchesSimple;
+      var matchesBestLen = matchesSimpleLen;
     }
+    var score = 0;
+    var lastTargetI = -1;
+    for (var i = 0; i < searchLen; ++i) {
+      var targetI = matchesBest[i];
+      // score only goes down if they're not consecutive
+      if (lastTargetI !== targetI - 1) score -= targetI;
+      lastTargetI = targetI;
+    }
+    if (!successStrict) score *= 1000;
+    score -= targetLen - searchLen;
+    prepared.score = score;
+    prepared.indexes = new Array(matchesBestLen);
+    for (var i = matchesBestLen - 1; i >= 0; --i)
+      prepared.indexes[i] = matchesBest[i];
+
+    return prepared;
   },
 
-  prepareLowerCodes: function (str) {
+  prepareLowerCodes: (str) => {
     var strLen = str.length;
     var lowerCodes = []; // new Array(strLen)    sparse array is too slow
     var lower = str.toLowerCase();
     for (var i = 0; i < strLen; ++i) lowerCodes[i] = lower.charCodeAt(i);
     return lowerCodes;
   },
-  prepareBeginningIndexes: function (target) {
+  prepareBeginningIndexes: (target) => {
     var targetLen = target.length;
     var beginningIndexes = [];
     var beginningIndexesLen = 0;
@@ -233,7 +230,7 @@ export const fuzzysort = {
     }
     return beginningIndexes;
   },
-  prepareNextBeginningIndexes: function (target) {
+  prepareNextBeginningIndexes: (target) => {
     var targetLen = target.length;
     var beginningIndexes = fuzzysort.prepareBeginningIndexes(target);
     var nextBeginningIndexes = []; // new Array(targetLen)     sparse array is too slow

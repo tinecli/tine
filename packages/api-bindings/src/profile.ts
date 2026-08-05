@@ -1,9 +1,9 @@
+import { create } from "@bufbuild/protobuf";
 import { ProfileSchema } from "@tine/proto/fig";
 import {
   sendListAvailableProfilesRequest,
   sendSetProfileRequest,
 } from "./requests.js";
-import { create } from "@bufbuild/protobuf";
 
 export async function listAvailableProfiles() {
   return sendListAvailableProfilesRequest({});

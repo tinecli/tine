@@ -1,6 +1,6 @@
 import * as wrappers from "@tine/api-bindings-wrappers";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as loadHelpers from "../src/loadHelpers";
-import { vi, describe, beforeEach, afterEach, it, expect } from "vitest";
 
 const { getVersionFromFullFile } = loadHelpers;
 

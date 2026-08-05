@@ -1,12 +1,12 @@
-import logger from "loglevel";
-import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
 import { filepaths, folders } from "@fig/autocomplete-generators";
-import { firstMatchingToken, makeArray, SpecLocationSource, SuggestionFlag, withTimeout, } from "@tine/shared/utils";
+import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
 import { executeCommand, executeLoginShell, getSetting, isInDevMode, SETTINGS, } from "@tine/api-bindings-wrappers";
-import { substituteAlias, } from "@tine/shell-parser";
-import { getSpecPath, loadSubcommandCached, serializeSpecLocation, } from "./loadSpec.js";
-import { ParseArgumentsError, ParsingHistoryError, UpdateStateError, } from "./errors.js";
+import { firstMatchingToken, makeArray, SpecLocationSource, SuggestionFlag, withTimeout, } from "@tine/shared/utils";
+import { substituteAlias } from "@tine/shell-parser";
+import logger from "loglevel";
 import { createCache, generateSpecCache } from "./caches.js";
+import { ParseArgumentsError, ParsingHistoryError, UpdateStateError, } from "./errors.js";
+import { getSpecPath, loadSubcommandCached, serializeSpecLocation, } from "./loadSpec.js";
 export var TokenType;
 (function (TokenType) {
     TokenType["None"] = "none";

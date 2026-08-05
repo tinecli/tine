@@ -1,39 +1,39 @@
-import { Result } from "@tine/fuzzysort";
-import logger from "loglevel";
 import {
+  getSetting,
+  SETTINGS,
+  type SettingsMap,
+} from "@tine/api-bindings-wrappers";
+import {
+  type Annotation,
+  countEqualOptions,
+  TokenType,
+} from "@tine/autocomplete-parser";
+import type { Result } from "@tine/fuzzysort";
+import type {
+  Arg,
   Option,
   Subcommand,
-  Arg,
   Suggestion,
   SuggestionType,
 } from "@tine/shared/internal";
 import {
-  makeArray,
-  SuggestionFlags,
-  SuggestionFlag,
   compareNamedObjectsAlphabetically,
-  memoizeOne,
-  localProtocol,
   fieldsAreEqual,
+  localProtocol,
+  makeArray,
+  memoizeOne,
+  SuggestionFlag,
+  type SuggestionFlags,
 } from "@tine/shared/utils";
-import {
-  countEqualOptions,
-  Annotation,
-  TokenType,
-} from "@tine/autocomplete-parser";
-import {
-  getSetting,
-  SETTINGS,
-  SettingsMap,
-} from "@tine/api-bindings-wrappers";
-import { GeneratorState } from "../generators/helpers";
+import logger from "loglevel";
+import type { GeneratorState } from "../generators/helpers";
 
 import {
+  bestScoreMatch,
+  getExactNameMatch,
   getFuzzyNameMatches,
   getPrefixNameMatches,
-  getExactNameMatch,
   getQueryTermForSuggestion,
-  bestScoreMatch,
 } from "./helpers";
 
 type StaticSuggestions = {

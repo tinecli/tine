@@ -3,8 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "license": "MIT OR Apache-2.0",
-  "author": "Amazon Web Services",
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
+  "repository": "https://github.com/tinecli/tine",
   "types": "global.d.ts",
   "files": [
     "global.d.ts"

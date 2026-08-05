@@ -1,9 +1,6 @@
-import React from "react";
-import {
-  Suggestion,
-  SuggestionType,
-} from "@tine/shared/internal";
+import type { Suggestion, SuggestionType } from "@tine/shared/internal";
 import { localProtocol } from "@tine/shared/utils";
+import type React from "react";
 import { icons } from "../fig/icons";
 
 type SuggestionIconProps = {

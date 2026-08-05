@@ -1,5 +1,5 @@
-import { ProcessChangedNotification, ShellPromptReturnedNotification, TextUpdate, HistoryUpdatedNotification } from "@tine/proto/fig";
-import { NotificationResponse } from "./notifications.js";
+import { type HistoryUpdatedNotification, type ProcessChangedNotification, type ShellPromptReturnedNotification, type TextUpdate } from "@tine/proto/fig";
+import { type NotificationResponse } from "./notifications.js";
 export declare const processDidChange: {
     subscribe(handler: (notification: ProcessChangedNotification) => NotificationResponse | undefined): Promise<import("./notifications.js").Subscription> | undefined;
 };

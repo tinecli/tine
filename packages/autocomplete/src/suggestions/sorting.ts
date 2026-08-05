@@ -1,9 +1,6 @@
+import { getSetting, SETTINGS } from "@tine/api-bindings-wrappers";
+import type { Suggestion } from "@tine/shared/internal";
 import { makeArray } from "@tine/shared/utils";
-import { Suggestion } from "@tine/shared/internal";
-import {
-  SETTINGS,
-  getSetting,
-} from "@tine/api-bindings-wrappers";
 
 // { command: { commandParam: count/lastUsedDate } }
 // e.g. git: { add: 2, push: 4 }

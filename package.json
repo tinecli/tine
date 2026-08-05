@@ -23,18 +23,13 @@
     "dev:autocomplete": "pnpm -C packages/autocomplete dev",
     "preview:autocomplete": "pnpm -C packages/autocomplete preview",
     "clean": "turbo clean --parallel",
-    "prepare": "husky",
-    "precommit": "lint-staged --config .lintstagedrc.mjs",
     "setup": "bash scripts/setup.sh"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.7",
     "@vitest/coverage-v8": "^3.0.8",
     "@vitest/ui": "^3.0.8",
     "@withfig/autocomplete": "2.692.3",
-    "husky": "^9.1.7",
-    "lint-staged": "^15.5.1",
-    "micromatch": "^4.0.8",
-    "prettier": "^3.5.3",
     "tsx": "^4.19.4",
     "turbo": "^2.5.2",
     "vitest": "^3.0.8"

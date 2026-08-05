@@ -1,6 +1,7 @@
-import React, { useEffect, useRef } from "react";
-import { shallow } from "zustand/shallow";
 import { parseArguments } from "@tine/autocomplete-parser";
+import type React from "react";
+import { useEffect, useRef } from "react";
+import { shallow } from "zustand/shallow";
 import { useAutocompleteStore } from "../state";
 import { shellContextSelector } from "../state/generators";
 

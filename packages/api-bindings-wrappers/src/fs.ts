@@ -8,6 +8,9 @@ type ReadFileHook = (path: string) => string | Promise<string>;
 export const fread = (path: string): Promise<string> => {
   const hook = (globalThis as { __tineReadFile?: ReadFileHook }).__tineReadFile;
   // Accept a sync (Swift) or async (Node) hook; normalize to a Promise.
-  if (hook) return Promise.resolve().then(() => hook(path)).catch(() => "");
+  if (hook)
+    return Promise.resolve()
+      .then(() => hook(path))
+      .catch(() => "");
   return FileSystem.read(path).then((out) => out ?? "");
 };

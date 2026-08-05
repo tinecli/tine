@@ -2,8 +2,7 @@
   "name": "@tine/api-bindings-wrappers",
   "version": "0.2.0",
   "license": "MIT OR Apache-2.0",
-  "author": "Amazon Web Services",
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
+  "repository": "https://github.com/tinecli/tine",
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
@@ -18,8 +17,8 @@
   "scripts": {
     "dev": "tsc --watch",
     "build": "tsc",
-    "lint": "eslint src && prettier --check src",
-    "lint:fix": "eslint --fix src && prettier --write src",
+    "lint": "biome check src",
+    "lint:fix": "biome check --write src",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -27,13 +26,11 @@
     "loglevel": "^1.9.2"
   },
   "devDependencies": {
-    "@tine/eslint-config": "workspace:^",
+    "@biomejs/biome": "2.5.7",
     "@tine/tsconfig": "workspace:^",
     "@tine/types": "workspace:^",
     "@tine/shared": "workspace:^",
     "@withfig/autocomplete-types": "^1.31.0",
-    "eslint": "^9.18.0",
-    "prettier": "^3.4.2",
     "typescript": "^7.0.2"
   }
 }

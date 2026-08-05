@@ -1,18 +1,16 @@
-import React, { useEffect } from "react";
 import {
   EditBufferNotifications,
   Event,
   Keybindings,
   Settings,
   Shell,
-  Types,
+  type Types,
 } from "@tine/api-bindings";
-import { AliasMap } from "@tine/shell-parser";
-import {
-  SettingsMap,
-  updateSettings,
-} from "@tine/api-bindings-wrappers";
+import { type SettingsMap, updateSettings } from "@tine/api-bindings-wrappers";
 import { clearSpecIndex } from "@tine/autocomplete-parser";
+import type { AliasMap } from "@tine/shell-parser";
+import type React from "react";
+import { useEffect } from "react";
 import { updateSelectSuggestionKeybindings } from "../actions";
 import { generatorCache } from "../generators/helpers";
 

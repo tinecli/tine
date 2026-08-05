@@ -1,13 +1,10 @@
-import {
-  SETTINGS,
-  updateSettings,
-} from "@tine/api-bindings-wrappers";
+import { SETTINGS, updateSettings } from "@tine/api-bindings-wrappers";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  getMaxWidth,
-  getMaxHeight,
-  MAX_WIDTH,
   AUTOCOMPLETE_HEIGHT,
+  getMaxHeight,
+  getMaxWidth,
+  MAX_WIDTH,
 } from "../window";
 
 describe("getMaxWidth", () => {

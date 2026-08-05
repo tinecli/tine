@@ -1,4 +1,4 @@
-import { BaseNode } from "./parser.js";
+import { type BaseNode } from "./parser.js";
 export * from "./errors.js";
 export type Token = {
     text: string;

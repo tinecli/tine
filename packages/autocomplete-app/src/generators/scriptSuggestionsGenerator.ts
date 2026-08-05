@@ -1,8 +1,8 @@
-import logger from "loglevel";
 import { executeCommandTimeout } from "@tine/api-bindings-wrappers";
+import logger from "loglevel";
 import { runPipingConsoleMethods } from "../utils";
 import {
-  GeneratorContext,
+  type GeneratorContext,
   haveContextForGenerator,
   runCachedGenerator,
 } from "./helpers";

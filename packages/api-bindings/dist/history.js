@@ -1,7 +1,7 @@
-import { HistoryQueryRequest_ParamSchema, } from "@tine/proto/fig";
-import { sendHistoryQueryRequest } from "./requests.js";
 import { create } from "@bufbuild/protobuf";
+import { HistoryQueryRequest_ParamSchema, } from "@tine/proto/fig";
 import { EmptySchema } from "@tine/proto/fig_common";
+import { sendHistoryQueryRequest } from "./requests.js";
 function mapParam(param) {
     let type;
     if (param === null) {

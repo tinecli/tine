@@ -20,6 +20,7 @@ export type LocalStateSubscriber = {
   changes: (oldState: LocalStateMap, newState: LocalStateMap) => void;
 };
 
+// biome-ignore lint/complexity/noStaticOnlyClass: kept as a class for the private static fields; converting to a module would touch every call site
 export class State {
   private static state: LocalStateMap = {};
 

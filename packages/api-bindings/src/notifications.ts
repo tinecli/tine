@@ -1,13 +1,12 @@
+import { create } from "@bufbuild/protobuf";
 import {
   type Notification,
-  type ServerOriginatedMessage,
   type NotificationRequest,
   NotificationRequestSchema,
   NotificationType,
+  type ServerOriginatedMessage,
 } from "@tine/proto/fig";
-
 import { sendMessage } from "./core.js";
-import { create } from "@bufbuild/protobuf";
 
 export type NotificationResponse = {
   unsubscribe: boolean;

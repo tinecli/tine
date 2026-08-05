@@ -1,13 +1,12 @@
-import { file_fig as file } from "@tine/proto/fig";
-import { CodeBlockWriter, IndentationText, Project } from "ts-morph";
 import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { file_fig as file } from "@tine/proto/fig";
+import { type CodeBlockWriter, IndentationText, Project } from "ts-morph";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-/* eslint-enable import/no-extraneous-dependencies */
 const capitalizeFirstLetter = (str: string) =>
   str.charAt(0).toUpperCase() + str.slice(1);
 
@@ -30,7 +29,10 @@ const getSubmessageTypes = (interfaceName: string) => {
     (message) => message.name === interfaceName,
   );
   return (
-    message?.fields.map((type) => type.message?.name!).filter(Boolean) ?? []
+    message?.fields
+      // biome-ignore lint/suspicious/noNonNullAssertedOptionalChain: filter(Boolean) below drops any that were actually null
+      .map((type) => type.message?.name!)
+      .filter(Boolean) ?? []
   );
 };
 

@@ -1,16 +1,13 @@
 import { create } from "@bufbuild/protobuf";
+import { type FilePath, FilePathSchema } from "@tine/proto/fig";
 import {
-  sendWriteFileRequest,
-  sendReadFileRequest,
-  sendDestinationOfSymbolicLinkRequest,
-  sendContentsOfDirectoryRequest,
   sendAppendToFileRequest,
+  sendContentsOfDirectoryRequest,
   sendCreateDirectoryRequest,
+  sendDestinationOfSymbolicLinkRequest,
+  sendReadFileRequest,
+  sendWriteFileRequest,
 } from "./requests.js";
-import {
-  type FilePath,
-  FilePathSchema,
-} from "@tine/proto/fig";
 
 function filePath(options: Omit<FilePath, "$typeName">) {
   return create(FilePathSchema, options);

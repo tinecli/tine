@@ -1,8 +1,8 @@
 import {
-  LocalStateChangedNotification,
+  type LocalStateChangedNotification,
   NotificationType,
 } from "@tine/proto/fig";
-import { _subscribe, NotificationResponse } from "./notifications.js";
+import { _subscribe, type NotificationResponse } from "./notifications.js";
 
 import {
   sendGetLocalStateRequest,

@@ -1,38 +1,38 @@
-import { Internal } from "@fig/autocomplete-shared";
-import { getLogger } from "loglevel";
-import {
-  parseArguments,
-  TokenType,
-  flattenAnnotations,
-  BasicAnnotation,
-  Annotation,
-  getSpecPath,
-  loadSubcommandCached,
-  serializeSpecLocation,
-} from "@tine/autocomplete-parser";
-import {
-  getAllCommandsWithAlias,
-  AliasMap,
-  Command,
-} from "@tine/shell-parser";
-import { SpecLocationSource } from "@tine/shared/utils";
-import { Suggestion } from "@tine/shared/internal";
+import type { Internal } from "@fig/autocomplete-shared";
+import { History } from "@tine/api-bindings";
 import {
   executeCommand,
   executeLoginShell,
-  SETTINGS,
   getSetting,
+  SETTINGS,
 } from "@tine/api-bindings-wrappers";
-import { History } from "@tine/api-bindings";
 import {
-  AnnotatedCommand,
-  HistoryEntry,
-  Graph,
+  type Annotation,
+  type BasicAnnotation,
+  flattenAnnotations,
+  getSpecPath,
+  loadSubcommandCached,
+  parseArguments,
+  serializeSpecLocation,
+  TokenType,
+} from "@tine/autocomplete-parser";
+import type { Suggestion } from "@tine/shared/internal";
+import { SpecLocationSource } from "@tine/shared/utils";
+import {
+  type AliasMap,
+  type Command,
+  getAllCommandsWithAlias,
+} from "@tine/shell-parser";
+import { getLogger } from "loglevel";
+import { MissingSpecError } from "./errors";
+import {
+  type AnnotatedCommand,
+  type Graph,
+  type HistoryContext,
+  type HistoryEntry,
   mirrorSubcommand,
   walkSubcommand,
-  HistoryContext,
 } from "./helpers";
-import { MissingSpecError } from "./errors";
 
 const historyLogger = getLogger("history");
 historyLogger.setDefaultLevel("warn");

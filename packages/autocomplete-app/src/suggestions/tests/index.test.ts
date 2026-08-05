@@ -1,19 +1,19 @@
-import { Suggestion } from "@tine/shared/internal";
-import { SETTINGS } from "@tine/api-bindings-wrappers";
 import * as settings from "@tine/api-bindings-wrappers";
+import { SETTINGS } from "@tine/api-bindings-wrappers";
+import type { Suggestion } from "@tine/shared/internal";
 import {
-  MockInstance,
   afterAll,
   beforeAll,
   describe,
   expect,
   it,
+  type MockInstance,
   vi,
 } from "vitest";
 import {
-  getStaticArgSuggestions,
-  filterSuggestions,
   deduplicateSuggestions,
+  filterSuggestions,
+  getStaticArgSuggestions,
   isTemplateSuggestion,
 } from "..";
 
@@ -195,7 +195,7 @@ describe("filterSuggestions", () => {
     beforeAll(() => {
       spy = vi.spyOn(settings, "getSetting");
       spy.mockImplementation((arg) => {
-        if (arg == SETTINGS.HIDE_AUTO_EXECUTE_SUGGESTION) return true;
+        if (arg === SETTINGS.HIDE_AUTO_EXECUTE_SUGGESTION) return true;
         return undefined;
       });
     });

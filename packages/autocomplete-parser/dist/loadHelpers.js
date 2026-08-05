@@ -1,12 +1,12 @@
+import { executeCommand, fread, isInDevMode, } from "@tine/api-bindings-wrappers";
+import { ensureTrailingSlash, withTimeout } from "@tine/shared/utils";
 import logger from "loglevel";
 import * as semver from "semver";
-import { ensureTrailingSlash, withTimeout, } from "@tine/shared/utils";
-import { executeCommand, fread, isInDevMode, } from "@tine/api-bindings-wrappers";
 import z from "zod";
 import { MOST_USED_SPECS } from "./constants.js";
 import { LoadLocalSpecError } from "./errors.js";
 const makeCdnUrlFactory = (baseUrl) => (specName, ext = "js") => `${baseUrl}${specName}.${ext}`;
-const cdnUrlFactory = makeCdnUrlFactory("https://specs.q.us-east-1.amazonaws.com/");
+const _cdnUrlFactory = makeCdnUrlFactory("https://specs.q.us-east-1.amazonaws.com/");
 const stringImportCache = new Map();
 // Minimal ESM->CJS rewrite so a user's hand-written spec (`export default …`)
 // evaluates via `new Function` in JavaScriptCore. Pack specs are already CJS, so
@@ -15,7 +15,7 @@ function esmToCjs(str) {
     // Specs are often minified to one line, so anchor on statement boundaries
     // (start / newline / ; / }) rather than line starts.
     const B = "(^|[\\n;}])";
-    return str
+    return (str
         // drop imports (unsupported; simple specs don't need them)
         .replace(new RegExp(`${B}\\s*import\\s[^\\n;]*;?`, "g"), "$1")
         // export { a as default, b as c }  ->  module.exports.default = a; …
@@ -34,7 +34,7 @@ function esmToCjs(str) {
         // export default <expr>  ->  module.exports.default = <expr>
         .replace(new RegExp(`${B}\\s*export\\s+default\\s+`, "g"), "$1module.exports.default = ")
         // export const/let/var/function/class/async X  ->  strip `export `
-        .replace(new RegExp(`${B}(\\s*)export\\s+(const|let|var|function|class|async)\\b`, "g"), "$1$2$3");
+        .replace(new RegExp(`${B}(\\s*)export\\s+(const|let|var|function|class|async)\\b`, "g"), "$1$2$3"));
 }
 export const importString = async (str) => {
     if (stringImportCache.has(str)) {

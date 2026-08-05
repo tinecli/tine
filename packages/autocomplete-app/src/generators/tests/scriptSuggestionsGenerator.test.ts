@@ -1,25 +1,21 @@
 import * as apiBindingsWrappers from "@tine/api-bindings-wrappers/executeCommand";
 
-import { Annotation } from "@tine/autocomplete-parser";
+import type { Annotation } from "@tine/autocomplete-parser";
 import {
-  MockInstance,
   afterEach,
   beforeAll,
   describe,
   expect,
   it,
+  type MockInstance,
   vi,
 } from "vitest";
+import type { GeneratorContext } from "../helpers";
 import * as helpers from "../helpers";
-import { GeneratorContext } from "../helpers";
 import { getScriptSuggestions } from "../scriptSuggestionsGenerator";
 
-vi.mock(
-  "@tine/api-bindings-wrappers/src/executeCommand",
-  async () =>
-    vi.importActual(
-      "@tine/api-bindings-wrappers/src/executeCommand",
-    ),
+vi.mock("@tine/api-bindings-wrappers/src/executeCommand", async () =>
+  vi.importActual("@tine/api-bindings-wrappers/src/executeCommand"),
 );
 
 const context: GeneratorContext = {

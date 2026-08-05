@@ -1,8 +1,8 @@
-import { useCallback, useMemo, CSSProperties, useRef } from "react";
-import logger from "loglevel";
 import fuzzysort from "@tine/fuzzysort";
-import { Suggestion as SuggestionT } from "@tine/shared/internal";
+import type { Suggestion as SuggestionT } from "@tine/shared/internal";
 import { makeArray } from "@tine/shared/utils";
+import logger from "loglevel";
+import { type CSSProperties, useCallback, useMemo, useRef } from "react";
 import { getQueryTermForSuggestion } from "../suggestions/helpers";
 import SuggestionIcon from "./SuggestionIcon";
 
@@ -294,6 +294,8 @@ const Suggestion = ({
   );
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: suggestion-list row; keyboard nav owned by the input, not per-row focus
+    // biome-ignore lint/a11y/useKeyWithClickEvents: suggestion-list row; keyboard nav owned by the input, not per-row focus
     <div
       style={style}
       className={`flex items-center overflow-hidden pl-1.5 ${

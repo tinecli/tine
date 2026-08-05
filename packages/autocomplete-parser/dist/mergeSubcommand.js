@@ -5,7 +5,8 @@
 function mergeRecords(base, overlay, onCollision) {
     const out = { ...base };
     for (const key of Object.keys(overlay)) {
-        out[key] = key in base ? onCollision(base[key], overlay[key]) : overlay[key];
+        out[key] =
+            key in base ? onCollision(base[key], overlay[key]) : overlay[key];
     }
     return out;
 }
