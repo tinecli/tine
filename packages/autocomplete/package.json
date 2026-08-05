@@ -15,14 +15,14 @@
     "@tine/autocomplete-parser": "workspace:^",
     "@tine/shell-parser": "workspace:^",
     "@fig/autocomplete-shared": "^1.1.2",
+    "@tine/fuzzysort": "workspace:^",
+    "@tine/shared": "workspace:^",
     "loglevel": "^1.9.2",
     "util": "^0.12.5"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.7",
     "@tine/types": "workspace:^",
-    "@tine/fuzzysort": "workspace:^",
-    "@tine/shared": "workspace:^",
     "@types/node": "^22.15.20",
     "@withfig/autocomplete-types": "^1.31.0",
     "typescript": "^7.0.2"

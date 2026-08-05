@@ -1,4 +1,4 @@
-import fuzzysort from "@tine/fuzzysort";
+import { single } from "@tine/fuzzysort";
 import type { Suggestion } from "@tine/shared/internal";
 import {
   ensureTrailingSlash,
@@ -33,7 +33,7 @@ export const getFuzzyNameMatches = (names: string[], query: string) => {
   if (!query) {
     return names.map((name) => ({ target: name, score: 0, indexes: [] }));
   }
-  return names.map((name) => fuzzysort.single(query, name));
+  return names.map((name) => single(query, name));
 };
 
 // IMPORTANT!: Always return scores: -10 < score <= 0

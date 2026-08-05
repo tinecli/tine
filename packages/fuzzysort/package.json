@@ -1,12 +1,30 @@
 {
   "name": "@tine/fuzzysort",
   "version": "0.1.0",
-  "license": "MIT",
+  "license": "MIT OR Apache-2.0",
   "repository": "https://github.com/tinecli/tine",
   "type": "module",
-  "exports": "./fuzzysort.js",
-  "types": "./fuzzysort.d.ts",
+  "exports": "./dist/index.js",
   "files": [
-    "*"
-  ]
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "tsc --watch",
+    "build": "tsc",
+    "test": "bun test",
+    "lint": "biome check src",
+    "lint:fix": "biome check --write src",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.7",
+    "@tine/tsconfig": "workspace:^",
+    "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

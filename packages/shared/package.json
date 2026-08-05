@@ -20,13 +20,13 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@fig/autocomplete-shared": "^1.1.2"
+    "@fig/autocomplete-shared": "^1.1.2",
+    "@tine/fuzzysort": "workspace:^"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.7",
     "@tine/tsconfig": "workspace:^",
     "@tine/types": "workspace:^",
-    "@tine/fuzzysort": "workspace:^",
     "@withfig/autocomplete-types": "^1.31.0",
     "typescript": "^7.0.2"
   }
