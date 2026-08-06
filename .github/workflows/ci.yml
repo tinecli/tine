@@ -52,3 +52,5 @@ jobs:
           test -x dist/Tine.app/Contents/MacOS/tine
           test -f dist/Tine.app/Contents/Resources/tine-engine.js
           test -f dist/Tine.app/Contents/Resources/AppIcon.icns
+          test -d dist/Tine.app/Contents/Resources/builtin-specs
+          test -f dist/Tine.app/Contents/Resources/tine.zsh
