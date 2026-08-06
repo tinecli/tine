@@ -1,4 +1,3 @@
-import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
 import { executeCommand } from "../shared/execShell.js";
 import type { SpecLocation, Subcommand } from "../shared/internal.js";
 import { type Logger, logger } from "../shared/log.js";
@@ -9,6 +8,7 @@ import {
   withTimeout,
 } from "../shared/utils.js";
 import { specCache } from "./caches.js";
+import { convertSubcommand, initializeDefault } from "./convertSpec.js";
 import { MissingSpecError } from "./errors.js";
 import {
   importFromPublicCDN,

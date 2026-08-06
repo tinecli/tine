@@ -1,4 +1,3 @@
-import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
 import { executeCommand } from "../shared/execShell.js";
 import type * as Internal from "../shared/internal.js";
 import { type Logger, logger } from "../shared/log.js";
@@ -12,6 +11,7 @@ import {
 } from "../shared/utils.js";
 import { type Command, substituteAlias } from "../shell-parser/index.js";
 import { createCache, generateSpecCache } from "./caches.js";
+import { convertSubcommand, initializeDefault } from "./convertSpec.js";
 import { ParseArgumentsError, UpdateStateError } from "./errors.js";
 import { filepaths, folders } from "./filepaths.js";
 import {
