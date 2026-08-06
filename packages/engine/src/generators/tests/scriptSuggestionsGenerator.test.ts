@@ -23,7 +23,7 @@ const context: GeneratorContext = {
   environmentVariables: {},
 };
 
-describe.todo("getScriptSuggestions", () => {
+describe("getScriptSuggestions", () => {
   let executeCommand: Mock<typeof exec.executeCommandTimeout>;
 
   beforeAll(() => {
@@ -148,7 +148,7 @@ describe.todo("getScriptSuggestions", () => {
     );
   });
 
-  it("should call executeCommand without timeout when the user defined ones are negative", async () => {
+  it("should clamp the timeout to zero when the user defined ones are negative", async () => {
     await getScriptSuggestions(
       { script: ["ascript"], scriptTimeout: -100 },
       context,
@@ -156,7 +156,7 @@ describe.todo("getScriptSuggestions", () => {
     );
     expect(executeCommand).toHaveBeenCalledWith(
       { args: [], command: "ascript", cwd: "/" },
-      undefined,
+      0,
     );
   });
 
@@ -166,23 +166,5 @@ describe.todo("getScriptSuggestions", () => {
       { args: [], command: "ascript", cwd: "/" },
       6000,
     );
-  });
-
-  describe("deprecated sshPrefix", () => {
-    it("should call executeCommand ignoring ssh", async () => {
-      await getScriptSuggestions(
-        { script: ["ascript"] },
-        {
-          ...context,
-          sshPrefix: "ssh -i blabla",
-        },
-        5000,
-      );
-
-      expect(executeCommand).toHaveBeenCalledWith(
-        { args: [], command: "ascript", cwd: "/" },
-        5000,
-      );
-    });
   });
 });

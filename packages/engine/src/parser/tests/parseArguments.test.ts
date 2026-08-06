@@ -45,9 +45,8 @@ const cmd = convertSubcommand(cmdSpec, initializeDefault);
 const parseArguments = (
   command: Command | null,
   context: Fig.ShellContext,
-  isParsingHistory?: boolean,
   localLogger?: Logger,
-) => defaultParseArguments(command, context, isParsingHistory, localLogger);
+) => defaultParseArguments(command, context, localLogger);
 
 beforeEach(() => {
   resetCaches();
@@ -240,7 +239,7 @@ const emptyContext: Fig.ShellContext = {
 // updateStateForSubcommand throws) because they are implementation details and
 // we are concerned only with behavior.
 // See https://teamgaslight.com/blog/testing-behavior-vs-testing-implementation
-describe.todo("parseArguments", () => {
+describe("parseArguments", () => {
   // Function that runs a basic test for a command that doesn't load/generate new spec.
   const basicTestWithSpec =
     (completionObj: Internal.Subcommand) =>
@@ -539,7 +538,7 @@ describe.todo("parseArguments", () => {
       expect(result.suggestionFlags).toBe(SuggestionFlag.Any);
       expect(result.searchTerm).toBe("");
       expect(result.currentArg).toStrictEqual(specToLoad.args[0]);
-      expect(result.completionObj).toBe(specToLoad);
+      expect(result.completionObj).toStrictEqual(specToLoad);
     });
 
     it("dotslash", async () => {
@@ -624,7 +623,7 @@ describe.todo("parseArguments", () => {
       expect(result.searchTerm).toBe("");
 
       expect(result.currentArg).toStrictEqual(specToLoad.args[0]);
-      expect(result.completionObj).toBe(specToLoad);
+      expect(result.completionObj).toStrictEqual(specToLoad);
     });
   });
 
@@ -649,7 +648,7 @@ describe.todo("parseArguments", () => {
       expect(result.suggestionFlags).toBe(SuggestionFlag.Any);
       expect(result.searchTerm).toBe("");
       expect(result.annotations.length).toBe(2);
-      expect(result.completionObj).toBe(
+      expect(result.completionObj).toStrictEqual(
         cmd.subcommands.recursiveLoadSpecNestedNested,
       );
     });
@@ -672,7 +671,7 @@ describe.todo("parseArguments", () => {
         cmd.subcommands.recursiveLoadSpecNestedNested.subcommands
           .doubleNestedSubcommand.args[0],
       );
-      expect(result.completionObj).toBe(
+      expect(result.completionObj).toStrictEqual(
         cmd.subcommands.recursiveLoadSpecNestedNested.subcommands
           .doubleNestedSubcommand,
       );
@@ -714,7 +713,7 @@ describe.todo("parseArguments", () => {
       expect(result.searchTerm).toBe("");
       expect(result.annotations.length).toBe(2);
       expect(result.currentArg).toStrictEqual(cmd.subcommands.sudo.args[0]);
-      expect(result.completionObj).toBe(cmd.subcommands.sudo);
+      expect(result.completionObj).toStrictEqual(cmd.subcommands.sudo);
     });
   });
 

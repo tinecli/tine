@@ -1,6 +1,5 @@
 import type { Annotation } from "../parser/index";
 import type { Suggestion } from "../shared/internal";
-import { getSetting, SETTINGS } from "../shared/settings";
 import { getCWDForFilesAndFolders } from "../shared/utils";
 import { Cache } from "./cache";
 
@@ -30,12 +29,7 @@ export async function runCachedGenerator<T>(
   initialRun: () => Promise<T>,
   cacheKey?: string /* This is generator.script or generator.script(...) */,
 ): Promise<T> {
-  const cacheDefault =
-    getSetting<boolean>(SETTINGS.CACHE_ALL_GENERATORS) ?? false;
-  let { cache } = generator;
-  if (!cache && cacheDefault) {
-    cache = { strategy: "stale-while-revalidate", ttl: 1_000 };
-  }
+  const { cache } = generator;
   if (!cache) {
     return initialRun();
   }

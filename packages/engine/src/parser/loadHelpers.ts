@@ -1,9 +1,7 @@
 import { executeCommand } from "../shared/execShell.js";
 import { readFile } from "../shared/host.js";
 import { type Logger, logger } from "../shared/log.js";
-import { isInDevMode } from "../shared/settings.js";
-import { ensureTrailingSlash, withTimeout } from "../shared/utils.js";
-import { MOST_USED_SPECS } from "./constants.js";
+import { ensureTrailingSlash } from "../shared/utils.js";
 import { LoadLocalSpecError } from "./errors.js";
 import { clean } from "./semver.js";
 
@@ -16,15 +14,6 @@ export type SpecFileImport =
       default: Fig.Subcommand;
       versions: Fig.VersionDiffMap;
     };
-
-const makeCdnUrlFactory =
-  (baseUrl: string) =>
-  (specName: string, ext: string = "js") =>
-    `${baseUrl}${specName}.${ext}`;
-
-const _cdnUrlFactory = makeCdnUrlFactory(
-  "https://specs.q.us-east-1.amazonaws.com/",
-);
 
 const stringImportCache = new Map<string, unknown>();
 
@@ -134,20 +123,6 @@ async function jsonFromPublicCDN(path: string): Promise<unknown> {
   return JSON.parse(contents);
 }
 
-// TODO: this is a problem for diff-versioned specs
-export async function importFromLocalhost<T = SpecFileImport>(
-  name: string,
-  port: number | string,
-): Promise<T> {
-  return withTimeout(
-    20000,
-    import(
-      /* @vite-ignore */
-      `http://localhost:${port}/${name}.js`
-    ),
-  );
-}
-
 const cachedCLIVersions: Record<string, string | undefined> = {};
 
 export const getCachedCLIVersion = (key: string) =>
@@ -162,7 +137,7 @@ export async function getVersionFromFullFile(
     try {
       const storageKey = `cliVersion-${name}`;
       const version = getCachedCLIVersion(storageKey);
-      if (!isInDevMode() && version !== null) {
+      if (version !== null) {
         return version;
       }
 
@@ -198,10 +173,6 @@ let publicSpecsRequest:
       diffVersionedSpecs: Set<string>;
     }>
   | undefined;
-
-export function clearSpecIndex() {
-  publicSpecsRequest = undefined;
-}
 
 type SpecIndex = {
   completions: string[];
@@ -244,17 +215,4 @@ export async function publicSpecExists(name: string): Promise<boolean> {
 export async function isDiffVersionedSpec(name: string): Promise<boolean> {
   const { diffVersionedSpecs } = await createPublicSpecsRequest();
   return diffVersionedSpecs.has(name);
-}
-
-export async function preloadSpecs(): Promise<SpecFileImport[]> {
-  return Promise.all(
-    MOST_USED_SPECS.map(async (name) => {
-      // TODO: refactor everything to allow the correct diff-versioned specs to be loaded
-      // too, now we are only loading the index
-      if (await isDiffVersionedSpec(name)) {
-        return importFromPublicCDN(`${name}/index`);
-      }
-      return importFromPublicCDN(name);
-    }).map((promise) => promise.catch((e) => e)),
-  );
 }

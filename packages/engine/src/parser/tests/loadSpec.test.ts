@@ -1,6 +1,5 @@
 import {
   afterEach,
-  beforeAll,
   beforeEach,
   describe,
   expect,
@@ -10,16 +9,25 @@ import {
 } from "bun:test";
 import * as execShell from "../../shared/execShell";
 import { logger } from "../../shared/log";
-import { SETTINGS, updateSettings } from "../../shared/settings";
 import { SpecLocationSource } from "../../shared/utils";
+import { resetCaches } from "../caches";
 import * as loadHelpers from "../loadHelpers";
-import { getSpecPath, loadFigSubcommand } from "../loadSpec";
+import {
+  getSpecPath,
+  loadFigSubcommand,
+  loadSubcommandCached,
+} from "../loadSpec";
 
+// Must supply every member loadSpec imports, or the real module's absence
+// surfaces as an undefined call deep inside a spec load.
 vi.mock("../loadHelpers", () => ({
   importSpecFromFile: vi
     .fn()
     .mockResolvedValue({ default: { name: "loadFromFile" } }),
-  getPrivateSpec: vi.fn().mockReturnValue(undefined),
+  importFromPublicCDN: vi
+    .fn()
+    .mockResolvedValue({ default: { name: "loadFromCDN" } }),
+  publicSpecExists: vi.fn().mockResolvedValue(false),
   isDiffVersionedSpec: vi.fn(),
 }));
 
@@ -30,10 +38,6 @@ vi.mock("../../shared/execShell", () => ({
 
 // TODO: remove this statement and move fig dir to shared
 const FIG_DIR = "~/.fig";
-
-beforeAll(() => {
-  updateSettings({});
-});
 
 describe("getSpecPath", () => {
   const cwd = "test_cwd";
@@ -119,7 +123,6 @@ describe("loadFigSubcommand", () => {
         typeof loadHelpers.isDiffVersionedSpec
       >
     ).mockResolvedValue(false);
-    updateSettings({});
   });
 
   afterEach(() => {
@@ -139,66 +142,58 @@ describe("loadFigSubcommand", () => {
     expect(result.name).toBe("loadFromFile");
   });
 
-  it("works in dev mode", async () => {
-    const devPath = "~/some-folder/";
-    const specLocation: Fig.SpecLocation = {
+  it("loads a local spec from the command's own .fig folder", async () => {
+    await loadFigSubcommand({
       name: "git",
       type: SpecLocationSource.LOCAL,
-    };
-
-    updateSettings({
-      [SETTINGS.DEV_COMPLETIONS_FOLDER]: devPath,
-      [SETTINGS.DEV_MODE_NPM]: false,
-      [SETTINGS.DEV_MODE]: false,
     });
-    await loadFigSubcommand(specLocation);
     expect(loadHelpers.importSpecFromFile).toHaveBeenLastCalledWith(
       "git",
       `${FIG_DIR}/autocomplete/build/`,
       logger,
     );
-
-    updateSettings({
-      [SETTINGS.DEV_COMPLETIONS_FOLDER]: devPath,
-      [SETTINGS.DEV_MODE_NPM]: true,
-      [SETTINGS.DEV_MODE]: false,
-    });
-    await loadFigSubcommand(specLocation);
-    expect(loadHelpers.importSpecFromFile).toHaveBeenLastCalledWith(
-      "git",
-      devPath,
-      logger,
-    );
-
-    updateSettings({
-      [SETTINGS.DEV_COMPLETIONS_FOLDER]: devPath,
-      [SETTINGS.DEV_MODE_NPM]: false,
-      [SETTINGS.DEV_MODE]: true,
-    });
-    await loadFigSubcommand(specLocation);
-    expect(loadHelpers.importSpecFromFile).toHaveBeenLastCalledWith(
-      "git",
-      devPath,
-      logger,
-    );
-
-    updateSettings({
-      [SETTINGS.DEV_COMPLETIONS_FOLDER]: "~/some-folder/",
-      [SETTINGS.DEV_MODE_NPM]: false,
-      [SETTINGS.DEV_MODE]: true,
-    });
-    await loadFigSubcommand(specLocation);
-    expect(loadHelpers.importSpecFromFile).toHaveBeenLastCalledWith(
-      "git",
-      devPath,
-      logger,
-    );
-
-    expect(loadHelpers.isDiffVersionedSpec).toHaveBeenCalledTimes(4);
   });
 });
 
 describe("loadSubcommandCached", () => {
-  // Needs loadFigSubcommand to be injectable before it can be mocked.
-  it.todo("caches by spec name", () => {});
+  beforeEach(() => {
+    resetCaches();
+    (
+      loadHelpers.importSpecFromFile as Mock<
+        typeof loadHelpers.importSpecFromFile
+      >
+    ).mockClear();
+    (
+      loadHelpers.isDiffVersionedSpec as Mock<
+        typeof loadHelpers.isDiffVersionedSpec
+      >
+    ).mockResolvedValue(false);
+  });
+
+  it("caches by spec name", async () => {
+    const location: Fig.SpecLocation = {
+      name: "path",
+      type: SpecLocationSource.LOCAL,
+    };
+
+    const first = await loadSubcommandCached(location);
+    const second = await loadSubcommandCached(location);
+
+    expect(first.name).toEqual(["loadFromFile"]);
+    expect(second).toBe(first);
+    expect(loadHelpers.importSpecFromFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads a spec whose name differs", async () => {
+    await loadSubcommandCached({
+      name: "path",
+      type: SpecLocationSource.LOCAL,
+    });
+    await loadSubcommandCached({
+      name: "other",
+      type: SpecLocationSource.LOCAL,
+    });
+
+    expect(loadHelpers.importSpecFromFile).toHaveBeenCalledTimes(2);
+  });
 });
