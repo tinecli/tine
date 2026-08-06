@@ -15,12 +15,12 @@ removed.
 tine also contains code derived from two MIT-licensed Fig packages, ported into
 this repository instead of depended upon:
 
-  packages/autocomplete-parser/src/filepaths.ts
+  packages/engine/src/parser/filepaths.ts
     derived from @fig/autocomplete-generators (lib/src/filepaths.js and
     lib/src/resolve.js), Copyright (c) Federico Ciardi <fed.ciardi@gmail.com>,
     MIT licensed.
 
-  packages/autocomplete-parser/src/specVersions.ts
+  packages/engine/src/parser/specVersions.ts
     derived from @fig/autocomplete-helpers (dist/versions.js), Copyright (c)
     2021 Hercules Labs Inc. (Fig), MIT licensed.
 

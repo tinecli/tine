@@ -21,6 +21,17 @@ Then grant **Accessibility** (System Settings → Privacy & Security → Accessi
 so the panel can track your cursor. Caret tracking works in Terminal, iTerm2, VSCode,
 and Ghostty — no pseudo-terminal, so nothing can leak your keystrokes.
 
+## Layout
+
+- `app/` — the Swift app (SwiftUI panel, JavaScriptCore host, socket server).
+- `packages/engine/` — the whole JS engine, one package, no build output. See
+  [its README](../packages/engine/README.md) for the folder map.
+- `scripts/` — build, package, install, and dev-run shell scripts.
+- `shell/tine.zsh` — the ZLE widget sourced by your shell.
+
+`bun run build` typechecks the engine (`tsc --noEmit`), `bun test` runs the JS
+tests, and `bun run engine` bundles `app/engine/tine-engine.js`.
+
 ## Specs
 
 The completion pack is **downloaded at runtime** — the app fetches it from the

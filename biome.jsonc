@@ -12,6 +12,11 @@
       "!**/dist",
       "!**/build",
       "!**/coverage",
+      // Agent worktrees: full checkouts with their own biome.jsonc.
+      "!.claude",
+      // Hand-written JavaScriptCore shims: the `function` expressions there are
+      // constructors (`new TextEncoder()`), which useArrowFunction would break.
+      "!app/engine/shims.js",
       // Logo/icon assets, not accessible content.
       "!**/*.svg"
     ]
