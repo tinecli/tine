@@ -9,6 +9,9 @@ xcuserdata/
 *.swp
 *.swo
 
+# Agent worktrees: full nested checkouts of this repo
+/.claude/worktrees/
+
 # Dependencies
 node_modules/
 
@@ -17,11 +20,9 @@ yarn.lock
 package-lock.json
 pnpm-lock.yaml
 
-# Build and test output
+# Build output
 .build/
-/dist/
-coverage/
-*.pending-snap
+dist/
 
 # Secrets
 .env*

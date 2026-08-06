@@ -4,7 +4,9 @@ Build and run tine from source.
 
 ## Prerequisites
 
-macOS 14+, zsh, Swift 6, and Node 22 + bun.
+macOS 14+, zsh, Swift 6, and bun (the version in `package.json`'s
+`packageManager`). No Node install is needed — bun runs the tests, the bundler and
+tsc. `bun run setup` installs what's missing via Homebrew.
 
 ## Run
 
@@ -26,10 +28,13 @@ and Ghostty — no pseudo-terminal, so nothing can leak your keystrokes.
 - `app/` — the Swift app (SwiftUI panel, JavaScriptCore host, socket server).
 - `packages/engine/` — the whole JS engine, one package, no build output. See
   [its README](../packages/engine/README.md) for the folder map.
-- `scripts/` — build, package, install, and dev-run shell scripts.
+- `scripts/` — setup, build, package, and dev-run shell scripts.
 - `shell/tine.zsh` — the ZLE widget sourced by your shell.
+- `tests/` — the end-to-end smoke test that runs the bundled engine in a bare
+  `vm` context. `packages/engine/tsconfig.json` includes it, so `bun run build`
+  typechecks it too.
 
-`bun run build` typechecks the engine (`tsc --noEmit`), `bun test` runs the JS
+`bun run build` typechecks the TypeScript (`tsc --noEmit`), `bun test` runs the JS
 tests, and `bun run engine` bundles `app/engine/tine-engine.js`.
 
 ## Specs

@@ -20,5 +20,8 @@
 
     "types": ["@withfig/autocomplete-types", "node", "bun"]
   },
-  "include": ["src", "tine-engine.ts"]
+  /* ../../tests holds the smoke test for this engine's bundle. It lives outside
+     the package but is the only other TS in the repo, so it rides along here
+     rather than earning a second tsconfig. */
+  "include": ["src", "tine-engine.ts", "../../tests"]
 }
