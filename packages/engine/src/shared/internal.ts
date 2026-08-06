@@ -1,4 +1,3 @@
-import type { Internal, Metadata } from "@fig/autocomplete-shared";
 import type { Result } from "../fuzzysort.js";
 
 export type SpecLocation = Fig.SpecLocation & {
@@ -7,7 +6,7 @@ export type SpecLocation = Fig.SpecLocation & {
 
 type Override<T, S> = Omit<T, keyof S> & S;
 export type SuggestionType = Fig.SuggestionType | "history" | "auto-execute";
-export type Suggestion<ArgT = Metadata.ArgMeta> = Override<
+export type Suggestion<ArgT = Arg> = Override<
   Fig.Suggestion,
   {
     type?: SuggestionType;
@@ -25,10 +24,37 @@ export type Suggestion<ArgT = Metadata.ArgMeta> = Override<
   }
 >;
 
-export type Arg = Metadata.ArgMeta;
-export type Option = Internal.Option<Metadata.ArgMeta, Metadata.OptionMeta>;
-export type Subcommand = Internal.Subcommand<
-  Metadata.ArgMeta,
-  Metadata.OptionMeta,
-  Metadata.SubcommandMeta
->;
+export type LoadSpec =
+  | Fig.SpecLocation[]
+  | Subcommand
+  | ((
+      token: string,
+      executeCommand: Fig.ExecuteCommandFunction,
+    ) => Promise<Fig.SpecLocation[] | Subcommand>);
+
+export type Arg = Omit<Fig.Arg, "template" | "generators" | "loadSpec"> & {
+  generators: Fig.Generator[];
+  loadSpec?: LoadSpec;
+};
+
+export type OptionMeta = Omit<Fig.Option, "args" | "name">;
+
+export type Option = OptionMeta & {
+  name: string[];
+  args: Arg[];
+};
+
+export type SubcommandMeta = Omit<
+  Fig.Subcommand,
+  "subcommands" | "options" | "loadSpec" | "persistentOptions" | "args" | "name"
+> & {
+  loadSpec?: LoadSpec;
+};
+
+export type Subcommand = SubcommandMeta & {
+  name: string[];
+  subcommands: Record<string, Subcommand>;
+  options: Record<string, Option>;
+  persistentOptions: Record<string, Option>;
+  args: Arg[];
+};

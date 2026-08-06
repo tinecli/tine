@@ -13,9 +13,6 @@
     "lint:fix": "biome check --write .",
     "setup": "bash scripts/setup.sh"
   },
-  "dependencies": {
-    "@fig/autocomplete-shared": "^1.1.2"
-  },
   "devDependencies": {
     "@biomejs/biome": "2.5.7",
     "@types/bun": "^1.3.14",

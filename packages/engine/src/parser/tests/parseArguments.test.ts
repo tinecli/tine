@@ -7,11 +7,6 @@ import {
   type Mock,
   vi,
 } from "bun:test";
-import {
-  convertSubcommand,
-  initializeDefault,
-  type Metadata,
-} from "@fig/autocomplete-shared";
 import type * as Internal from "../../shared/internal";
 import { type Logger, logger } from "../../shared/log";
 import {
@@ -22,6 +17,7 @@ import {
 } from "../../shared/utils";
 import { type Command, getCommand } from "../../shell-parser/index";
 import { resetCaches } from "../caches";
+import { convertSubcommand, initializeDefault } from "../convertSpec";
 import { filepaths, folders } from "../filepaths";
 import * as loadSpec from "../loadSpec";
 import { loadSubcommandCached } from "../loadSpec";
@@ -246,7 +242,7 @@ describe("parseArguments", () => {
     async (
       buffer: string,
       flags: SuggestionFlags,
-      currentArg: Metadata.ArgMeta | null,
+      currentArg: Internal.Arg | null,
       searchTerm: string,
     ) => {
       // Mock loading of the provided spec.
