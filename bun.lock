@@ -52,14 +52,14 @@
         "@tine/api-bindings": "workspace:~",
         "@tine/api-bindings-wrappers": "workspace:^",
         "@tine/autocomplete-parser": "workspace:^",
+        "@tine/fuzzysort": "workspace:^",
+        "@tine/shared": "workspace:^",
         "@tine/shell-parser": "workspace:^",
         "loglevel": "^1.9.2",
         "util": "^0.12.5",
       },
       "devDependencies": {
         "@biomejs/biome": "2.5.7",
-        "@tine/fuzzysort": "workspace:^",
-        "@tine/shared": "workspace:^",
         "@tine/types": "workspace:^",
         "@types/node": "^22.15.20",
         "@withfig/autocomplete-types": "^1.31.0",
@@ -93,16 +93,21 @@
     "packages/fuzzysort": {
       "name": "@tine/fuzzysort",
       "version": "0.1.0",
+      "devDependencies": {
+        "@biomejs/biome": "2.5.7",
+        "@tine/tsconfig": "workspace:^",
+        "typescript": "^7.0.2",
+      },
     },
     "packages/shared": {
       "name": "@tine/shared",
       "version": "0.1.0",
       "dependencies": {
         "@fig/autocomplete-shared": "^1.1.2",
+        "@tine/fuzzysort": "workspace:^",
       },
       "devDependencies": {
         "@biomejs/biome": "2.5.7",
-        "@tine/fuzzysort": "workspace:^",
         "@tine/tsconfig": "workspace:^",
         "@tine/types": "workspace:^",
         "@withfig/autocomplete-types": "^1.31.0",

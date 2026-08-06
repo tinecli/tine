@@ -12,8 +12,6 @@
       "!**/dist",
       "!**/build",
       "!**/coverage",
-      // Vendored fork of github.com/farzher/fuzzysort — not ours to restyle.
-      "!packages/fuzzysort/fuzzysort.js",
       // Logo/icon assets, not accessible content.
       "!**/*.svg"
     ]
