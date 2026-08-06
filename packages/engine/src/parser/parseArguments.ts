@@ -754,6 +754,7 @@ const parseArgumentsCached = async (
   specLocations?: Internal.SpecLocation[],
   startIndex = 0,
   localLogger: Logger = logger,
+  inheritedPersistentOptions: Record<string, Internal.Option> = {},
 ): Promise<ArgumentParserState> => {
   let currentCommand = command;
   let tokens = currentCommand.tokens.slice(startIndex);
@@ -805,8 +806,18 @@ const parseArgumentsCached = async (
     throw new UpdateStateError("Failed loading spec");
   }
 
+  // Inherited before parsing, not merged after: every token here — including the
+  // persistent option itself — must resolve against them.
+  const rootSpec: Internal.Subcommand = {
+    ...spec,
+    persistentOptions: {
+      ...inheritedPersistentOptions,
+      ...spec.persistentOptions,
+    },
+  };
+
   let state: ArgumentParserState = getInitialState(
-    spec,
+    rootSpec,
     tokens[0].text,
     specPath,
   );
@@ -830,25 +841,16 @@ const parseArgumentsCached = async (
         : loadSpec;
 
     if (Array.isArray(loadSpecResult)) {
-      const parentPersistentOptions = state.completionObj.persistentOptions;
       state = await parseArgumentsCached(
         currentCommand,
         context,
         // authClient,
         loadSpecResult,
         startIndex + index,
+        localLogger,
+        state.completionObj.persistentOptions,
       );
-      state = {
-        ...state,
-        commandIndex: state.commandIndex + index,
-        completionObj: {
-          ...state.completionObj,
-          persistentOptions: {
-            ...parentPersistentOptions,
-            ...state.completionObj.persistentOptions,
-          },
-        },
-      };
+      state = { ...state, commandIndex: state.commandIndex + index };
       return true;
     }
 

@@ -674,6 +674,56 @@ describe("parseArguments", () => {
     });
   });
 
+  describe("persistent options through loadSpec", () => {
+    const persistentSpec = convertSubcommand(
+      {
+        name: "cmd",
+        options: [
+          {
+            name: "--profile",
+            isPersistent: true,
+            args: { name: "profile", generators: { script: ["profiles"] } },
+          },
+        ],
+        subcommands: [{ name: "sub", loadSpec: "cmd/sub" }],
+      },
+      initializeDefault,
+    );
+    const loadedSpec = convertSubcommand(
+      {
+        name: "sub",
+        subcommands: [{ name: "nested", args: { name: "path" } }],
+      },
+      initializeDefault,
+    );
+
+    beforeEach(() => {
+      resetCaches();
+      (loadSubcommandCached as Mock<typeof loadSubcommandCached>)
+        .mockResolvedValueOnce(persistentSpec)
+        .mockResolvedValueOnce(loadedSpec);
+    });
+
+    it("suggests the persistent option args inside the loaded spec", async () => {
+      const command = getCommand("cmd sub nested --profile ", {});
+      const result = await parseArguments(command, emptyContext);
+
+      expect(result.suggestionFlags).toBe(SuggestionFlag.Args);
+      expect(result.currentArg).toStrictEqual(
+        persistentSpec.persistentOptions["--profile"].args[0],
+      );
+    });
+
+    it("keeps parsing after the persistent option arg", async () => {
+      const command = getCommand("cmd sub nested --profile dev ", {});
+      const result = await parseArguments(command, emptyContext);
+
+      expect(result.currentArg).toStrictEqual(
+        loadedSpec.subcommands.nested.args[0],
+      );
+    });
+  });
+
   describe("isCommand", () => {
     beforeEach(() => {
       // Mock loading of the original cmd spec, and then the loaded spec.
