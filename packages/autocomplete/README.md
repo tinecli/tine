@@ -18,5 +18,5 @@ into JavaScriptCore. The Swift app is the only frontend; there is no web build.
 ## Tests
 
 ```bash
-pnpm exec vitest run packages/autocomplete
+bunx vitest run packages/autocomplete
 ```

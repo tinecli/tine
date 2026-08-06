@@ -12,9 +12,10 @@ xcuserdata/
 # Dependencies
 node_modules/
 
-# stray lockfiles from a package manager other than pnpm
+# stray lockfiles from a package manager other than bun
 yarn.lock
 package-lock.json
+pnpm-lock.yaml
 
 # Build and test output
 .build/

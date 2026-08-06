@@ -7,7 +7,7 @@ OS="$(uname -s)"
 install_macos_deps() {
   echo "Detected macOS"
   xcode-select --install || true
-  brew install mise pnpm protobuf zsh jq
+  brew install mise bun protobuf zsh jq
 }
 
 add_mise_to_shell() {
@@ -44,15 +44,15 @@ setup_mise() {
 
 install_js_deps() {
   echo "Installing JS dependencies..."
-  # No --ignore-scripts: pnpm.onlyBuiltDependencies in package.json already
-  # allowlists just @bufbuild/buf's postinstall (downloads the buf binary,
-  # needed to build @tine/proto) and blocks everything else.
-  pnpm install
+  # bun only runs postinstall scripts for its default-trusted list, which already
+  # covers @bufbuild/buf (downloads the buf binary, needed to build @tine/proto)
+  # and blocks everything else.
+  bun install
 }
 
 build_workspace() {
   echo "Building workspace packages (packages/*/dist)..."
-  pnpm run build
+  bun run build
 }
 
 echo "Setting up project dependencies..."
