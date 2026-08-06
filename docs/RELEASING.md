@@ -1,8 +1,9 @@
 # Releasing
 
-Tag a version and push — the `Release` GitHub Action builds the spec pack + app,
+Tag a version on `main` and push — the `Release` GitHub Action builds the app,
 packages a Developer ID signed + notarized dmg, publishes a GitHub Release, and bumps
-the Homebrew cask in `tinecli/homebrew-tap`:
+the Homebrew cask in `tinecli/homebrew-tap`. The completion pack is not built here; the
+app downloads it at runtime from `tinecli/autocomplete`:
 
 ```sh
 git tag v0.1.1 && git push origin v0.1.1
@@ -16,11 +17,12 @@ git tag v0.1.1 && git push origin v0.1.1
 | `APPLE_CERT_PASSWORD` | password used when exporting that `.p12` |
 | `NOTARY_APPLE_ID` | Apple ID email for `notarytool` |
 | `NOTARY_PASSWORD` | app-specific password for that Apple ID |
-| `TAP_GITHUB_TOKEN` | PAT with write access to the tap (for the cask bump) |
+| `TAP_GITHUB_TOKEN` | token with write access to the tap (for the cask bump) |
 
-Without the Apple secrets the build falls back to ad-hoc signing (no notarization);
-without `TAP_GITHUB_TOKEN` the cask bump is skipped. The cask's `caveats` block is
-hand-maintained in the tap — the workflow only rewrites `version` and `sha256`.
+All five are required: the workflow's preflight step fails the run if any is empty, and
+the tag must be an ancestor of `main`. The cask's `caveats` block is hand-maintained in
+[`tinecli/homebrew-tap`](https://github.com/tinecli/homebrew-tap/blob/main/Casks/tine.rb)
+— the workflow only rewrites `version` and `sha256`.
 
 ## Building a dmg locally
 

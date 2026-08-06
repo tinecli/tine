@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build a distributable, Developer ID signed (+ optionally notarized) Tine.app + .dmg.
-#   TINE_VERSION=0.1.0 scripts/package.sh [--no-specs]
+#   TINE_VERSION=0.1.0 scripts/package.sh
 # Signing: TINE_SIGN_ID="-" → ad-hoc; else Developer ID (default).
 # Notarization (skipped unless all three are set): NOTARY_APPLE_ID, NOTARY_TEAM_ID,
 # NOTARY_PASSWORD (an app-specific password). Staples the ticket into app + dmg so

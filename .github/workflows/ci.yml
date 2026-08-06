@@ -1,42 +1,50 @@
 name: CI
 
-# Build-only sanity: proves the engine bundles and the app compiles + packages
-# (ad-hoc signed, no spec pack) on every push / PR. No secrets.
+# Two independent jobs: cheap checks on Linux, and a real macOS packaging run
+# (ad-hoc signed, no notarization). No secrets.
 on:
   push:
     branches: [ main ]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
-    name: Build (unsigned)
-    runs-on: macos-26   # match release.yml — exercise the macOS 26 SDK (Liquid Glass) build
+  checks:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      # node stays the runtime for tsc; bun is only the package manager.
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
 
-      - name: Install tools
-        run: brew install librsvg
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run build
+      - run: bun test
 
-      - name: Install JS deps
-        run: bun install --frozen-lockfile
+  app:
+    name: Package app (ad-hoc signed)
+    runs-on: macos-26   # match release.yml — build on the macOS 26 SDK (Liquid Glass)
+    steps:
+      - uses: actions/checkout@v7
 
-      - name: Typecheck the engine
-        run: bun run build
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
 
-      - name: Build engine
-        run: bash scripts/build-engine.sh
+      - run: bun install --frozen-lockfile
 
-      - name: Package (ad-hoc, no specs)
-        run: TINE_SIGN_ID="-" bash scripts/package.sh --no-specs
+      # package.sh builds the Swift app and the engine bundle itself.
+      - name: Package
+        run: TINE_SIGN_ID="-" bash scripts/package.sh
 
       - name: Verify bundle
         run: |
@@ -44,4 +52,3 @@ jobs:
           test -x dist/Tine.app/Contents/MacOS/tine
           test -f dist/Tine.app/Contents/Resources/tine-engine.js
           test -f dist/Tine.app/Contents/Resources/AppIcon.icns
-          echo "✅ app built + icon + engine present"
