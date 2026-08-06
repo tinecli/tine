@@ -5,8 +5,8 @@ global.fig = {
 
 const originalGlobalFig = global.fig;
 
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { Suggestion } from "@tine/shared/internal";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   bestScoreMatch,
   getCommonSuggestionPrefix,

@@ -1,3 +1,13 @@
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type Mock,
+  vi,
+} from "bun:test";
 import { filepaths, folders } from "@fig/autocomplete-generators";
 import {
   convertSubcommand,
@@ -13,17 +23,8 @@ import {
 } from "@tine/shared/utils";
 import { type Command, getCommand } from "@tine/shell-parser";
 import logger from "loglevel";
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  type Mock,
-  vi,
-} from "vitest";
 import { resetCaches } from "../src/caches";
+import * as loadSpec from "../src/loadSpec";
 import { loadSubcommandCached } from "../src/loadSpec";
 import {
   createArgState,
@@ -35,8 +36,10 @@ import {
 } from "../src/parseArguments";
 import { cmdSpec } from "./mocks/spec";
 
+type AnyFn = (...args: never[]) => unknown;
+
 vi.mock("../src/loadSpec", () => ({
-  ...vi.importActual("../src/loadSpec.ts"),
+  ...loadSpec,
   loadSubcommandCached: vi.fn(),
 }));
 
@@ -258,7 +261,7 @@ describe.todo("parseArguments", () => {
       searchTerm: string,
     ) => {
       // Mock loading of the provided spec.
-      (loadSubcommandCached as Mock).mockResolvedValueOnce(cmd);
+      (loadSubcommandCached as Mock<AnyFn>).mockResolvedValueOnce(cmd);
 
       const command = getCommand(buffer, {});
       const result = await parseArguments(command, emptyContext);
@@ -485,7 +488,7 @@ describe.todo("parseArguments", () => {
     beforeEach(() => {
       // Mock loading of the original cmd spec, and then the loaded spec.
       resetCaches();
-      (loadSubcommandCached as Mock).mockResolvedValueOnce(cmd);
+      (loadSubcommandCached as Mock<AnyFn>).mockResolvedValueOnce(cmd);
     });
     // Empty command
     it("empty command", async () => {
@@ -514,7 +517,7 @@ describe.todo("parseArguments", () => {
     beforeEach(() => {
       // Mock loading of the original cmd spec, and then the loaded spec.
       resetCaches();
-      (loadSubcommandCached as Mock)
+      (loadSubcommandCached as Mock<AnyFn>)
         .mockResolvedValueOnce(cmd)
         .mockResolvedValueOnce(specToLoad);
     });
@@ -635,7 +638,7 @@ describe.todo("parseArguments", () => {
     beforeEach(() => {
       // Mock loading of the original cmd spec, and then the loaded spec.
       resetCaches();
-      (loadSubcommandCached as Mock)
+      (loadSubcommandCached as Mock<AnyFn>)
         .mockResolvedValueOnce(cmd)
         .mockResolvedValueOnce(cmd.subcommands.recursiveLoadSpecNested)
         .mockResolvedValueOnce(cmd.subcommands.recursiveLoadSpecNestedNested);
@@ -686,7 +689,7 @@ describe.todo("parseArguments", () => {
     beforeEach(() => {
       // Mock loading of the original cmd spec, and then the loaded spec.
       resetCaches();
-      (loadSubcommandCached as Mock)
+      (loadSubcommandCached as Mock<AnyFn>)
         .mockResolvedValue(cmd.subcommands.sudo)
         .mockResolvedValueOnce(cmd);
     });
@@ -725,7 +728,7 @@ describe.todo("parseArguments", () => {
     // Mock loading of the original cmd spec.
     beforeEach(() => {
       resetCaches();
-      (loadSubcommandCached as Mock).mockResolvedValueOnce(cmd);
+      (loadSubcommandCached as Mock<AnyFn>).mockResolvedValueOnce(cmd);
     });
 
     it("works", async () => {
@@ -771,6 +774,6 @@ describe.todo("parseArguments", () => {
   });
 
   afterEach(() => {
-    (loadSubcommandCached as Mock).mockRestore();
+    (loadSubcommandCached as Mock<AnyFn>).mockRestore();
   });
 });

@@ -15,7 +15,6 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest",
     "lint": "biome check src tests",
     "lint:fix": "biome check --write src tests",
     "clean": "rm -rf dist"
@@ -29,7 +28,6 @@
     "@tine/types": "workspace:^",
     "@tine/fuzzysort": "workspace:^",
     "@withfig/autocomplete-types": "^1.31.0",
-    "typescript": "^7.0.2",
-    "vitest": "^3.0.8"
+    "typescript": "^7.0.2"
   }
 }

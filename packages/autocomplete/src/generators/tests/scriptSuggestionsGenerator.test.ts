@@ -1,22 +1,17 @@
-import * as apiBindingsWrappers from "@tine/api-bindings-wrappers/executeCommand";
-
-import type { Annotation } from "@tine/autocomplete-parser";
 import {
   afterEach,
   beforeAll,
   describe,
   expect,
   it,
-  type MockInstance,
+  type Mock,
   vi,
-} from "vitest";
+} from "bun:test";
+import * as apiBindingsWrappers from "@tine/api-bindings-wrappers/executeCommand";
+import type { Annotation } from "@tine/autocomplete-parser";
 import type { GeneratorContext } from "../helpers";
 import * as helpers from "../helpers";
 import { getScriptSuggestions } from "../scriptSuggestionsGenerator";
-
-vi.mock("@tine/api-bindings-wrappers/src/executeCommand", async () =>
-  vi.importActual("@tine/api-bindings-wrappers/src/executeCommand"),
-);
 
 const context: GeneratorContext = {
   annotations: [] as Annotation[],
@@ -29,7 +24,7 @@ const context: GeneratorContext = {
 };
 
 describe.todo("getScriptSuggestions", () => {
-  let executeCommand: MockInstance;
+  let executeCommand: Mock<typeof apiBindingsWrappers.executeCommandTimeout>;
 
   beforeAll(() => {
     vi.spyOn(helpers, "runCachedGenerator");
@@ -102,7 +97,7 @@ describe.todo("getScriptSuggestions", () => {
     ).toEqual([
       { name: "hello", type: "auto-execute" },
       { name: "world", type: "folder" },
-    ]);
+    ] as unknown as Fig.Suggestion[]);
     expect(postProcess).toHaveBeenCalledWith("a/\nx\nc/\nl", []);
   });
 

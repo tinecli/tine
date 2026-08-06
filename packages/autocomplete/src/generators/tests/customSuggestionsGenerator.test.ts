@@ -1,13 +1,13 @@
-import type { Annotation } from "@tine/autocomplete-parser";
 import {
   afterEach,
   beforeAll,
   describe,
   expect,
   it,
-  type MockInstance,
+  type Mock,
   vi,
-} from "vitest";
+} from "bun:test";
+import type { Annotation } from "@tine/autocomplete-parser";
 import { getCustomSuggestions } from "../customSuggestionsGenerator";
 import type { GeneratorContext } from "../helpers";
 import * as helpers from "../helpers";
@@ -23,7 +23,7 @@ const context: GeneratorContext = {
 };
 
 describe("getCustomSuggestions", () => {
-  let runCachedGenerator: MockInstance;
+  let runCachedGenerator: Mock<typeof helpers.runCachedGenerator>;
 
   beforeAll(() => {
     runCachedGenerator = vi.spyOn(helpers, "runCachedGenerator");

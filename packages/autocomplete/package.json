@@ -6,7 +6,6 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "test": "vitest",
     "lint": "biome check src tine-engine.ts",
     "lint:fix": "biome check --write src tine-engine.ts"
   },
@@ -26,8 +25,7 @@
     "@tine/shared": "workspace:^",
     "@types/node": "^22.15.20",
     "@withfig/autocomplete-types": "^1.31.0",
-    "typescript": "^7.0.2",
-    "vitest": "^3.0.8"
+    "typescript": "^7.0.2"
   },
   "bundledDependencies": [
     "@tine/fuzzysort",

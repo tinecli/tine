@@ -1,6 +1,6 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import type { Annotation } from "@tine/autocomplete-parser";
 import { sleep } from "@tine/shared/utils";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type GeneratorContext,
   generatorCache,
@@ -51,7 +51,7 @@ describe("haveContextForGenerator", () => {
 
 describe("runCachedGenerator", () => {
   describe("no cache object", () => {
-    const initialRun = vi.fn();
+    const initialRun = vi.fn<() => Promise<unknown>>();
 
     beforeEach(() => {
       generatorCache.clear();
@@ -80,7 +80,7 @@ describe("runCachedGenerator", () => {
   });
 
   describe("should respect cacheByDirectory key when cache is specified", () => {
-    const initialRun = vi.fn();
+    const initialRun = vi.fn<() => Promise<unknown>>();
 
     beforeEach(() => {
       generatorCache.clear();
@@ -148,7 +148,7 @@ describe("runCachedGenerator", () => {
   });
 
   describe("should attempt to cache based on `script` field", () => {
-    const initialRun = vi.fn();
+    const initialRun = vi.fn<() => Promise<unknown>>();
 
     beforeEach(() => {
       generatorCache.clear();

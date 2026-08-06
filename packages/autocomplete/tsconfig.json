@@ -18,7 +18,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    "types": ["@withfig/autocomplete-types", "@tine/types", "node"]
+    "types": ["@withfig/autocomplete-types", "@tine/types", "node", "bun"]
   },
   "include": ["src", "tine-engine.ts"]
 }

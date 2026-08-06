@@ -1,4 +1,5 @@
-// tine: stub for @tine/api-bindings in the engine bundle. The real module is the
+// tine: stub for @tine/api-bindings in the engine bundle, selected by the
+// "tine-jsc" export condition (see package.json). The real module is the
 // protobuf IPC-to-desktop transport we don't use (buffer comes via the zsh
 // socket, specs via __tineReadFile). This keeps proto/IPC out of the JSC bundle.
 // Only these named exports are referenced by the bundled wrapper code.

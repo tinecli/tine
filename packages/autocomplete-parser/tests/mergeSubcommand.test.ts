@@ -1,5 +1,5 @@
+import { describe, expect, it } from "bun:test";
 import type { Subcommand } from "@tine/shared/internal";
-import { describe, expect, it } from "vitest";
 import { mergeSubcommand } from "../src/mergeSubcommand";
 
 // Minimal converted-shape builders (subcommands/options are name-keyed records).

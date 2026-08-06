@@ -1,6 +1,3 @@
-import { SETTINGS, updateSettings } from "@tine/api-bindings-wrappers";
-import { SpecLocationSource } from "@tine/shared/utils";
-import logger from "loglevel";
 import {
   afterEach,
   beforeAll,
@@ -10,15 +7,15 @@ import {
   it,
   type Mock,
   vi,
-} from "vitest";
+} from "bun:test";
+import * as wrappers from "@tine/api-bindings-wrappers";
+import { SETTINGS, updateSettings } from "@tine/api-bindings-wrappers";
+import { SpecLocationSource } from "@tine/shared/utils";
+import logger from "loglevel";
 import * as loadHelpers from "../src/loadHelpers";
-import {
-  getSpecPath,
-  loadFigSubcommand,
-  loadSubcommandCached,
-} from "../src/loadSpec";
+import { getSpecPath, loadFigSubcommand } from "../src/loadSpec";
 
-const { importSpecFromFile } = loadHelpers;
+type AnyFn = (...args: never[]) => unknown;
 
 vi.mock("../src/loadHelpers", () => ({
   importSpecFromFile: vi
@@ -28,8 +25,8 @@ vi.mock("../src/loadHelpers", () => ({
   isDiffVersionedSpec: vi.fn(),
 }));
 
-vi.mock("@tine/api-bindings-wrappers", async () => ({
-  ...(await vi.importActual("@tine/api-bindings-wrappers")),
+vi.mock("@tine/api-bindings-wrappers", () => ({
+  ...wrappers,
   executeCommand: vi.fn(),
 }));
 
@@ -121,12 +118,12 @@ describe("loadFigSubcommand", () => {
   window.URL.createObjectURL = vi.fn();
 
   beforeEach(() => {
-    (loadHelpers.isDiffVersionedSpec as Mock).mockResolvedValue(false);
+    (loadHelpers.isDiffVersionedSpec as Mock<AnyFn>).mockResolvedValue(false);
     updateSettings({});
   });
 
   afterEach(() => {
-    (loadHelpers.isDiffVersionedSpec as Mock).mockClear();
+    (loadHelpers.isDiffVersionedSpec as Mock<AnyFn>).mockClear();
   });
 
   it("works with expected input", async () => {
@@ -151,7 +148,7 @@ describe("loadFigSubcommand", () => {
       [SETTINGS.DEV_MODE]: false,
     });
     await loadFigSubcommand(specLocation);
-    expect(importSpecFromFile).toHaveBeenLastCalledWith(
+    expect(loadHelpers.importSpecFromFile).toHaveBeenLastCalledWith(
       "git",
       `${FIG_DIR}/autocomplete/build/`,
       logger,
@@ -163,7 +160,11 @@ describe("loadFigSubcommand", () => {
       [SETTINGS.DEV_MODE]: false,
     });
     await loadFigSubcommand(specLocation);
-    expect(importSpecFromFile).toHaveBeenLastCalledWith("git", devPath, logger);
+    expect(loadHelpers.importSpecFromFile).toHaveBeenLastCalledWith(
+      "git",
+      devPath,
+      logger,
+    );
 
     updateSettings({
       [SETTINGS.DEV_COMPLETIONS_FOLDER]: devPath,
@@ -171,7 +172,11 @@ describe("loadFigSubcommand", () => {
       [SETTINGS.DEV_MODE]: true,
     });
     await loadFigSubcommand(specLocation);
-    expect(importSpecFromFile).toHaveBeenLastCalledWith("git", devPath, logger);
+    expect(loadHelpers.importSpecFromFile).toHaveBeenLastCalledWith(
+      "git",
+      devPath,
+      logger,
+    );
 
     updateSettings({
       [SETTINGS.DEV_COMPLETIONS_FOLDER]: "~/some-folder/",
@@ -179,42 +184,17 @@ describe("loadFigSubcommand", () => {
       [SETTINGS.DEV_MODE]: true,
     });
     await loadFigSubcommand(specLocation);
-    expect(importSpecFromFile).toHaveBeenLastCalledWith("git", devPath, logger);
+    expect(loadHelpers.importSpecFromFile).toHaveBeenLastCalledWith(
+      "git",
+      devPath,
+      logger,
+    );
 
     expect(loadHelpers.isDiffVersionedSpec).toHaveBeenCalledTimes(4);
   });
 });
 
 describe("loadSubcommandCached", () => {
-  // This is broken right now...
-  it.todo("works", async () => {
-    const oldLoadSpec = loadFigSubcommand;
-    // biome-ignore lint/suspicious/noImportAssign: it.todo above — known-broken, unreachable
-    (loadFigSubcommand as Mock) = vi.fn();
-    (loadFigSubcommand as Mock).mockResolvedValue({ name: "exampleSpec" });
-    const context: Fig.ShellContext = {
-      currentWorkingDirectory: "",
-      currentProcess: "",
-      sshPrefix: "",
-      environmentVariables: {},
-    };
-
-    await loadSubcommandCached(
-      { name: "git", type: SpecLocationSource.LOCAL },
-      context,
-    );
-    await loadSubcommandCached(
-      { name: "git", type: SpecLocationSource.LOCAL },
-      context,
-    );
-    expect(loadFigSubcommand).toHaveBeenCalledTimes(1);
-
-    await loadSubcommandCached(
-      { name: "hg", type: SpecLocationSource.LOCAL },
-      context,
-    );
-    expect(loadFigSubcommand).toHaveBeenCalledTimes(2);
-    // biome-ignore lint/suspicious/noImportAssign: it.todo above — known-broken, unreachable
-    (loadFigSubcommand as unknown) = oldLoadSpec;
-  });
+  // Needs loadFigSubcommand to be injectable before it can be mocked.
+  it.todo("caches by spec name");
 });
