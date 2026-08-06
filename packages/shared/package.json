@@ -26,7 +26,6 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.7",
     "@tine/tsconfig": "workspace:^",
-    "@tine/types": "workspace:^",
     "@withfig/autocomplete-types": "^1.31.0",
     "typescript": "^7.0.2"
   }

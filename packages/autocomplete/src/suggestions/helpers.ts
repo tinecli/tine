@@ -1,11 +1,11 @@
 import { single } from "@tine/fuzzysort";
 import type { Suggestion } from "@tine/shared/internal";
+import { logger } from "@tine/shared/log";
 import {
   ensureTrailingSlash,
   longestCommonPrefix,
   makeArray,
 } from "@tine/shared/utils";
-import logger from "loglevel";
 
 const SHORTCUT_PREFIX = "?";
 

@@ -3,7 +3,7 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "./src",
-    "types": ["@tine/types", "@withfig/autocomplete-types"]
+    "types": ["@withfig/autocomplete-types"]
   },
   "include": ["src"]
 }

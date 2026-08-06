@@ -12,6 +12,18 @@ AI/chat, cloud service clients, authentication, telemetry, dashboard,
 pseudo-terminal, input method, and non-macOS platform support have been
 removed.
 
+tine also contains code derived from two MIT-licensed Fig packages, ported into
+this repository instead of depended upon:
+
+  packages/autocomplete-parser/src/filepaths.ts
+    derived from @fig/autocomplete-generators (lib/src/filepaths.js and
+    lib/src/resolve.js), Copyright (c) Federico Ciardi <fed.ciardi@gmail.com>,
+    MIT licensed.
+
+  packages/autocomplete-parser/src/specVersions.ts
+    derived from @fig/autocomplete-helpers (dist/versions.js), Copyright (c)
+    2021 Hercules Labs Inc. (Fig), MIT licensed.
+
 The original MIT and Apache 2.0 license texts are retained in LICENSE.MIT and
 LICENSE.APACHE. Fig autocomplete specs are sourced from
 https://github.com/withfig/autocomplete (MIT).

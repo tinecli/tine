@@ -1,9 +1,9 @@
-import { getVersionFromVersionedSpec } from "@fig/autocomplete-helpers";
 import type { SpecLocation } from "@tine/shared/internal";
 import { splitPath } from "@tine/shared/utils";
 import { WrongDiffVersionedSpecError } from "./errors.js";
 import { getVersionFromFullFile, type SpecFileImport } from "./loadHelpers.js";
 import { importSpecFromLocation } from "./loadSpec.js";
+import { getVersionFromVersionedSpec } from "./specVersions.js";
 
 export const tryResolveSpecToSubcommand = async (
   spec: SpecFileImport,

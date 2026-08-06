@@ -7,7 +7,7 @@ OS="$(uname -s)"
 install_macos_deps() {
   echo "Detected macOS"
   xcode-select --install || true
-  brew install mise bun protobuf zsh jq
+  brew install mise bun zsh jq
 }
 
 add_mise_to_shell() {
@@ -44,9 +44,7 @@ setup_mise() {
 
 install_js_deps() {
   echo "Installing JS dependencies..."
-  # bun only runs postinstall scripts for its default-trusted list, which already
-  # covers @bufbuild/buf (downloads the buf binary, needed to build @tine/proto)
-  # and blocks everything else.
+  # No dependency needs a postinstall script.
   bun install
 }
 

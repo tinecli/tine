@@ -1,6 +1,5 @@
-import { executeCommandTimeout } from "@tine/api-bindings-wrappers";
-import logger from "loglevel";
-import { runPipingConsoleMethods } from "../utils";
+import { executeCommandTimeout } from "@tine/shared/exec";
+import { logger } from "@tine/shared/log";
 import {
   type GeneratorContext,
   haveContextForGenerator,
@@ -27,9 +26,7 @@ export async function getScriptSuggestions(
     // A script can either be a string or a function that returns a string.
     // If the script is a function, run it, and get the output string.
     const commandToRun =
-      script && typeof script === "function"
-        ? runPipingConsoleMethods(() => script(tokenArray))
-        : script;
+      script && typeof script === "function" ? script(tokenArray) : script;
 
     if (!commandToRun) {
       return [];
@@ -71,9 +68,7 @@ export async function getScriptSuggestions(
     } else if (postProcess) {
       // If we have a post process function
       // The function takes one input and outputs an array
-      runPipingConsoleMethods(() => {
-        result = postProcess(stdout, tokenArray);
-      });
+      result = postProcess(stdout, tokenArray);
       result = result.filter(
         (item) => item && (typeof item === "string" || !!item.name),
       );

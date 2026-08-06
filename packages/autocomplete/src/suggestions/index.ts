@@ -1,9 +1,4 @@
 import {
-  getSetting,
-  SETTINGS,
-  type SettingsMap,
-} from "@tine/api-bindings-wrappers";
-import {
   type Annotation,
   countEqualOptions,
   TokenType,
@@ -16,6 +11,8 @@ import type {
   Suggestion,
   SuggestionType,
 } from "@tine/shared/internal";
+import { logger } from "@tine/shared/log";
+import { getSetting, SETTINGS, type SettingsMap } from "@tine/shared/settings";
 import {
   compareNamedObjectsAlphabetically,
   fieldsAreEqual,
@@ -25,7 +22,6 @@ import {
   SuggestionFlag,
   type SuggestionFlags,
 } from "@tine/shared/utils";
-import logger from "loglevel";
 import type { GeneratorState } from "../generators/helpers";
 
 import {

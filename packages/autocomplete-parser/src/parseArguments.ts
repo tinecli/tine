@@ -1,13 +1,8 @@
-import { filepaths, folders } from "@fig/autocomplete-generators";
 import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
-import {
-  executeCommand,
-  executeLoginShell,
-  getSetting,
-  isInDevMode,
-  SETTINGS,
-} from "@tine/api-bindings-wrappers";
+import { executeCommand, executeLoginShell } from "@tine/shared/execShell";
 import type * as Internal from "@tine/shared/internal";
+import { type Logger, logger } from "@tine/shared/log";
+import { getSetting, isInDevMode, SETTINGS } from "@tine/shared/settings";
 import {
   firstMatchingToken,
   makeArray,
@@ -17,13 +12,13 @@ import {
   withTimeout,
 } from "@tine/shared/utils";
 import { type Command, substituteAlias } from "@tine/shell-parser";
-import logger from "loglevel";
 import { createCache, generateSpecCache } from "./caches.js";
 import {
   ParseArgumentsError,
   ParsingHistoryError,
   UpdateStateError,
 } from "./errors.js";
+import { filepaths, folders } from "./filepaths.js";
 import {
   getSpecPath,
   loadSubcommandCached,
@@ -636,7 +631,7 @@ const generateSpecForState = async (
   state: ArgumentParserState,
   tokenArray: string[],
   isParsingHistory = false,
-  localLogger: logger.Logger = logger,
+  localLogger: Logger = logger,
 ): Promise<ArgumentParserState> => {
   localLogger.debug("generateSpec", { state, tokenArray });
   const { completionObj } = state;
@@ -781,7 +776,7 @@ const parseArgumentsCached = async (
   specLocations?: Internal.SpecLocation[],
   isParsingHistory?: boolean,
   startIndex = 0,
-  localLogger: logger.Logger = logger,
+  localLogger: Logger = logger,
 ): Promise<ArgumentParserState> => {
   const exec = getExecuteShellCommandFunction(isParsingHistory);
 
@@ -1102,7 +1097,7 @@ export const parseArguments = async (
   context: Fig.ShellContext,
   // authClient: AuthClient,
   isParsingHistory = false,
-  localLogger: logger.Logger = logger,
+  localLogger: Logger = logger,
 ): Promise<ArgumentParserResult> => {
   const tokens = command?.tokens ?? [];
   if (!command || tokens.length === 0) {

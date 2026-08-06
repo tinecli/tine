@@ -7,8 +7,8 @@ import {
   type Mock,
   vi,
 } from "bun:test";
-import * as apiBindingsWrappers from "@tine/api-bindings-wrappers/executeCommand";
 import type { Annotation } from "@tine/autocomplete-parser";
+import * as exec from "@tine/shared/exec";
 import type { GeneratorContext } from "../helpers";
 import * as helpers from "../helpers";
 import { getScriptSuggestions } from "../scriptSuggestionsGenerator";
@@ -24,12 +24,12 @@ const context: GeneratorContext = {
 };
 
 describe.todo("getScriptSuggestions", () => {
-  let executeCommand: Mock<typeof apiBindingsWrappers.executeCommandTimeout>;
+  let executeCommand: Mock<typeof exec.executeCommandTimeout>;
 
   beforeAll(() => {
     vi.spyOn(helpers, "runCachedGenerator");
     executeCommand = vi
-      .spyOn(apiBindingsWrappers, "executeCommandTimeout")
+      .spyOn(exec, "executeCommandTimeout")
       .mockResolvedValue({ status: 0, stdout: "a/\nx\nc/\nl", stderr: "" });
   });
 

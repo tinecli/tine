@@ -1,6 +1,5 @@
-import { executeCommand } from "@tine/api-bindings-wrappers";
-import logger from "loglevel";
-import { runPipingConsoleMethods } from "../utils";
+import { executeCommand } from "@tine/shared/execShell";
+import { logger } from "@tine/shared/log";
 import {
   type GeneratorContext,
   haveContextForGenerator,
@@ -34,16 +33,14 @@ export async function getCustomSuggestions(
       generator,
       context,
       () =>
-        runPipingConsoleMethods(() =>
-          generator.custom!(tokenArray, executeCommand, {
-            currentWorkingDirectory,
-            currentProcess,
-            sshPrefix: "",
-            searchTerm,
-            environmentVariables,
-            isDangerous,
-          }),
-        ),
+        generator.custom!(tokenArray, executeCommand, {
+          currentWorkingDirectory,
+          currentProcess,
+          sshPrefix: "",
+          searchTerm,
+          environmentVariables,
+          isDangerous,
+        }),
       generator.cache?.cacheKey,
     );
 

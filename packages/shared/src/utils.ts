@@ -1,4 +1,4 @@
-import { createErrorInstance } from "./errors.js";
+import { createErrorInstance } from "@tine/shared/errors";
 
 // Use bitwise representation of suggestion flags.
 // See here: https://stackoverflow.com/questions/39359740/what-are-enum-flags-in-typescript/
@@ -201,17 +201,7 @@ export const getCWDForFilesAndFolders = (
 };
 
 export function localProtocol(domain: string, path: string) {
-  let modifiedDomain;
-  if (domain === "path" && !window.fig?.constants?.newUriFormat) {
-    modifiedDomain = "";
-  } else {
-    modifiedDomain = domain;
-  }
-
-  if (window.fig?.constants?.os === "windows") {
-    return `https://fig.${modifiedDomain}/${path}`;
-  }
-  return `fig://${modifiedDomain}/${path}`;
+  return `fig://${domain === "path" ? "" : domain}/${path}`;
 }
 
 type ExponentialBackoffOptions = {

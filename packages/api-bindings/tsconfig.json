@@ -1,8 +1,0 @@
-{
-  "extends": ["@tine/tsconfig/base.json", "@tine/tsconfig/dom.json"],
-  "compilerOptions": {
-    "outDir": "dist",
-    "rootDir": "./src"
-  },
-  "include": ["src/"]
-}
