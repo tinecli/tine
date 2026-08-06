@@ -2,7 +2,12 @@
   "compilerOptions": {
     "target": "ES2020",
     "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    /* No DOM: the bundle runs in JavaScriptCore, not a browser. With DOM here,
+       `window`/`document`/`HTMLElement` typecheck fine and crash at runtime.
+       setTimeout, console, TextEncoder and performance come from the
+       @types/node and @types/bun entries in `types` below — and so does
+       `localStorage`, which biome's noRestrictedGlobals catches instead. */
+    "lib": ["ES2020"],
     "module": "ESNext",
     "skipLibCheck": true,
 

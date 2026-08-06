@@ -27,9 +27,15 @@
   },
   "linter": {
     "enabled": true,
+    // The test domain adds noFocusedTests, noExportsInTest and
+    // noDuplicateTestHooks; all three measure zero hits.
+    "domains": {
+      "test": "recommended"
+    },
     "rules": {
       "preset": "recommended",
-      // The five rules below are still off. Counts are exact as of 2026-08-05,
+      // The five rules marked "off" below are still off. Counts are exact as
+      // of 2026-08-05,
       // measured with `biome check --only=<group>/<rule> .` — re-measure before
       // you claim a number. None has a fix `biome check --write` will apply on
       // its own, so each needs a deliberate pass over the source.
@@ -46,15 +52,52 @@
         // 1 hit, and the code there already uses the safe
         // `Object.prototype.hasOwnProperty.call` form. The rule only wants
         // Object.hasOwn (ES2022), which the engine's ES2020 lib lacks.
-        "noPrototypeBuiltins": "off"
+        "noPrototypeBuiltins": "off",
+        "noConstantBinaryExpressions": "error",
+        "noReturnAssign": "error",
+        "noUnusedExpressions": "error",
+        "noUnassignedVariables": "error",
+        "noVar": "error"
       },
       "style": {
         // 13 hits of intentional `!` non-null assertions.
-        "noNonNullAssertion": "off"
+        "noNonNullAssertion": "off",
+        // Web Storage and friends are real globals in @types/node, so tsc
+        // cannot reject them even with DOM out of `lib`. JavaScriptCore has
+        // none of them.
+        "noRestrictedGlobals": {
+          "level": "error",
+          "options": {
+            "deniedGlobals": {
+              "localStorage": "JavaScriptCore has no Web Storage.",
+              "sessionStorage": "JavaScriptCore has no Web Storage.",
+              "indexedDB": "JavaScriptCore has no IndexedDB.",
+              "navigator": "JavaScriptCore has no navigator.",
+              "location": "JavaScriptCore has no location."
+            }
+          }
+        }
       },
       "complexity": {
         // 6 hits; every fix is flagged unsafe, so it needs review per site.
         "useOptionalChain": "off"
+      },
+      // The engine bundle runs inside JavaScriptCore, which has no Node
+      // globals, no `process` and no module loader. These four guard that.
+      // The tests below run under bun instead, so the override turns the two
+      // host-shape rules back off there.
+      "correctness": {
+        "noGlobalDirnameFilename": "error",
+        "noNodejsModules": "error",
+        "noProcessGlobal": "error",
+        "noUnusedInstantiation": "error"
+      },
+      // Type-aware rules. Biome 2.5.7 keeps them in nursery, and they only
+      // take effect when listed here by name — the `types` domain does not
+      // enable them.
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error"
       }
     }
   },
@@ -68,6 +111,19 @@
       "indentStyle": "space"
     }
   },
+  "overrides": [
+    {
+      "includes": ["**/tests/**", "**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noNodejsModules": "off",
+            "noProcessGlobal": "off"
+          }
+        }
+      }
+    }
+  ],
   "assist": {
     "enabled": true,
     "actions": {
