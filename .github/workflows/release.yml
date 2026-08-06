@@ -114,10 +114,9 @@ jobs:
           codesign --verify --strict --deep --verbose=2 "$APP"
           codesign -dvv "$APP" > "$RUNNER_TEMP/codesign.txt" 2>&1
           grep -q 'Authority=Developer ID Application' "$RUNNER_TEMP/codesign.txt"
-          spctl -a -vvv "$APP" > "$RUNNER_TEMP/spctl-app.txt" 2>&1
-          grep -q 'source=Notarized Developer ID' "$RUNNER_TEMP/spctl-app.txt"
-          spctl -a -vvv -t install "$DMG" > "$RUNNER_TEMP/spctl-dmg.txt" 2>&1
-          grep -q 'source=Notarized Developer ID' "$RUNNER_TEMP/spctl-dmg.txt"
+          # No spctl here: GitHub runners disable Gatekeeper assessments, so
+          # spctl rejects even notarized artifacts. stapler validate is the
+          # offline notarization-ticket proof.
           xcrun stapler validate "$APP"
           xcrun stapler validate "$DMG"
 
