@@ -44,6 +44,9 @@ _tine_ax_terminal() {
 _tine_cellsize() {
   emulate -L zsh
   _tine_ax_terminal && return
+  # Canario answers 16t with the padded view divided by the grid — the wrong cell
+  # size — so the app derives cells from its own rect. Skip a query that can't help.
+  [[ "${TERM_PROGRAM:-}" == canario ]] && return
   [[ ${_TINE_CW:-0} -gt 0 ]] && return
   local saved b tty=${TTY:-/dev/tty}
   saved=$(stty -g <$tty 2>/dev/null) || return

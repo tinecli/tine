@@ -257,7 +257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduleIdleHide()
     }
 
-    /// Panel top-left just below the caret in a canvas terminal (Ghostty), derived
+    /// Panel top-left just below the caret in a canvas terminal (Ghostty, Canario), derived
     /// from the shell's prompt-anchor cell + grid and the buffer offset. AX gives
     /// the text-area frame; the grid divides it into cells.
     private func terminalCellPoint(gap: CGFloat = 4) -> (point: CGPoint, lineHeight: CGFloat)? {
@@ -267,21 +267,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let col = consumed % f.cols
         let row = min((f.anchorRow - 1) + consumed / f.cols, f.rows - 1)
 
-        // The AX rect is the whole text-area element, larger than the glyph grid
-        // (balanced padding). Use the terminal-reported cell size (device px → pt)
-        // for exact cells, and centre the grid in the rect. Fall back to rect÷grid.
-        let scale = screen(containing: rect)?.backingScaleFactor ?? 2
-        let cellW = f.cellW > 0 ? CGFloat(f.cellW) / scale : rect.width / CGFloat(f.cols)
-        let cellH = f.cellH > 0 ? CGFloat(f.cellH) / scale : rect.height / CGFloat(f.rows)
-        let originX = rect.minX + max(0, rect.width - cellW * CGFloat(f.cols)) / 2
-        // The glyph grid is centred within the AX text-area rect (balanced padding).
-        let originY = rect.minY + max(0, rect.height - cellH * CGFloat(f.rows)) / 2
-
-        let x = originX + CGFloat(col) * cellW
-        let cellBottomAX = originY + CGFloat(row + 1) * cellH
+        let g = gridGeometry(rect: rect, cols: f.cols, rows: f.rows, cellPxW: f.cellW, cellPxH: f.cellH)
+        let x = g.origin.x + CGFloat(col) * g.cellW
+        let cellBottomAX = g.origin.y + CGFloat(row + 1) * g.cellH
         let primaryHeight = NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.height
             ?? NSScreen.main?.frame.height ?? 0
-        return (CGPoint(x: x, y: primaryHeight - cellBottomAX - gap), cellH)
+        return (CGPoint(x: x, y: primaryHeight - cellBottomAX - gap), g.cellH)
+    }
+
+    /// Cell size and grid top-left inside a canvas terminal's AX text-area rect,
+    /// which is bigger than the glyph grid by the terminal's padding.
+    private func gridGeometry(rect: CGRect, cols: Int, rows: Int, cellPxW: Int, cellPxH: Int)
+        -> (origin: CGPoint, cellW: CGFloat, cellH: CGFloat) {
+        // Canario (Rio's AppKit frontend) pins the grid to a flat 6pt inset and
+        // rounds every cell up to a whole point, so the rect divides exactly. Its
+        // CSI 16t reply divides the *padded* view by the grid, so it over-reports
+        // and must be ignored.
+        if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.raphaelamorim.canario" {
+            let pad: CGFloat = 6
+            return (CGPoint(x: rect.minX + pad, y: rect.minY + pad),
+                    floor((rect.width - 2 * pad) / CGFloat(cols)),
+                    floor((rect.height - 2 * pad) / CGFloat(rows)))
+        }
+        // Elsewhere (Ghostty) the padding is balanced, so the grid sits centred.
+        // Prefer the terminal-reported cell size (device px → pt); else rect÷grid.
+        let scale = screen(containing: rect)?.backingScaleFactor ?? 2
+        let cellW = cellPxW > 0 ? CGFloat(cellPxW) / scale : rect.width / CGFloat(cols)
+        let cellH = cellPxH > 0 ? CGFloat(cellPxH) / scale : rect.height / CGFloat(rows)
+        return (CGPoint(x: rect.minX + max(0, rect.width - cellW * CGFloat(cols)) / 2,
+                        y: rect.minY + max(0, rect.height - cellH * CGFloat(rows)) / 2),
+                cellW, cellH)
     }
 
     /// The screen the AX rect (top-left origin) sits on, for its backing scale.
