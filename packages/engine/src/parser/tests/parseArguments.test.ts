@@ -1,10 +1,10 @@
 import {
+  afterAll,
   afterEach,
   beforeEach,
   describe,
   expect,
   it,
-  type Mock,
   vi,
 } from "bun:test";
 import type * as Internal from "../../shared/internal";
@@ -20,7 +20,6 @@ import { resetCaches } from "../caches";
 import { convertSubcommand, initializeDefault } from "../convertSpec";
 import { filepaths, folders } from "../filepaths";
 import * as loadSpec from "../loadSpec";
-import { loadSubcommandCached } from "../loadSpec";
 import {
   createArgState,
   parseArguments as defaultParseArguments,
@@ -31,10 +30,12 @@ import {
 } from "../parseArguments";
 import { cmdSpec } from "./mocks/spec";
 
-vi.mock("../loadSpec", () => ({
-  ...loadSpec,
-  loadSubcommandCached: vi.fn(),
-}));
+// A spy, not vi.mock: bun's module mocks are process-global and leak into
+// loadSpec.test.ts, which needs the real loadSubcommandCached.
+const loadSubcommandCached = vi.spyOn(loadSpec, "loadSubcommandCached");
+afterAll(() => {
+  loadSubcommandCached.mockRestore();
+});
 
 const cmd = convertSubcommand(cmdSpec, initializeDefault);
 
@@ -246,9 +247,7 @@ describe("parseArguments", () => {
       searchTerm: string,
     ) => {
       // Mock loading of the provided spec.
-      (
-        loadSubcommandCached as Mock<typeof loadSubcommandCached>
-      ).mockResolvedValueOnce(cmd);
+      loadSubcommandCached.mockResolvedValueOnce(cmd);
 
       const command = getCommand(buffer, {});
       const result = await parseArguments(command, emptyContext);
@@ -475,9 +474,7 @@ describe("parseArguments", () => {
     beforeEach(() => {
       // Mock loading of the original cmd spec, and then the loaded spec.
       resetCaches();
-      (
-        loadSubcommandCached as Mock<typeof loadSubcommandCached>
-      ).mockResolvedValueOnce(cmd);
+      loadSubcommandCached.mockResolvedValueOnce(cmd);
     });
     // Empty command
     it("empty command", async () => {
@@ -506,7 +503,7 @@ describe("parseArguments", () => {
     beforeEach(() => {
       // Mock loading of the original cmd spec, and then the loaded spec.
       resetCaches();
-      (loadSubcommandCached as Mock<typeof loadSubcommandCached>)
+      loadSubcommandCached
         .mockResolvedValueOnce(cmd)
         .mockResolvedValueOnce(specToLoad);
     });
@@ -627,7 +624,7 @@ describe("parseArguments", () => {
     beforeEach(() => {
       // Mock loading of the original cmd spec, and then the loaded spec.
       resetCaches();
-      (loadSubcommandCached as Mock<typeof loadSubcommandCached>)
+      loadSubcommandCached
         .mockResolvedValueOnce(cmd)
         .mockResolvedValueOnce(cmd.subcommands.recursiveLoadSpecNested)
         .mockResolvedValueOnce(cmd.subcommands.recursiveLoadSpecNestedNested);
@@ -699,7 +696,7 @@ describe("parseArguments", () => {
 
     beforeEach(() => {
       resetCaches();
-      (loadSubcommandCached as Mock<typeof loadSubcommandCached>)
+      loadSubcommandCached
         .mockResolvedValueOnce(persistentSpec)
         .mockResolvedValueOnce(loadedSpec);
     });
@@ -728,7 +725,7 @@ describe("parseArguments", () => {
     beforeEach(() => {
       // Mock loading of the original cmd spec, and then the loaded spec.
       resetCaches();
-      (loadSubcommandCached as Mock<typeof loadSubcommandCached>)
+      loadSubcommandCached
         .mockResolvedValue(cmd.subcommands.sudo)
         .mockResolvedValueOnce(cmd);
     });
@@ -767,9 +764,7 @@ describe("parseArguments", () => {
     // Mock loading of the original cmd spec.
     beforeEach(() => {
       resetCaches();
-      (
-        loadSubcommandCached as Mock<typeof loadSubcommandCached>
-      ).mockResolvedValueOnce(cmd);
+      loadSubcommandCached.mockResolvedValueOnce(cmd);
     });
 
     it("works", async () => {
@@ -815,6 +810,6 @@ describe("parseArguments", () => {
   });
 
   afterEach(() => {
-    (loadSubcommandCached as Mock<typeof loadSubcommandCached>).mockRestore();
+    loadSubcommandCached.mockReset();
   });
 });
