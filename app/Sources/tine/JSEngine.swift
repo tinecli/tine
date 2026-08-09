@@ -71,6 +71,18 @@ final class JSEngine {
         ctx.setObject(bridged as NSDictionary, forKeyedSubscript: "__tineFrecency" as NSString)
     }
 
+    /// Re-bridge one command's params after a pick. Accept happens per keystroke,
+    /// so it must not walk the whole index; this is the same property write the
+    /// full bridge performs for that key, over untouched siblings, so the result
+    /// is the state `setFrecency` would leave. Dropped before the load-path
+    /// bridge sets the global — that bridge already carries the pick.
+    func setFrecencyCommand(_ cmd: String, params: [String: Frecency.Use]) {
+        guard ready, let index = ctx.objectForKeyedSubscript("__tineFrecency"), index.isObject
+        else { return }
+        let bridged = params.mapValues { ["count": Double($0.count), "lastUsed": $0.lastUsed] }
+        index.setObject(bridged as NSDictionary, forKeyedSubscript: cmd as NSString)
+    }
+
     /// Provide the argument values learned from history ([cmd: [flag: [value: Use]]]),
     /// suggested when the spec has nothing for the current arg.
     func setHistoryValues(_ index: [String: [String: [String: Frecency.Use]]]) {
