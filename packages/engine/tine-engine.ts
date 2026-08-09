@@ -9,7 +9,7 @@ import "../../app/engine/shims.js";
 import { getCustomSuggestions } from "./src/generators/customSuggestionsGenerator.js";
 import { getScriptSuggestions } from "./src/generators/scriptSuggestionsGenerator.js";
 import { getTemplateSuggestions } from "./src/generators/templateSuggestionsGenerator.js";
-import { parseArguments } from "./src/parser/index.js";
+import { MissingSpecError, parseArguments } from "./src/parser/index.js";
 import type { Suggestion } from "./src/shared/internal.js";
 import { SuggestionFlag } from "./src/shared/utils.js";
 import { getCommand } from "./src/shell-parser/index.js";
@@ -92,7 +92,10 @@ async function suggest(
       HOME: (globalThis as { __tineHome?: string }).__tineHome ?? "",
     },
   };
-  const parsed = await parseArguments(command as never, context as never);
+  const parsed = await parseArguments(command as never, context as never).catch(
+    rethrowUnlessMissingSpec,
+  );
+  if (!parsed) return historyOnlyResult(upToCursor);
 
   // Run the current arg's generators (git branches, folder/file listings, …)
   // via the Swift command bridge, and feed the results in as generator states.
@@ -188,6 +191,35 @@ function historyValues(
   if (!specIsSilent) return [];
 
   return getHistoryValueSuggestions(cmd, historyFlagKey(upToCursor));
+}
+
+const rethrowUnlessMissingSpec = (err: unknown): null => {
+  if (err instanceof MissingSpecError) return null;
+  throw err;
+};
+
+// No spec for this command — the long tail the specs will never cover. The
+// parser has nothing to say, so the user's own values are the whole answer, run
+// through the same pools, grammar filter and frecency as the specced path.
+function historyOnlyResult(upToCursor: string): TineResult {
+  const empty = { searchTerm: "", items: [] };
+  const tokens = upToCursor.trimStart().split(/\s+/);
+  // Still on the command name: first-token completion handles that, not this.
+  if (tokens.length < 2) return empty;
+
+  const current = tokens[tokens.length - 1];
+  const separator = current.startsWith("-") ? current.indexOf("=") : -1;
+  // A flag is being typed, not its value: with no spec there are none to offer.
+  if (current.startsWith("-") && separator <= 0) return empty;
+
+  const searchTerm = separator > 0 ? current.slice(separator + 1) : current;
+  // filterSuggestions leaves the empty-search-term case unsorted, so rank first.
+  const ranked = getHistoryValueSuggestions(
+    tokens[0],
+    historyFlagKey(upToCursor),
+  ).sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+  const filtered = filterSuggestions(ranked, searchTerm, true, false);
+  return { searchTerm, items: toItems(filtered, searchTerm) };
 }
 
 // The flag whose value the cursor sits in: the one being typed on in `--net=h`,
