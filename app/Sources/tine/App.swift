@@ -324,6 +324,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Closing the window leaves the autocomplete agent running.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
+    // Picks are written a second after the last one, so quitting right after an
+    // accept has to write the debounced one now.
+    func applicationWillTerminate(_ notification: Notification) {
+        frecency.flush()
+    }
+
     // Relaunching the app (open again) re-shows the GUI.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         openDashboard()
