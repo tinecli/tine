@@ -36,6 +36,17 @@ describe("frecencyBoost", () => {
     expect(frecencyBoost(now, now)).toBe(0);
     expect(frecencyBoost({ count: 3 }, now)).toBe(0);
   });
+
+  it("scores a foreign entry as zero instead of NaN or -Infinity", () => {
+    expect(frecencyBoost({ count: Number.NaN, lastUsed: now }, now)).toBe(0);
+    expect(frecencyBoost({ count: -1, lastUsed: now }, now)).toBe(0);
+    expect(
+      frecencyBoost({ count: Number.POSITIVE_INFINITY, lastUsed: now }, now),
+    ).toBe(0);
+    expect(
+      frecencyBoost({ count: 3, lastUsed: Number.NEGATIVE_INFINITY }, now),
+    ).toBe(0);
+  });
 });
 
 describe("updatePriorities", () => {

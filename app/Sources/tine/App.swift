@@ -80,7 +80,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
             self.frecency.load()
-            DispatchQueue.main.async { self.state.engine?.setFrecency(self.frecency.index) }
+            DispatchQueue.main.async {
+                self.state.engine?.setFrecency(self.frecency.index)
+                self.state.engine?.setHistoryValues(self.frecency.valueIndex)
+            }
         }
 
         let server = SocketServer(path: sockPath) { [weak self] req in
@@ -132,7 +135,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 if let (b, c) = self.state.accept() {
                     // Learn: record (rawCommand, pickedName) for frecency ranking.
-                    if let name = self.state.selectedName {
+                    // A history value is skipped: it came from ~/.zsh_history, the
+                    // shell logs it again, and the store must stay free of values.
+                    if let name = self.state.selectedName, self.state.selectedType != "history" {
                         let cmd = req.buffer.split(whereSeparator: { $0 == " " || $0 == "\t" })
                             .first.map(String.init) ?? ""
                         self.frecency.record(cmd: cmd, param: name)

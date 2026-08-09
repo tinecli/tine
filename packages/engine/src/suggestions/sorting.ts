@@ -9,13 +9,18 @@ type Index = Record<string, Record<string, unknown>>;
 
 const HALF_LIFE_MS = 7 * 24 * 60 * 60 * 1000;
 
+// Foreign data (an edited store, a stale bridge) must never turn into a NaN or
+// -Infinity priority, so the shape check also bounds the numbers.
 const isUse = (value: unknown): value is Use =>
   typeof value === "object" &&
   value !== null &&
   "count" in value &&
   "lastUsed" in value &&
   typeof value.count === "number" &&
-  typeof value.lastUsed === "number";
+  typeof value.lastUsed === "number" &&
+  Number.isFinite(value.count) &&
+  value.count >= 0 &&
+  Number.isFinite(value.lastUsed);
 
 // Uses decayed by age, mapped into (0, 1) so a boost never crosses a priority band.
 export const frecencyBoost = (use: unknown, now: number): number => {

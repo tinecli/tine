@@ -71,6 +71,16 @@ final class JSEngine {
         ctx.setObject(bridged as NSDictionary, forKeyedSubscript: "__tineFrecency" as NSString)
     }
 
+    /// Provide the argument values learned from history ([cmd: [flag: [value: Use]]]),
+    /// suggested when the spec has nothing for the current arg.
+    func setHistoryValues(_ index: [String: [String: [String: Frecency.Use]]]) {
+        guard ready else { return }
+        let bridged = index.mapValues {
+            $0.mapValues { $0.mapValues { ["count": Double($0.count), "lastUsed": $0.lastUsed] } }
+        }
+        ctx.setObject(bridged as NSDictionary, forKeyedSubscript: "__tineHistoryValues" as NSString)
+    }
+
     /// Toggle first-token (command-name) completion.
     func setFirstTokenEnabled(_ on: Bool) {
         guard ready else { return }
