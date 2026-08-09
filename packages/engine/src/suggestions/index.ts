@@ -11,7 +11,6 @@ import type {
 import { logger } from "../shared/log";
 import {
   compareNamedObjectsAlphabetically,
-  fieldsAreEqual,
   localProtocol,
   makeArray,
   memoizeOne,
@@ -329,18 +328,43 @@ const addAutoExecuteSuggestion = (
   return suggestions;
 };
 
+const valueKey = (
+  value: unknown,
+  functionIds: Map<unknown, number>,
+): string => {
+  if (typeof value === "function") {
+    const id = functionIds.get(value) ?? functionIds.size;
+    functionIds.set(value, id);
+    return `function:${id}`;
+  }
+  if (value === null) return "null";
+  if (typeof value === "string") return `string:${JSON.stringify(value)}`;
+  if (typeof value !== "object") return `${typeof value}:${String(value)}`;
+  const entries = Object.entries(value)
+    .map(
+      ([key, nested]) =>
+        `${JSON.stringify(key)}:${valueKey(nested, functionIds)}`,
+    )
+    .sort();
+  return `{${entries.join(",")}}`;
+};
+
 export const deduplicateSuggestions = (
   suggestions: Suggestion[],
   fields: (keyof Suggestion)[],
 ): Suggestion[] => {
+  if (!fields.length) return suggestions;
+  const functionIds = new Map<unknown, number>();
+  const seen = new Set<string>();
   const deduplicated: Suggestion[] = [];
   for (const suggestion of suggestions) {
-    const isDuplicated =
-      deduplicated.filter((dd) => fieldsAreEqual(suggestion, dd, fields))
-        .length > 0;
-    if (!isDuplicated) {
-      deduplicated.push(suggestion);
-    }
+    const key = valueKey(
+      fields.map((field) => suggestion[field]),
+      functionIds,
+    );
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduplicated.push(suggestion);
   }
   return deduplicated;
 };

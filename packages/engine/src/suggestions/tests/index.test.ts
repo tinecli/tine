@@ -273,4 +273,14 @@ describe("deduplicateSuggestions", () => {
       deduplicateSuggestions(suggestions, ["name", "displayName", "args"]),
     ).toStrictEqual(expected);
   });
+
+  it("should keep suggestions whose compared generators are different functions", () => {
+    const suggestions: Suggestion[] = [
+      { name: "a", args: [{ generators: [{ custom: async () => [] }] }] },
+      { name: "a", args: [{ generators: [{ custom: async () => [] }] }] },
+    ];
+    expect(deduplicateSuggestions(suggestions, ["name", "args"])).toStrictEqual(
+      suggestions,
+    );
+  });
 });
