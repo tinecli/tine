@@ -17,7 +17,7 @@ import {
   getAllSuggestions,
   isTemplateSuggestion,
 } from "./src/suggestions/index.js";
-import { updatePriorities } from "./src/suggestions/sorting.js";
+import { frecencyBoost, updatePriorities } from "./src/suggestions/sorting.js";
 
 type TineSuggestion = {
   name: string;
@@ -216,26 +216,31 @@ function commandNameResult(
   aliases: Record<string, string>,
 ): TineResult {
   const frec =
-    (globalThis as { __tineFrecency?: Record<string, Record<string, number>> })
+    (globalThis as { __tineFrecency?: Record<string, Record<string, unknown>> })
       .__tineFrecency ?? {};
   const names = new Set<string>([
     ...specNames(),
     ...Object.keys(aliases),
     ...Object.keys(frec),
   ]);
-  const recencyOf = (name: string): number => {
+  const now = Date.now();
+  const boostOf = (name: string): number => {
     const params = frec[name];
-    return params ? Math.max(0, ...Object.values(params)) : 0;
+    if (!params) return 0;
+    return Math.max(
+      0,
+      ...Object.values(params).map((use) => frecencyBoost(use, now)),
+    );
   };
   const cmds = [...names].map((name) => {
-    const r = recencyOf(name);
+    const boost = boostOf(name);
     return {
       name,
       type: "subcommand",
       insertValue: name,
       shouldAddSpace: true,
       description: aliases[name] ? `alias → ${aliases[name]}` : "",
-      priority: r ? Math.min(100, 75 + r / 1e13) : 50,
+      priority: boost ? 75 + boost : 50,
     };
   });
   const filtered = filterSuggestions(cmds as never, partial, true, false);
