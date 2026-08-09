@@ -10,6 +10,9 @@ struct TineConfig: Codable, Equatable {
     var showDetail: Bool = false            // Ctrl+K detail pane visible
     var showMenuBarIcon: Bool = true        // status-bar item visible
     var openWindowAtStart: Bool = true      // open the dashboard window on launch
+    var autoUpdateSpecs: Bool = true        // download a newer spec pack by itself
+    var autoUpdateApp: Bool = true          // false = only tell the user about releases
+    var updateNotifications: Bool = true    // notify about installed/available updates
     // User's own spec locations. Each holds override/<cmd>.js (replace) and
     // extend/<cmd>.js (merge) subfolders. Default lives under ~/.config/tine,
     // alongside this config; add more (e.g. a team-shared repo) in Settings.
@@ -18,6 +21,31 @@ struct TineConfig: Codable, Equatable {
     /// The spec dirs with a leading `~` expanded — safe to hand to the file layer.
     var localSpecsDirsExpanded: [String] {
         localSpecsDirs.map { ($0 as NSString).expandingTildeInPath }
+    }
+
+    init() {}
+
+    /// Decoded key by key: a config written by an older tine is missing whatever
+    /// keys were added since, and the synthesized decoder would throw on the first
+    /// one — silently resetting every setting the user does have.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T {
+            ((try? c.decodeIfPresent(T.self, forKey: key)) ?? nil) ?? fallback
+        }
+        let d = TineConfig()
+        maxVisibleRows = value(.maxVisibleRows, d.maxVisibleRows)
+        glass = value(.glass, d.glass)
+        fontName = value(.fontName, d.fontName)
+        fontSize = value(.fontSize, d.fontSize)
+        firstTokenCompletion = value(.firstTokenCompletion, d.firstTokenCompletion)
+        showDetail = value(.showDetail, d.showDetail)
+        showMenuBarIcon = value(.showMenuBarIcon, d.showMenuBarIcon)
+        openWindowAtStart = value(.openWindowAtStart, d.openWindowAtStart)
+        autoUpdateSpecs = value(.autoUpdateSpecs, d.autoUpdateSpecs)
+        autoUpdateApp = value(.autoUpdateApp, d.autoUpdateApp)
+        updateNotifications = value(.updateNotifications, d.updateNotifications)
+        localSpecsDirs = value(.localSpecsDirs, d.localSpecsDirs)
     }
 
     static let path = "\(NSHomeDirectory())/.config/tine/config.json"
