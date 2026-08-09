@@ -164,16 +164,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let update = self.specInstaller.updateAvailable ? 1 : 0
                 return "ax=\(AXCaret.isTrusted ? 1 : 0);specs=\(SpecInstaller.installedCount());version=\(v);update=\(update)"
             case "aliases":
-                // buffer = the shell's `alias` output, lines joined by US.
-                var map: [String: String] = [:]
-                for line in req.buffer.components(separatedBy: TINE_US) where !line.isEmpty {
-                    guard let eq = line.firstIndex(of: "=") else { continue }
-                    let name = String(line[..<eq])
-                    let value = String(line[line.index(after: eq)...])
-                    if !name.isEmpty { map[name] = value }
+                return "\(self.applyAliases(req.buffer))"
+            case "env":
+                // buffer = "<PATH>" RS "<alias dump>". The shell sends only what
+                // changed since its last prompt, so a section can be absent: no RS
+                // means the aliases are unchanged, an empty first section means the
+                // PATH is. Both stay as the app last learned them.
+                let sections = req.buffer.components(separatedBy: TINE_RS)
+                if let path = sections.first, !path.isEmpty {
+                    CommandRunner.setShellPath(path)
                 }
-                self.state.engine?.setAliases(map)
-                return "\(map.count)"
+                if sections.count > 1 { _ = self.applyAliases(sections[1]) }
+                return "0"
             case "toggleDetail":
                 self.state.config.showDetail.toggle()
                 self.panel?.relayout()
@@ -202,6 +204,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A background generator finished with new data — re-run the current
         // suggestion so late results appear without another keystroke.
         CommandRunner.onRefresh = { [weak self] in self?.scheduleRefresh() }
+    }
+
+    /// Hand the engine the shell's `alias` output (lines joined by US), so the
+    /// parser can expand `pc ` → `plug-cli `. Returns the alias count.
+    private func applyAliases(_ dump: String) -> Int {
+        var map: [String: String] = [:]
+        for line in dump.components(separatedBy: TINE_US) where !line.isEmpty {
+            guard let eq = line.firstIndex(of: "=") else { continue }
+            let name = String(line[..<eq])
+            let value = String(line[line.index(after: eq)...])
+            if !name.isEmpty { map[name] = value }
+        }
+        state.engine?.setAliases(map)
+        return map.count
     }
 
     private var refreshWork: DispatchWorkItem?

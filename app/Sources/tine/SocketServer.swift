@@ -1,6 +1,9 @@
 import Foundation
 
 let TINE_US = "\u{1f}"
+/// Splits the sections of a multi-part payload (the `env` buffer), one level
+/// above US — which the alias dump already uses as its own line separator.
+let TINE_RS = "\u{1e}"
 
 /// One request from the shell feed (shell/tine.zsh).
 /// Wire format (one line): type US cursor US cwd US pos US buffer
