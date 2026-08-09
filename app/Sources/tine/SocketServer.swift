@@ -122,7 +122,7 @@ final class SocketServer {
             rows: p(3),
             cellW: p(4),
             cellH: p(5),
-            session: pid_t(exactly: p(6)) ?? 0,
+            session: pid_t(exactly: max(0, p(6))) ?? 0,
             buffer: parts[(extended ? 4 : 3)...].joined(separator: TINE_US)
         )
     }

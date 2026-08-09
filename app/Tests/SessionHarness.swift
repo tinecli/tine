@@ -26,11 +26,14 @@ enum SessionHarness {
         }
     }
 
-    // Stubbed world: which app is frontmost, and which terminal each shell runs in.
+    // Stubbed world: which app is frontmost, which terminal each shell runs in,
+    // and which terminals are still running.
     static var frontmost: pid_t = 100
     static var terminals: [pid_t: pid_t] = [:]
+    static var running: Set<pid_t> = []
     static let sessions = SessionOwnership(frontmostPID: { frontmost },
-                                           terminalPID: { terminals[$0] })
+                                           terminalPID: { terminals[$0] },
+                                           isRunningApp: { running.contains($0) })
 
     // Panel model: what App.swift does with a verdict.
     static var visible = false
@@ -105,6 +108,7 @@ enum SessionHarness {
 
     static func scenarios(sock: String) {
         terminals = [a: 100, b: 200]
+        running = [100, 200, 300, 400, 500]
 
         frontmost = 100
         check("A types: panel presents over A's terminal",
@@ -168,6 +172,22 @@ enum SessionHarness {
               request(sock, "accept", session: b, buffer: "") == "")
         check("the legacy shell can", request(sock, "accept", session: 0, buffer: "") == "hi")
 
+        // A shell exits, its terminal quits, and the OS hands the pid to a shell
+        // in another terminal: the cached mapping must not outlive the terminal.
+        let reused: pid_t = 4004
+        terminals[reused] = 400
+        frontmost = 400
+        check("a shell in terminal 400 presents there",
+              update(sock, reused, "vim", cursor: 3) == "1" && placedOver == 400)
+        _ = request(sock, "dismiss", session: reused, buffer: "")
+        running.remove(400)
+        terminals[reused] = 500
+        frontmost = 500
+        check("the same pid, reused in terminal 500, presents there",
+              update(sock, reused, "vimrc", cursor: 5) == "1" && placedOver == 500)
+        check("it owns the panel", sessions.owner == reused)
+        _ = request(sock, "dismiss", session: reused, buffer: "")
+
         parsing(sock: sock)
     }
 
@@ -183,6 +203,8 @@ enum SessionHarness {
               reply(sock, "echo\u{1f}0\u{1f}/tmp\u{1f}1;1;80;24;0;30;4242\u{1f}a\u{1f}b") == "4242|30|a\u{1f}b")
         check("a garbage session reads as 0",
               reply(sock, "echo\u{1f}0\u{1f}/tmp\u{1f}1;1;80;24;0;30;99999999999\u{1f}x") == "0|30|x")
+        check("a negative session reads as 0",
+              reply(sock, "echo\u{1f}0\u{1f}/tmp\u{1f}1;1;80;24;0;30;-1\u{1f}x") == "0|30|x")
         check("the short (pre-positioning) form still parses",
               reply(sock, "echo\u{1f}0\u{1f}/tmp\u{1f}x") == "0|0|x")
     }

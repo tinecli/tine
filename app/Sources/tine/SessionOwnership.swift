@@ -21,11 +21,14 @@ final class SessionOwnership {
     private var apps: [pid_t: pid_t] = [:] // 0 = no application ancestor
     private let frontmostPID: () -> pid_t?
     private let terminalPID: (pid_t) -> pid_t?
+    private let isRunningApp: (pid_t) -> Bool
 
     init(frontmostPID: @escaping () -> pid_t? = { NSWorkspace.shared.frontmostApplication?.processIdentifier },
-         terminalPID: @escaping (pid_t) -> pid_t? = SessionOwnership.applicationAncestor(of:)) {
+         terminalPID: @escaping (pid_t) -> pid_t? = SessionOwnership.applicationAncestor(of:),
+         isRunningApp: @escaping (pid_t) -> Bool = { NSRunningApplication(processIdentifier: $0) != nil }) {
         self.frontmostPID = frontmostPID
         self.terminalPID = terminalPID
+        self.isRunningApp = isRunningApp
     }
 
     func isOwner(_ session: pid_t) -> Bool { session == 0 || session == owner }
@@ -58,7 +61,15 @@ final class SessionOwnership {
     }
 
     private func terminalApp(of session: pid_t) -> pid_t? {
-        if let cached = apps[session] { return cached == 0 ? nil : cached }
+        if let cached = apps[session] {
+            // 0 = the walk found no application ancestor (tmux, ssh).
+            if cached == 0 { return nil }
+            // A cached terminal that has quit means the OS reused the pid for a
+            // shell somewhere else: resolve it again rather than answer for a
+            // terminal that is gone, which would leave that shell unable to ever
+            // show the panel.
+            if isRunningApp(cached) { return cached }
+        }
         let found = terminalPID(session) ?? 0
         apps[session] = found
         return found == 0 ? nil : found
