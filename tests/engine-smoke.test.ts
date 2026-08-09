@@ -6,6 +6,7 @@ import vm from "node:vm";
 
 type Item = {
   name: string;
+  description: string;
   insertValue: string;
   queryTerm: string;
   type: string;
@@ -68,6 +69,7 @@ const use = (count: number) => ({ count, lastUsed: Date.now() });
 
 let context: vm.Context;
 let tineSuggest: Suggest;
+let bundle: string;
 
 const suggest = (line: string): Promise<Result> =>
   new Promise((resolve) => tineSuggest(line, line.length, "/tmp", resolve));
@@ -112,11 +114,70 @@ beforeAll(async () => {
       },
     },
   });
-  vm.runInContext(
-    await Bun.file(`${root}app/engine/tine-engine.js`).text(),
-    context,
-  );
+  bundle = await Bun.file(`${root}app/engine/tine-engine.js`).text();
+  vm.runInContext(bundle, context);
   tineSuggest = vm.runInContext("globalThis.tineSuggest", context);
+});
+
+// A fresh context per index fixture: the engine caches the parsed index.json.
+const firstTokenItems = (
+  index: string,
+  aliases: Record<string, string> = {},
+): Promise<{ items: Item[]; error: unknown }> => {
+  const ctx = vm.createContext({
+    __tineReadFile: (path: string) =>
+      path === `${specsDir}/index.json` ? index : "",
+    __tineSpecsDir: specsDir,
+    __tineAliases: aliases,
+  });
+  vm.runInContext(bundle, ctx);
+  const run: Suggest = vm.runInContext("globalThis.tineSuggest", ctx);
+  return new Promise((resolve) =>
+    run("j", 1, "/tmp", (r) =>
+      resolve({
+        items: r.items,
+        error: vm.runInContext("globalThis.__tineErr", ctx),
+      }),
+    ),
+  );
+};
+
+const withDescriptions = JSON.stringify({
+  completions: ["jq", "jj"],
+  descriptions: { jq: "Command-line JSON processor" },
+});
+
+test("a command name carries its root description from the index", async () => {
+  const { items } = await firstTokenItems(withDescriptions);
+  expect(items.map((item) => [item.name, item.description])).toEqual([
+    ["jq", "Command-line JSON processor"],
+    ["jj", ""],
+  ]);
+});
+
+test("alias text wins over the index description", async () => {
+  const { items } = await firstTokenItems(withDescriptions, {
+    jq: "jq --sort-keys",
+  });
+  expect(items[0].description).toBe("alias → jq --sort-keys");
+});
+
+test("an index without descriptions leaves them blank", async () => {
+  const { items, error } = await firstTokenItems(
+    JSON.stringify({ completions: ["jq"] }),
+  );
+  expect(items.map((item) => item.description)).toEqual([""]);
+  expect(error).toBeUndefined();
+});
+
+test("a malformed descriptions map leaves them blank", async () => {
+  for (const descriptions of [42, null, ["jq"], { jq: 42 }]) {
+    const { items, error } = await firstTokenItems(
+      JSON.stringify({ completions: ["jq"], descriptions }),
+    );
+    expect(items.map((item) => item.description)).toEqual([""]);
+    expect(error).toBeUndefined();
+  }
 });
 
 test("the bundle exposes tineSuggest", () => {
