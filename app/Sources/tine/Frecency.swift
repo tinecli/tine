@@ -1,26 +1,56 @@
 import Foundation
 
-/// Ranks suggestions by how recently the user used a command's subcommands/flags.
-/// The index is `[rawCommand: [param: lastUsedMillis]]`, matching the engine's
-/// sorting.ts (recencyBoost = value / 1e13). Bootstrapped from ~/.zsh_history and
-/// extended with live picks persisted to ~/.local/share/tine/frecency.json.
+/// Ranks suggestions by how often and how recently the user used a command's
+/// subcommands/flags. The index is `[rawCommand: [param: Use]]`, blended by the
+/// engine's sorting.ts. Bootstrapped from ~/.zsh_history and extended with live
+/// picks persisted to ~/.local/share/tine/frecency.json.
 final class Frecency {
+    /// One param's usage. Decodes the older store format — a bare timestamp — as a
+    /// single use, so an existing frecency.json still loads.
+    struct Use: Codable {
+        var count: Int
+        var lastUsed: Double
+
+        init(count: Int = 1, lastUsed: Double) {
+            self.count = count
+            self.lastUsed = lastUsed
+        }
+
+        init(from decoder: Decoder) throws {
+            if let lastUsed = try? decoder.singleValueContainer().decode(Double.self) {
+                self.init(lastUsed: lastUsed)
+                return
+            }
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.init(count: try c.decode(Int.self, forKey: .count),
+                      lastUsed: try c.decode(Double.self, forKey: .lastUsed))
+        }
+
+        func merged(with other: Use) -> Use {
+            Use(count: max(count, other.count), lastUsed: max(lastUsed, other.lastUsed))
+        }
+    }
+
     static let storePath = "\(NSHomeDirectory())/.local/share/tine/frecency.json"
     private static let historyPath = "\(NSHomeDirectory())/.zsh_history"
     private static let maxHistoryLines = 8000
 
     /// history ∪ live — fed to the engine as globalThis.__tineFrecency.
-    private(set) var index: [String: [String: Double]] = [:]
+    private(set) var index: [String: [String: Use]] = [:]
     /// Only the live picks (persisted); merged over history on load.
-    private var live: [String: [String: Double]] = [:]
+    private var live: [String: [String: Use]] = [:]
 
     func load() {
         index = Self.parseHistory()
         if let data = FileManager.default.contents(atPath: Self.storePath),
-           let obj = try? JSONDecoder().decode([String: [String: Double]].self, from: data) {
+           let obj = try? JSONDecoder().decode([String: [String: Use]].self, from: data) {
             live = obj
             for (cmd, params) in live {
-                for (p, t) in params { index[cmd, default: [:]][p] = max(index[cmd]?[p] ?? 0, t) }
+                // Live picks re-enter ~/.zsh_history when the shell logs them, so the
+                // two counts overlap: take the larger, never their sum.
+                for (p, use) in params {
+                    index[cmd, default: [:]][p] = index[cmd]?[p]?.merged(with: use) ?? use
+                }
             }
         }
     }
@@ -29,9 +59,17 @@ final class Frecency {
     func record(cmd: String, param: String) {
         guard !cmd.isEmpty, !param.isEmpty, !param.contains("↪"), !param.contains(" ") else { return }
         let now = Date().timeIntervalSince1970 * 1000
-        live[cmd, default: [:]][param] = now
-        index[cmd, default: [:]][param] = now
+        Self.bump(&live, cmd, param, now)
+        Self.bump(&index, cmd, param, now)
         persistLive()
+    }
+
+    private static func bump(_ idx: inout [String: [String: Use]],
+                             _ cmd: String, _ param: String, _ ts: Double) {
+        var use = idx[cmd]?[param] ?? Use(count: 0, lastUsed: 0)
+        use.count += 1
+        use.lastUsed = max(use.lastUsed, ts)
+        idx[cmd, default: [:]][param] = use
     }
 
     private func persistLive() {
@@ -50,7 +88,7 @@ final class Frecency {
         return t.allSatisfy { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" }
     }
 
-    private static func parseHistory() -> [String: [String: Double]] {
+    private static func parseHistory() -> [String: [String: Use]] {
         let raw = (try? String(contentsOfFile: historyPath, encoding: .utf8))
             ?? String(data: FileManager.default.contents(atPath: historyPath) ?? Data(), encoding: .ascii)
         guard let raw else { return [:] }
@@ -58,7 +96,7 @@ final class Frecency {
         var lines = raw.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
         if lines.count > maxHistoryLines { lines = Array(lines.suffix(maxHistoryLines)) }
 
-        var idx: [String: [String: Double]] = [:]
+        var idx: [String: [String: Use]] = [:]
         let nowMs = Date().timeIntervalSince1970 * 1000
         for (i, line) in lines.enumerated() {
             var cmd = line
@@ -79,12 +117,11 @@ final class Frecency {
             if root == "cd", let target = tokens.dropFirst().first {
                 let base = (target as NSString).lastPathComponent
                 if !base.isEmpty, base != "/", base != "-" {
-                    let key = base + "/"
-                    idx["cd", default: [:]][key] = max(idx["cd"]?[key] ?? 0, ts)
+                    bump(&idx, "cd", base + "/", ts)
                 }
             }
             for t in tokens.dropFirst() where isRankable(t) {
-                idx[root, default: [:]][t] = max(idx[root]?[t] ?? 0, ts)
+                bump(&idx, root, t, ts)
             }
         }
         return idx

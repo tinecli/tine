@@ -62,10 +62,13 @@ final class JSEngine {
         ctx.setObject(aliases as NSDictionary, forKeyedSubscript: "__tineAliases" as NSString)
     }
 
-    /// Provide the frecency index ([cmd: [param: lastUsedMillis]]) for ranking.
-    func setFrecency(_ index: [String: [String: Double]]) {
+    /// Provide the frecency index ([cmd: [param: {count, lastUsed}]]) for ranking.
+    func setFrecency(_ index: [String: [String: Frecency.Use]]) {
         guard ready else { return }
-        ctx.setObject(index as NSDictionary, forKeyedSubscript: "__tineFrecency" as NSString)
+        let bridged = index.mapValues {
+            $0.mapValues { ["count": Double($0.count), "lastUsed": $0.lastUsed] }
+        }
+        ctx.setObject(bridged as NSDictionary, forKeyedSubscript: "__tineFrecency" as NSString)
     }
 
     /// Toggle first-token (command-name) completion.
