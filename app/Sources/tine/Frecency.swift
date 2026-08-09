@@ -35,7 +35,7 @@ final class Frecency {
     }
 
     static let storePath = "\(NSHomeDirectory())/.local/share/tine/frecency.json"
-    private static let historyPath = "\(NSHomeDirectory())/.zsh_history"
+    private static let defaultHistoryPath = "\(NSHomeDirectory())/.zsh_history"
     private static let maxHistoryLines = 8000
     /// Live picks kept in the store; past this the least recently used go.
     private static let maxLiveEntries = 5000
@@ -56,24 +56,48 @@ final class Frecency {
     private var pendingWrite: DispatchWorkItem?
     /// Guards the store against a write scheduled before `load` read it.
     private var loaded = false
+    /// The shell sends it (see `setHistoryIgnore`); until then nothing is ignored.
+    private var ignore = HistoryIgnore.none
+    private let historyPath: String
+
+    init(historyPath: String = Frecency.defaultHistoryPath) {
+        self.historyPath = historyPath
+    }
 
     var index: [String: [String: Use]] { queue.sync { merged } }
     var valueIndex: [String: [String: [String: Use]]] { queue.sync { values } }
 
     func load() {
-        let history = Self.parseHistory()
         let stored = Self.readStore()
         queue.sync {
             Self.merge(stored, into: &live)
             pruneLive()
-            var idx = history.params
-            // Live picks re-enter ~/.zsh_history when the shell logs them, so the
-            // two counts overlap: take the larger, never their sum.
-            Self.merge(live, into: &idx)
-            merged = idx
-            values = history.values
             loaded = true
+            rebuild()
         }
+    }
+
+    /// Take the shell's `HISTORY_IGNORE` (an unexported parameter, so it arrives
+    /// over the socket) and rebuild both indexes under it — an already-loaded pool
+    /// drops its now-ignored entries. Memory only; the store holds no values, and
+    /// ~/.zsh_history is never written. Returns true when the pattern changed.
+    func setHistoryIgnore(_ pattern: String) -> Bool {
+        queue.sync {
+            guard pattern != ignore.source else { return false }
+            ignore = HistoryIgnore(pattern)
+            rebuild()
+            return true
+        }
+    }
+
+    private func rebuild() {
+        let history = Self.parseHistory(path: historyPath, ignore: ignore)
+        var idx = history.params
+        // Live picks re-enter ~/.zsh_history when the shell logs them, so the
+        // two counts overlap: take the larger, never their sum.
+        Self.merge(live, into: &idx)
+        merged = idx
+        values = history.values
     }
 
     /// Record a pick (cmd = raw first token, param = accepted suggestion name).
@@ -308,16 +332,6 @@ final class Frecency {
             && s.contains(where: \.isLowercase)
     }
 
-    /// zsh keeps HISTORY_IGNORE matches out of the file; honour it on read too, for
-    /// lines written before the user set it. Best effort: the app only sees the
-    /// pattern when the shell exports it.
-    private static func historyIgnorePatterns() -> [String] {
-        let raw = ProcessInfo.processInfo.environment["HISTORY_IGNORE"] ?? ""
-        var pattern = raw.trimmingCharacters(in: .whitespaces)
-        if pattern.hasPrefix("("), pattern.hasSuffix(")") { pattern = String(pattern.dropFirst().dropLast()) }
-        return pattern.isEmpty ? [] : pattern.split(separator: "|").map(String.init)
-    }
-
     private static func bumpValue(_ values: inout [String: [String: [String: Use]]],
                                   _ cmd: String, _ flag: String, _ value: String, _ ts: Double) {
         guard !isSecretName(flag) else { return }
@@ -383,7 +397,7 @@ final class Frecency {
         }
     }
 
-    static func parseHistory(path: String = historyPath)
+    static func parseHistory(path: String = defaultHistoryPath, ignore: HistoryIgnore = .none)
         -> (params: [String: [String: Use]], values: [String: [String: [String: Use]]]) {
         let raw = (try? String(contentsOfFile: path, encoding: .utf8))
             ?? String(data: FileManager.default.contents(atPath: path) ?? Data(), encoding: .ascii)
@@ -394,7 +408,6 @@ final class Frecency {
 
         var idx: [String: [String: Use]] = [:]
         var values: [String: [String: [String: Use]]] = [:]
-        let ignored = historyIgnorePatterns()
         let nowMs = Date().timeIntervalSince1970 * 1000
         for (i, line) in lines.enumerated() {
             var cmd = line
@@ -409,8 +422,7 @@ final class Frecency {
                 cmd = String(line[line.index(after: semi)...])
             }
             // HIST_IGNORE_SPACE: a leading space means the user hid the line.
-            guard !cmd.hasPrefix(" "), !ignored.contains(where: { fnmatch($0, cmd, 0) == 0 })
-            else { continue }
+            guard !cmd.hasPrefix(" "), !ignore.matches(cmd) else { continue }
             let tokens = cmd.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
             guard let root = tokens.first, !root.isEmpty else { continue }
             // cd targets are paths (skipped by isRankable): record the destination's
@@ -428,4 +440,110 @@ final class Frecency {
         }
         return (idx, capValues(values, nowMs))
     }
+}
+
+/// zsh's `HISTORY_IGNORE`, compiled once. zsh keeps matches out of the history
+/// file at write time; honouring it on read covers the lines written before the
+/// user set it. The parameter is not exported, so the app learns it from the
+/// shell's `env` message rather than from its own environment.
+///
+/// The value is one zsh pattern matched against the whole line. Translated here:
+/// `*`, `?`, `[…]` (`!`/`^` negation, ranges, `[:class:]`), `(…|…)` alternation
+/// at any depth, top-level `|`, and `\` escapes. Not translated — such a pattern
+/// matches no line, so its history stays visible: extendedglob (`#`, `##`, `^`,
+/// `~`, `(#i)`) and numeric ranges (`<->`, `<n-m>`).
+struct HistoryIgnore {
+    static let none = HistoryIgnore("")
+
+    let source: String
+    private let regex: NSRegularExpression?
+
+    init(_ pattern: String) {
+        source = pattern
+        regex = Self.compile(pattern)
+    }
+
+    func matches(_ line: String) -> Bool {
+        guard let regex else { return false }
+        return regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil
+    }
+
+    private static func compile(_ pattern: String) -> NSRegularExpression? {
+        guard !pattern.isEmpty else { return nil }
+        var out = "\\A(?:"
+        var depth = 0
+        var i = pattern.startIndex
+        while i < pattern.endIndex {
+            let c = pattern[i]
+            i = pattern.index(after: i)
+            switch c {
+            case "\\":
+                guard i < pattern.endIndex else { out += "\\\\"; break }
+                out += quote(pattern[i])
+                i = pattern.index(after: i)
+            // Runs collapse: `**` must not become a nested quantifier the regex
+            // engine can backtrack forever on.
+            case "*":
+                while i < pattern.endIndex, pattern[i] == "*" { i = pattern.index(after: i) }
+                out += ".*"
+            case "?": out += "."
+            case "(": out += "(?:"; depth += 1
+            case ")":
+                guard depth > 0 else { return nil }
+                out += ")"
+                depth -= 1
+            case "|": out += "|"
+            case "[":
+                guard let (cls, next) = charClass(pattern, i) else { return nil }
+                out += cls
+                i = next
+            default: out += quote(c)
+            }
+        }
+        guard depth == 0 else { return nil }
+        return try? NSRegularExpression(pattern: out + ")\\z")
+    }
+
+    private static func quote(_ c: Character) -> String {
+        NSRegularExpression.escapedPattern(for: String(c))
+    }
+
+    /// Copy a `[…]` class through, mapping zsh's `!` negation to the regex `^`.
+    /// Returns nil when it is unterminated — zsh would not treat that as a class.
+    private static func charClass(_ p: String, _ start: String.Index)
+        -> (String, String.Index)? {
+        var i = start
+        var out = "["
+        if i < p.endIndex, p[i] == "!" || p[i] == "^" {
+            out += "^"
+            i = p.index(after: i)
+        }
+        if i < p.endIndex, p[i] == "]" {
+            out += "\\]"
+            i = p.index(after: i)
+        }
+        while i < p.endIndex {
+            let c = p[i]
+            i = p.index(after: i)
+            if c == "]" { return (out + "]", i) }
+            // [:alpha:] and friends pass through whole; a bare `[` is a literal.
+            if c == "[", i < p.endIndex, p[i] == ":",
+               let end = p.range(of: ":]", range: i..<p.endIndex) {
+                out += "[" + p[i..<end.upperBound]
+                i = end.upperBound
+                continue
+            }
+            if c == "\\", i < p.endIndex {
+                out += "\\" + String(p[i])
+                i = p.index(after: i)
+                continue
+            }
+            // `-` stays bare so ranges survive; escaping a letter would spell a
+            // regex class (`\d`, `\a`), so only the set's own syntax is escaped.
+            out += setSyntax.contains(c) ? "\\" + String(c) : String(c)
+        }
+        return nil
+    }
+
+    private static let setSyntax: Set<Character> = ["\\", "]", "[", "&", "^", "{", "}"]
 }

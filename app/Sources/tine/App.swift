@@ -196,15 +196,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "aliases":
                 return "\(self.applyAliases(req.buffer))"
             case "env":
-                // buffer = "<PATH>" RS "<alias dump>". The shell sends only what
-                // changed since its last prompt, so a section can be absent: no RS
-                // means the aliases are unchanged, an empty first section means the
-                // PATH is. Both stay as the app last learned them.
+                // buffer = "<PATH>" RS "<alias dump>" RS "<HISTORY_IGNORE>". The
+                // shell sends only what changed since its last prompt, so a section
+                // can be absent: no RS means the aliases are unchanged, an empty
+                // first section means the PATH is. Both stay as the app last
+                // learned them. A present section is authoritative, empty included.
                 let sections = req.buffer.components(separatedBy: TINE_RS)
                 if let path = sections.first, !path.isEmpty {
                     CommandRunner.setShellPath(path)
                 }
                 if sections.count > 1 { _ = self.applyAliases(sections[1]) }
+                if sections.count > 2 { self.applyHistoryIgnore(sections[2]) }
                 return "0"
             case "toggleDetail":
                 self.state.config.showDetail.toggle()
@@ -248,6 +250,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         state.engine?.setAliases(map)
         return map.count
+    }
+
+    /// Re-read history under the shell's HISTORY_IGNORE, off the prompt's socket
+    /// call: rebuilding rescans ~/.zsh_history, and only a changed pattern does it.
+    private func applyHistoryIgnore(_ pattern: String) {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self, self.frecency.setHistoryIgnore(pattern) else { return }
+            let (index, values) = (self.frecency.index, self.frecency.valueIndex)
+            DispatchQueue.main.async {
+                self.state.engine?.setFrecency(index)
+                self.state.engine?.setHistoryValues(values)
+            }
+        }
     }
 
     private var refreshWork: DispatchWorkItem?
