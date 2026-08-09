@@ -16,6 +16,7 @@ _TINE_SRC=${(%):-%x}
 zmodload zsh/stat 2>/dev/null && zstat -A _TINE_SRC_MTIME +mtime "$_TINE_SRC" 2>/dev/null
 
 _TINE_US=$'\x1f'
+_TINE_RS=$'\x1e'   # separates the sections of the env message (US is taken)
 _TINE_ACTIVE=0
 _TINE_REPLY=""
 _TINE_HIST=0   # in shell-history navigation (Up past the top row), like Fig
@@ -27,6 +28,10 @@ _TINE_CH=0     # cell height in device pixels
 _TINE_PREVLEN=0 # buffer length at the previous feed, to spot the first typed char
 _TINE_DISMISSED=0    # Esc dismissed the panel; stay hidden until the buffer changes
 _TINE_DISMISS_BUF="" # buffer at the moment of dismissal
+_TINE_SOCK_INODE=""  # socket inode at the last env send; a new one = the app restarted
+
+# $aliases/$galiases, so the alias set can be fingerprinted without forking.
+zmodload zsh/parameter 2>/dev/null
 
 # Terminals whose caret Accessibility reports directly (Terminal, iTerm2, VSCode)
 # use the AX path and need no shell-side cursor anchor — so we skip the tty
@@ -193,32 +198,42 @@ zle -N _tine_enter
 zle -N _tine_esc
 zle -N _tine_detail
 
-# Send the shell's aliases to the app so the parser can expand them (pc -> plug-cli).
-# Once per prompt: cheap, and survives an app restart.
-_tine_send_aliases() {
+# Send the shell's aliases (the parser expands them: pc -> plug-cli) and PATH (so
+# generators run the user's tools — a GUI-launched app gets only the minimal
+# launchd PATH) as one message: "<PATH><RS><alias dump>", the dump omitted when
+# it hasn't changed. One connection per prompt instead of two, and no fork.
+#
+# PATH goes every prompt because the app holds one global slot for it: the shell
+# at the active prompt has to reassert its own, or another tab's direnv/venv PATH
+# would stay in place for this shell's whole session.
+#
+# The dump costs a fork, so it's gated on a fork-free fingerprint of zsh's own
+# alias tables, committed only once the app has taken it — a restarted app has
+# forgotten it, and also recreated the socket, so a new inode forces a resend.
+_tine_send_env() {
+  emulate -L zsh
   [[ -n "$TINE_SOCK" ]] || return
-  zmodload zsh/net/socket 2>/dev/null || return
-  local fd reply dump
-  dump="$(alias | tr '\n' "$_TINE_US")"
-  zsocket "$TINE_SOCK" 2>/dev/null || return
-  fd=$REPLY
-  print -u "$fd" -r -- "aliases${_TINE_US}0${_TINE_US}${PWD}${_TINE_US}0;0;0;0;0;0${_TINE_US}${dump}"
-  IFS= read -r -u "$fd" reply
-  exec {fd}>&-
-}
-
-# Send the shell's PATH so the app can run generators (git branch, aws, gh, …)
-# with the same tools the user has — a GUI-launched app otherwise gets only the
-# minimal launchd PATH. Sent every prompt so per-dir PATH (direnv, venvs) tracks.
-_tine_send_path() {
-  [[ -n "$TINE_SOCK" ]] || return
+  local -a st
+  zstat -A st +inode "$TINE_SOCK" 2>/dev/null
+  if [[ "$st[1]" != "$_TINE_SOCK_INODE" ]]; then
+    _TINE_SOCK_INODE=$st[1]
+    unset _TINE_ENV_ALIASES
+  fi
+  local sending=0 payload=$PATH
+  # Quote each name/value and join on US, so no alias can spell another pair.
+  local sig=${(pj:\x1f:)${(qkv)aliases}}${(pj:\x1f:)${(qkv)galiases}}
+  if (( ! ${+_TINE_ENV_ALIASES} )) || [[ "$sig" != "$_TINE_ENV_ALIASES" ]]; then
+    sending=1
+    payload+="${_TINE_RS}$(alias | tr '\n' "$_TINE_US")"
+  fi
   zmodload zsh/net/socket 2>/dev/null || return
   local fd reply
   zsocket "$TINE_SOCK" 2>/dev/null || return
   fd=$REPLY
-  print -u "$fd" -r -- "path${_TINE_US}0${_TINE_US}${PWD}${_TINE_US}0;0;0;0;0;0${_TINE_US}${PATH}"
+  print -u "$fd" -r -- "env${_TINE_US}0${_TINE_US}${PWD}${_TINE_US}0;0;0;0;0;0${_TINE_US}${payload}"
   IFS= read -r -u "$fd" reply
   exec {fd}>&-
+  if (( sending )) && [[ -n "$reply" ]]; then _TINE_ENV_ALIASES=$sig; fi
 }
 # `tine` CLI — manage the app from the shell.
 #   tine dashboard   open the dashboard window
@@ -344,8 +359,10 @@ _tine_doctor() {
 
 autoload -Uz add-zsh-hook 2>/dev/null
 if (( $+functions[add-zsh-hook] )); then
-  add-zsh-hook precmd _tine_send_aliases
-  add-zsh-hook precmd _tine_send_path
+  # Drop the split hooks, still registered in a shell that re-sourced this file.
+  add-zsh-hook -d precmd _tine_send_aliases
+  add-zsh-hook -d precmd _tine_send_path
+  add-zsh-hook precmd _tine_send_env
   add-zsh-hook precmd _tine_cellsize
 fi
 
