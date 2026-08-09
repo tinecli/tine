@@ -20,6 +20,10 @@ enum CommandRunner {
     private static let lock = NSLock()
     private static let queue = DispatchQueue(label: "dev.gustaf.tine.generator", attributes: .concurrent)
     private static let ttl: TimeInterval = 3
+    /// How long a timed-out child gets to honour SIGTERM before SIGKILL, and again
+    /// to close its pipes before the reads give up. Short: a wedged generator has
+    /// nothing left to say, and the panel is waiting on it.
+    private static let grace: TimeInterval = 0.5
 
     /// Called (on the main thread) when a background refresh produced *new* output,
     /// so the app can re-run the current suggestion and surface late generator
@@ -78,12 +82,14 @@ enum CommandRunner {
         // blocks. Return the stale value if we have one, else an empty success.
         if !dup {
             queue.async {
+                // Clearing the marker must survive every path out of here: a leaked
+                // marker pins `isLoading` on and blocks that key from running again.
+                defer { lock.lock(); inflight.remove(key); lock.unlock() }
                 let result = execute(executable: executable, args: args, cwd: cwd,
                                      env: env, timeoutMs: timeoutMs)
                 lock.lock()
                 let prev = cache[key]?.output
                 cache[key] = (result, Date())
-                inflight.remove(key)
                 if cache.count > 128 {
                     cache = cache.filter { Date().timeIntervalSince($0.value.at) < ttl }
                 }
@@ -123,18 +129,58 @@ enum CommandRunner {
         // longest any shipped spec asks for. 2 s only when a spec asks for nothing.
         let requested = timeoutMs.flatMap { $0.isFinite && $0 > 0 ? $0 / 1000.0 : nil }
         let timeout = min(requested ?? 2.0, 20.0)
-        let killer = DispatchWorkItem { if proc.isRunning { proc.terminate() } }
-        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: killer)
+        let start = DispatchTime.now()
+        // SIGTERM is a request; a child that ignores it holds its stdout open and
+        // wedges the read. Escalate to SIGKILL, which it cannot ignore.
+        let term = DispatchWorkItem { if proc.isRunning { proc.terminate() } }
+        let kill9 = DispatchWorkItem { if proc.isRunning { kill(proc.processIdentifier, SIGKILL) } }
+        DispatchQueue.global().asyncAfter(deadline: start + timeout, execute: term)
+        DispatchQueue.global().asyncAfter(deadline: start + timeout + grace, execute: kill9)
 
-        let out = outPipe.fileHandleForReading.readDataToEndOfFile()
-        let err = errPipe.fileHandleForReading.readDataToEndOfFile()
+        // The reads need a deadline of their own, strictly after the SIGKILL: a
+        // grandchild that inherited the write end keeps the pipe open even once
+        // the child is dead, and would otherwise block here forever.
+        // Both at once, sharing one deadline: a child that fills the stderr pipe
+        // buffer blocks there and never closes stdout, so draining in sequence
+        // would spend the whole deadline on stdout and lose stderr entirely.
+        let readDeadline = start + timeout + grace * 2
+        var err = Data()
+        let errDrain = DispatchWorkItem { err = drain(errPipe, until: readDeadline) }
+        queue.async(execute: errDrain)
+        let out = drain(outPipe, until: readDeadline)
+        errDrain.wait()
         proc.waitUntilExit()
-        killer.cancel()
+        term.cancel()
+        kill9.cancel()
 
         return encode(
-            stdout: String(data: out, encoding: .utf8) ?? "",
-            stderr: String(data: err, encoding: .utf8) ?? "",
+            stdout: String(decoding: out, as: UTF8.self),
+            stderr: String(decoding: err, as: UTF8.self),
             exitCode: proc.terminationStatus
         )
+    }
+
+    /// Reads a pipe to EOF, giving up at `deadline` with whatever arrived so far.
+    /// Dispatch I/O rather than `readDataToEndOfFile` so an abandoned read releases
+    /// its thread instead of blocking one for as long as the writer lives.
+    private static func drain(_ pipe: Pipe, until deadline: DispatchTime) -> Data {
+        let fd = dup(pipe.fileHandleForReading.fileDescriptor)
+        guard fd >= 0 else { return Data() }
+        let reader = DispatchQueue(label: "dev.gustaf.tine.generator.read")
+        let done = DispatchSemaphore(value: 0)
+        var buffer = Data()
+        let channel = DispatchIO(type: .stream, fileDescriptor: fd, queue: reader) { _ in
+            close(fd)
+            done.signal()
+        }
+        channel.read(offset: 0, length: Int.max, queue: reader) { finished, data, _ in
+            if let data { buffer.append(contentsOf: data) }
+            if finished { channel.close() }
+        }
+        if done.wait(timeout: deadline) == .timedOut {
+            channel.close(flags: .stop)
+            done.wait()
+        }
+        return reader.sync { buffer }
     }
 }
