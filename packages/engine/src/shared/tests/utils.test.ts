@@ -1,70 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import {
   compareNamedObjectsAlphabetically,
-  fieldsAreEqual,
   longestCommonPrefix,
   makeArray,
   makeArrayIfExists,
 } from "../utils";
-
-describe("fieldsAreEqual", () => {
-  it("should return immediately if two values are the same", () => {
-    expect(fieldsAreEqual("hello", "hello", [])).toEqual(true);
-    expect(fieldsAreEqual("hello", "hell", [])).toEqual(false);
-    expect(fieldsAreEqual(1, 1, ["valueOf"])).toEqual(true);
-    expect(fieldsAreEqual(null, null, [])).toEqual(true);
-    expect(fieldsAreEqual(null, undefined, [])).toEqual(false);
-    expect(fieldsAreEqual(undefined, undefined, [])).toEqual(true);
-    expect(fieldsAreEqual(null, "hello", [])).toEqual(false);
-    expect(fieldsAreEqual(100, null, [])).toEqual(false);
-    expect(fieldsAreEqual({}, {}, [])).toEqual(true);
-    expect(fieldsAreEqual(() => {}, () => {}, [])).toEqual(false);
-  });
-
-  it("should return true if fields are equal", () => {
-    const fn = () => {};
-    expect(
-      fieldsAreEqual(
-        {
-          a: "hello",
-          b: 100,
-          c: undefined,
-          d: false,
-          e: fn,
-          f: { fa: true, fb: { fba: true } },
-          g: null,
-        },
-        {
-          a: "hello",
-          b: 100,
-          c: undefined,
-          d: false,
-          e: fn,
-          f: { fa: true, fb: { fba: true } },
-          g: null,
-        },
-        ["a", "b", "c", "d", "e", "f", "g"],
-      ),
-    ).toEqual(true);
-    expect(fieldsAreEqual({ a: {} }, { a: {} }, ["a"])).toEqual(true);
-  });
-
-  it("should return false if any field is not equal or fields are not specified", () => {
-    expect(fieldsAreEqual({ a: null }, { a: {} }, ["a"])).toEqual(false);
-    expect(fieldsAreEqual({ a: undefined }, { a: "hello" }, ["a"])).toEqual(
-      false,
-    );
-    expect(fieldsAreEqual({ a: false }, { a: true }, ["a"])).toEqual(false);
-    expect(
-      fieldsAreEqual(
-        { a: { b: { c: "hello" } } },
-        { a: { b: { c: "hell" } } },
-        ["a"],
-      ),
-    ).toEqual(false);
-    expect(fieldsAreEqual({ a: "true" }, { b: "true" }, [])).toEqual(false);
-  });
-});
 
 describe("makeArray", () => {
   it("should transform an object into an array", () => {
