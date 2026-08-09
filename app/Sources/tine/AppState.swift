@@ -46,7 +46,7 @@ final class AppState: ObservableObject {
     /// the panel jump as the caret is re-queried.
     @discardableResult
     func update(_ msg: FeedMessage) -> Bool {
-        if msg.buffer == buffer && msg.cursor == cursor { return false }
+        if msg.buffer == buffer && msg.cursor == cursor && msg.cwd == cwd { return false }
         buffer = msg.buffer
         cursor = msg.cursor
         cwd = msg.cwd
