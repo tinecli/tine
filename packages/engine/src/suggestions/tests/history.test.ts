@@ -3,6 +3,9 @@ import { getHistoryValueSuggestions } from "../history";
 
 const now = Date.now();
 const day = 24 * 60 * 60 * 1000;
+// The source reads its own clock, so a fixture last used "now" decays by however
+// long the test takes to reach it. Dating one ahead pins the decay at zero.
+const never = now + 365 * day;
 const host = globalThis as { __tineHistoryValues?: unknown };
 
 const names = (cmd: string, flag: string) =>
@@ -15,7 +18,7 @@ afterEach(() => {
 describe("getHistoryValueSuggestions", () => {
   it("offers the values typed after this flag, marked as history", () => {
     host.__tineHistoryValues = {
-      docker: { "-p": { "8080:8080": { count: 3, lastUsed: now } } },
+      docker: { "-p": { "8080:8080": { count: 3, lastUsed: never } } },
     };
     expect(getHistoryValueSuggestions("docker", "-p")).toEqual([
       {
