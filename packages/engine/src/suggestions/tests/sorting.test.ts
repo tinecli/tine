@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import type { Suggestion } from "../../shared/internal";
 import { frecencyBoost, updatePriorities } from "../sorting";
 
@@ -40,9 +40,14 @@ describe("frecencyBoost", () => {
 
 describe("updatePriorities", () => {
   const sub = (name: string): Suggestion => ({ name, type: "subcommand" });
+  const host = globalThis as { __tineFrecency?: unknown };
+
+  afterEach(() => {
+    host.__tineFrecency = undefined;
+  });
 
   it("orders the used band by frequency, not by timestamp alone", () => {
-    (globalThis as { __tineFrecency?: unknown }).__tineFrecency = {
+    host.__tineFrecency = {
       git: {
         commit: { count: 500, lastUsed: Date.now() - day },
         bisect: { count: 1, lastUsed: Date.now() },
