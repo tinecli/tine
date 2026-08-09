@@ -11,6 +11,14 @@ const host = globalThis as { __tineHistoryValues?: unknown };
 const names = (cmd: string, flag: string) =>
   getHistoryValueSuggestions(cmd, flag).map((s) => s.name);
 
+// Put one value in one pool and report what survives the filter.
+const survivors = (flag: string, value: string) => {
+  host.__tineHistoryValues = {
+    deploy: { [flag]: { [value]: { count: 3, lastUsed: never } } },
+  };
+  return names("deploy", flag);
+};
+
 afterEach(() => {
   host.__tineHistoryValues = undefined;
 });
@@ -34,9 +42,9 @@ describe("getHistoryValueSuggestions", () => {
   it("keeps one flag's values out of another's pool", () => {
     host.__tineHistoryValues = {
       docker: {
-        "-p": { "8080:8080": { count: 3, lastUsed: now } },
-        "-e": { "NODE_ENV=production": { count: 3, lastUsed: now } },
-        "": { "nginx:latest": { count: 3, lastUsed: now } },
+        "-p": { "8080:8080": { count: 3, lastUsed: never } },
+        "-e": { "NODE_ENV=production": { count: 3, lastUsed: never } },
+        "": { "nginx:latest": { count: 3, lastUsed: never } },
       },
     };
     expect(names("docker", "-p")).toEqual(["8080:8080"]);
@@ -67,40 +75,69 @@ describe("getHistoryValueSuggestions", () => {
     expect(ranked[0].priority).toBeLessThan(51);
   });
 
-  it("never surfaces a credential-shaped value", () => {
-    const secrets = [
-      "AKIAIOSFODNN7EXAMPLE",
-      "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-      "github_pat_11ABCDEFG0abcdefghijkl",
-      "sk-proj-abcdefghijklmnopqrstuvwxyz012345",
-      "xoxb-123456789012-abcdefghijkl",
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.abc",
-      "-----BEGIN",
-      "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY",
-      "api_token=abcdef",
-      "3f2a1b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a",
-      "https://example.com/x?token=abcdef",
-      "Zm9vYmFyYmF6cXV4Y29ycmdlZ3JhdWx0Z2FycA",
-    ];
-    host.__tineHistoryValues = {
-      deploy: {
-        "-v": Object.fromEntries([
-          ...secrets.map((s) => [s, { count: 9, lastUsed: now }]),
-          ["nginx:latest", { count: 1, lastUsed: now }],
-        ]),
-      },
-    };
-    expect(names("deploy", "-v")).toEqual(["nginx:latest"]);
-  });
-
-  it("offers nothing under a flag that names a credential", () => {
-    host.__tineHistoryValues = {
-      deploy: { "--api-key": { hunter2: { count: 9, lastUsed: now } } },
-    };
-    expect(names("deploy", "--api-key")).toEqual([]);
-  });
-
   it("offers nothing when the host set no index", () => {
     expect(names("docker", "-p")).toEqual([]);
   });
+});
+
+// A value is admitted only by matching one of these shapes. Everything else is
+// dropped, whether or not it looks like a secret.
+describe("admitted grammars", () => {
+  const admitted: Array<[string, string, string]> = [
+    ["port", "--port", "8080"],
+    ["port mapping", "-p", "8080:8080"],
+    ["port mapping with a bind address", "-p", "80:8080:80"],
+    ["dotted host", "-h", "api.example.com"],
+    ["IPv4 literal", "-h", "192.168.1.10"],
+    ["localhost", "-h", "localhost"],
+    ["host:port", "-h", "cache.example.com:6379"],
+    ["user@host", "", "deploy@web.example.com"],
+    ["URL without userinfo", "", "https://api.example.com/v1/things"],
+    ["absolute path", "", "/etc/hosts"],
+    ["relative path", "", "./notes/todo.md"],
+    ["parent path", "", "../sibling/file.txt"],
+    ["home path", "", "~/Documents/notes.md"],
+    ["name:tag in the positional pool", "", "nginx:latest"],
+    ["NAME=word", "-e", "NODE_ENV=production"],
+    ["NAME=grammar", "-e", "PORT=8080"],
+  ];
+  for (const [what, flag, value] of admitted) {
+    it(`admits a ${what}`, () => {
+      expect(survivors(flag, value)).toEqual([value]);
+    });
+  }
+});
+
+describe("rejected values", () => {
+  const rejected: Array<[string, string, string]> = [
+    ["user:pass after a flag (alice:hunter2)", "-u", "alice:hunter2"],
+    ["a URL carrying userinfo", "", "postgres://user:pass@db.example.com/app"],
+    ["a slashed AWS key", "", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"],
+    ["a base32 seed", "", "JBSWY3DPEHPK3PXPJBSW"],
+    ["a dotted 20+ mixed-case secret", "--tag", "aB3dEfGh.iJkLmNoPqRs7"],
+    ["a dictionary password after -p (hunter2)", "-p", "hunter2"],
+    ["short hex after a flag", "-b", "a1b2c3d4"],
+    ["a bare word", "", "production"],
+    ["a bare relative path", "", "build/out"],
+    ["name:tag after a flag", "-t", "nginx:latest"],
+    ["a GitHub token", "", "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"],
+    ["a fine-grained GitHub token", "", "github_pat_11ABCDEFG0abcdefghijkl"],
+    ["an AWS access key id", "", "AKIAIOSFODNN7EXAMPLE"],
+    ["an OpenAI key", "", "sk-proj-abcdefghijklmnopqrstuvwxyz012345"],
+    ["a Slack token", "", "xoxb-123456789012-abcdefghijkl"],
+    ["a JWT", "", "eyJhbGciOiJIUzI1NiJ9.e30.abcdefghijkl"],
+    ["a PEM header", "", "-----BEGIN"],
+    ["a 40-char hex digest", "", "3f2a1b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a"],
+    ["a base64 blob", "", "Zm9vYmFyYmF6cXV4Y29ycmdlZ3JhdWx0Z2FycA"],
+    ["SECRET=value", "-e", "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIK7MDENG"],
+    ["DB_PASS=value", "-e", "DB_PASS=hunter2"],
+    ["a value under a credential-named flag", "--api-key", "hunter2"],
+    ["a value under --password", "--password", "web.example.com"],
+    ["a value under --pwd", "--pwd", "web.example.com"],
+  ];
+  for (const [what, flag, value] of rejected) {
+    it(`rejects ${what}`, () => {
+      expect(survivors(flag, value)).toEqual([]);
+    });
+  }
 });

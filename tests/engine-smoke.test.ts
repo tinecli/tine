@@ -34,6 +34,7 @@ const files: Record<string, string> = {
       { name: "--config", args: { name: "file", template: "filepaths" } },
       { name: "--mode", args: { name: "mode", suggestions: ["fast"] } },
       { name: "--net", requiresEquals: true, args: { name: "net" } },
+      { name: "-u", args: { name: "user" } },
     ],
     args: { name: "target" },
   };
@@ -103,6 +104,7 @@ beforeAll(async () => {
         "--config": { "override.yml": use(9) },
         "--mode": { turbo: use(9) },
         "--net": { "host.local": use(9) },
+        "-u": { "alice:hunter2": use(9) },
         "": {
           "web.example.com": use(3),
           ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789: use(99),
@@ -183,7 +185,10 @@ test("history values never include a credential-shaped token", async () => {
     "--net",
     "-e",
     "-p",
+    "-u",
   ]);
+  // user:pass wearing an image tag's shape: admitted positionally, never here.
+  expect(await names("deploy -u ")).toEqual([]);
 });
 
 test("a generator or a spec suggestion keeps history values out", async () => {

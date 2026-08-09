@@ -35,6 +35,11 @@ final class AppState: ObservableObject {
         suggestions.indices.contains(selectedIndex) ? suggestions[selectedIndex].name : nil
     }
 
+    /// Type of the highlighted suggestion, e.g. "history" (never recorded).
+    var selectedType: String? {
+        suggestions.indices.contains(selectedIndex) ? suggestions[selectedIndex].type : nil
+    }
+
     /// Returns true if the buffer actually changed (so the caller repositions the
     /// panel). A redraw after a nav key re-sends the same buffer — recomputing or
     /// resetting the selection then would snap the highlight to the top and make

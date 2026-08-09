@@ -164,15 +164,104 @@ final class Frecency {
         return t.allSatisfy { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" }
     }
 
-    /// The value pool's looser rule: `8080:8080`, `nginx:latest` and `./out` pass,
-    /// while quoted, shell-special and credential-shaped tokens never do.
-    private static func isValue(_ t: String) -> Bool {
-        guard t.count >= 2, t.count <= 80, !t.hasPrefix("-") else { return false }
-        guard let first = t.first,
-              first.isLetter || first.isNumber || first == "." || first == "/" || first == "~"
-        else { return false }
+    /// A value enters the pool only when it matches one of the shapes worth
+    /// suggesting *and* survives the blocklists below. Recognising every secret is
+    /// a losing game; recognising the few useful grammars is not. history.ts runs
+    /// the identical rules on the engine side.
+    private static func isValue(_ t: String, _ flag: String) -> Bool {
+        guard t.count >= 2, t.count <= 80 else { return false }
         guard t.allSatisfy({ !$0.isWhitespace && !shellSpecial.contains($0) }) else { return false }
-        return !looksSecret(t)
+        guard !isSecretName(flag), !looksSecret(t) else { return false }
+        return matchesGrammar(t, flag)
+    }
+
+    private static func matchesGrammar(_ t: String, _ flag: String) -> Bool {
+        if isPort(t[...]) || isPortMapping(t) { return true }
+        if isHost(t) || isHostPort(t) || isUserAtHost(t) { return true }
+        if isURL(t) || isPath(t) { return true }
+        // `nginx:latest` is an image tag positionally and `alice:hunter2` after a
+        // flag, so name:tag is admitted in the positional pool only.
+        if flag.isEmpty, isNameTag(t) { return true }
+        return isAssignment(t, flag)
+    }
+
+    private static func isAlnum(_ c: Character) -> Bool {
+        c.isASCII && (c.isLetter || c.isNumber)
+    }
+
+    /// [A-Za-z0-9._-]+ — the plain word every other grammar is built from.
+    private static func isWord(_ s: Substring) -> Bool {
+        !s.isEmpty && s.allSatisfy { isAlnum($0) || $0 == "." || $0 == "_" || $0 == "-" }
+    }
+
+    private static func isPort(_ s: Substring) -> Bool {
+        !s.isEmpty && s.count <= 5 && s.allSatisfy { $0.isASCII && $0.isNumber }
+    }
+
+    private static func isPortMapping(_ t: String) -> Bool {
+        let parts = t.split(separator: ":", omittingEmptySubsequences: false)
+        return (2...3).contains(parts.count) && parts.allSatisfy(isPort)
+    }
+
+    private static func isLabel(_ s: Substring) -> Bool {
+        guard let first = s.first, let last = s.last, isAlnum(first), isAlnum(last) else {
+            return false
+        }
+        return s.allSatisfy { isAlnum($0) || $0 == "-" }
+    }
+
+    /// Dotted names and IPv4 literals. A bare single label is not a host — that
+    /// shape is a dictionary password.
+    private static func isHost(_ t: String) -> Bool {
+        if t == "localhost" { return true }
+        let parts = t.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count >= 2 && parts.allSatisfy(isLabel)
+    }
+
+    private static func isHostPort(_ t: String) -> Bool {
+        guard let colon = t.lastIndex(of: ":"), colon != t.startIndex else { return false }
+        return isHost(String(t[..<colon])) && isPort(t[t.index(after: colon)...])
+    }
+
+    private static func isUserAtHost(_ t: String) -> Bool {
+        let parts = t.split(separator: "@", omittingEmptySubsequences: false)
+        guard parts.count == 2, isWord(parts[0]) else { return false }
+        let host = String(parts[1])
+        return isHost(host) || isHostPort(host)
+    }
+
+    /// Userinfo carries the password in `postgres://user:pass@host/db`, so a URL
+    /// is admitted only when its authority has none.
+    private static func isURL(_ t: String) -> Bool {
+        guard let mark = t.range(of: "://") else { return false }
+        let scheme = t[..<mark.lowerBound]
+        guard let first = scheme.first, first.isASCII, first.isLetter else { return false }
+        guard scheme.allSatisfy({ isAlnum($0) || $0 == "+" || $0 == "." || $0 == "-" })
+        else { return false }
+        let rest = t[mark.upperBound...]
+        let authority = rest.prefix(while: { $0 != "/" })
+        return !authority.isEmpty && !authority.contains("@")
+    }
+
+    /// Anchored paths only: a bare relative path is indistinguishable from a word.
+    private static func isPath(_ t: String) -> Bool {
+        guard t.hasPrefix("/") || t.hasPrefix("./") || t.hasPrefix("../") || t.hasPrefix("~/")
+        else { return false }
+        return t.split(separator: "/").allSatisfy { $0 == "~" || isWord($0) }
+    }
+
+    private static func isNameTag(_ t: String) -> Bool {
+        let parts = t.split(separator: ":", omittingEmptySubsequences: false)
+        return parts.count == 2 && parts.allSatisfy(isWord)
+    }
+
+    private static func isAssignment(_ t: String, _ flag: String) -> Bool {
+        guard let eq = t.firstIndex(of: "="), eq != t.startIndex else { return false }
+        let name = t[..<eq]
+        let rest = String(t[t.index(after: eq)...])
+        guard isWord(name), !isSecretName(String(name)) else { return false }
+        if matchesGrammar(rest, flag) { return true }
+        return isWord(rest[...]) && !looksHighEntropy(rest[...])
     }
 
     private static let shellSpecial = Set("\"'`$*?<>|;&(){}[]!\\")
@@ -182,8 +271,9 @@ final class Frecency {
         "bearer", "-----begin",
     ]
     private static let secretNames = [
-        "passwd", "password", "passphrase", "secret", "token", "credential",
-        "key", "auth", "session", "cookie", "private", "signature", "salt",
+        "pass", "passwd", "password", "passphrase", "pwd", "secret", "token",
+        "credential", "key", "auth", "session", "cookie", "private", "signature",
+        "salt",
     ]
 
     /// A flag or `NAME=` whose name says the value next to it is a credential.
@@ -201,12 +291,16 @@ final class Frecency {
         return t.split(whereSeparator: { "/:@=,?&".contains($0) }).contains(where: looksHighEntropy)
     }
 
+    /// Dots stay inside the run: `aB3dEfGh.iJkLmNoPqRs7` is a secret wearing a
+    /// hostname's clothes. Long all-lowercase dotted names are real hostnames, so
+    /// the blanket length rule skips anything dotted.
     private static func looksHighEntropy(_ s: Substring) -> Bool {
         guard s.count >= 20 else { return false }
         if s.allSatisfy({ $0.isHexDigit }) { return true }
-        guard s.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "+" || $0 == "_" || $0 == "-" })
-        else { return false }
-        if s.count >= 32 { return true }
+        guard s.allSatisfy({
+            isAlnum($0) || $0 == "+" || $0 == "_" || $0 == "-" || $0 == "."
+        }) else { return false }
+        if s.count >= 32, !s.contains(".") { return true }
         return s.contains(where: \.isNumber) && s.contains(where: \.isUppercase)
             && s.contains(where: \.isLowercase)
     }
@@ -230,24 +324,42 @@ final class Frecency {
         values[cmd, default: [:]][flag, default: [:]][value] = use
     }
 
+    /// A pool key is a plain flag: one letter after `-`, or a word after `--`.
+    /// Anything else — `-pHunter2`, `-La`, `--x[1]` — has swallowed its own value,
+    /// so neither it nor the token after it can be trusted as a pair.
+    private static func isPoolKey(_ t: String) -> Bool {
+        if t.hasPrefix("--") {
+            let name = t.dropFirst(2)
+            guard let first = name.first, isAlnum(first) else { return false }
+            return name.allSatisfy { isAlnum($0) || $0 == "-" }
+        }
+        let name = t.dropFirst()
+        return name.count == 1 && isAlnum(name[name.startIndex])
+    }
+
     /// Record each value under the flag before it, so `-p` and `-e` never mix.
-    /// `--flag=value` splits, and a bare word with no flag before it is left out:
-    /// in that slot it is nearly always a subcommand the spec already suggests.
+    /// `--flag=value` splits; a value with no flag before it goes to the "" pool.
     private static func recordValues(_ values: inout [String: [String: [String: Use]]],
                                      _ cmd: String, _ tokens: [String], _ ts: Double) {
         var flag = ""
+        var unrecordable = false
         for t in tokens.dropFirst() {
             guard t.hasPrefix("-") else {
-                if isValue(t), !flag.isEmpty || !isRankable(t) {
-                    bumpValue(&values, cmd, flag, t, ts)
-                }
+                if !unrecordable, isValue(t, flag) { bumpValue(&values, cmd, flag, t, ts) }
                 flag = ""
+                unrecordable = false
                 continue
             }
-            guard let eq = t.firstIndex(of: "=") else { flag = t; continue }
-            let value = String(t[t.index(after: eq)...])
-            if isValue(value) { bumpValue(&values, cmd, String(t[..<eq]), value, ts) }
             flag = ""
+            guard let eq = t.firstIndex(of: "=") else {
+                unrecordable = !isPoolKey(t)
+                flag = unrecordable ? "" : t
+                continue
+            }
+            unrecordable = false
+            let key = String(t[..<eq])
+            let value = String(t[t.index(after: eq)...])
+            if isPoolKey(key), isValue(value, key) { bumpValue(&values, cmd, key, value, ts) }
         }
     }
 
