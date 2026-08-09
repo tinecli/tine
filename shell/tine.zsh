@@ -198,10 +198,11 @@ zle -N _tine_enter
 zle -N _tine_esc
 zle -N _tine_detail
 
-# Send the shell's aliases (the parser expands them: pc -> plug-cli) and PATH (so
+# Send the shell's aliases (the parser expands them: pc -> plug-cli), PATH (so
 # generators run the user's tools — a GUI-launched app gets only the minimal
-# launchd PATH) as one message: "<PATH><RS><alias dump>", the dump omitted when
-# it hasn't changed. One connection per prompt instead of two, and no fork.
+# launchd PATH) and HISTORY_IGNORE (unexported, so the app cannot read it) as one
+# message: "<PATH><RS><alias dump><RS><HISTORY_IGNORE>", each trailing section
+# omitted when it hasn't changed. One connection per prompt, and no fork.
 #
 # PATH goes every prompt because the app holds one global slot for it: the shell
 # at the active prompt has to reassert its own, or another tab's direnv/venv PATH
@@ -217,15 +218,24 @@ _tine_send_env() {
   zstat -A st +inode "$TINE_SOCK" 2>/dev/null
   if [[ "$st[1]" != "$_TINE_SOCK_INODE" ]]; then
     _TINE_SOCK_INODE=$st[1]
-    unset _TINE_ENV_ALIASES
+    unset _TINE_ENV_ALIASES _TINE_ENV_HISTIGN
   fi
-  local sending=0 payload=$PATH
+  local aliases_sent=0 histign_sent=0 payload=$PATH
   # Quote each name/value and join on US, so no alias can spell another pair.
   local sig=${(pj:\x1f:)${(qkv)aliases}}${(pj:\x1f:)${(qkv)galiases}}
+  # Strip the framing bytes at the source, so the cache compares what was sent:
+  # a newline would truncate the request and RS/US would shift the sections, and
+  # the reply would still commit the cache and never resend.
+  local histign=${${HISTORY_IGNORE-}//[$'\n\x1e\x1f']/}
   if (( ! ${+_TINE_ENV_ALIASES} )) || [[ "$sig" != "$_TINE_ENV_ALIASES" ]]; then
-    sending=1
-    payload+="${_TINE_RS}$(alias | tr '\n' "$_TINE_US")"
+    aliases_sent=1
   fi
+  if (( ! ${+_TINE_ENV_HISTIGN} )) || [[ "$histign" != "$_TINE_ENV_HISTIGN" ]]; then
+    histign_sent=1
+    aliases_sent=1   # sections are positional: a later one carries the earlier
+  fi
+  if (( aliases_sent )); then payload+="${_TINE_RS}$(alias | tr '\n' "$_TINE_US")"; fi
+  if (( histign_sent )); then payload+="${_TINE_RS}${histign}"; fi
   zmodload zsh/net/socket 2>/dev/null || return
   local fd reply
   zsocket "$TINE_SOCK" 2>/dev/null || return
@@ -233,7 +243,10 @@ _tine_send_env() {
   print -u "$fd" -r -- "env${_TINE_US}0${_TINE_US}${PWD}${_TINE_US}0;0;0;0;0;0${_TINE_US}${payload}"
   IFS= read -r -u "$fd" reply
   exec {fd}>&-
-  if (( sending )) && [[ -n "$reply" ]]; then _TINE_ENV_ALIASES=$sig; fi
+  if [[ -n "$reply" ]]; then
+    if (( aliases_sent )); then _TINE_ENV_ALIASES=$sig; fi
+    if (( histign_sent )); then _TINE_ENV_HISTIGN=$histign; fi
+  fi
 }
 # `tine` CLI — manage the app from the shell.
 #   tine dashboard   open the dashboard window
