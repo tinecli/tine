@@ -4,6 +4,9 @@ import Foundation
 /// subcommands/flags. The index is `[rawCommand: [param: Use]]`, blended by the
 /// engine's sorting.ts. Bootstrapped from ~/.zsh_history and extended with live
 /// picks persisted to ~/.local/share/tine/frecency.json.
+///
+/// Both indexes live behind `queue`, and the store is written there a second
+/// after the last pick, so accepting a suggestion never waits on the disk.
 final class Frecency {
     /// One param's usage. Decodes the older store format — a bare timestamp — as a
     /// single use, so an existing frecency.json still loads.
@@ -34,24 +37,33 @@ final class Frecency {
     static let storePath = "\(NSHomeDirectory())/.local/share/tine/frecency.json"
     private static let historyPath = "\(NSHomeDirectory())/.zsh_history"
     private static let maxHistoryLines = 8000
+    /// Live picks kept in the store; past this the least recently used go.
+    private static let maxLiveEntries = 5000
+    private static let writeDelay = 1.0
 
+    private let queue = DispatchQueue(label: "tine.frecency", qos: .utility)
     /// history ∪ live — fed to the engine as globalThis.__tineFrecency.
-    private(set) var index: [String: [String: Use]] = [:]
+    private var merged: [String: [String: Use]] = [:]
     /// Only the live picks (persisted); merged over history on load.
     private var live: [String: [String: Use]] = [:]
+    private var pendingWrite: DispatchWorkItem?
+    /// Guards the store against a write scheduled before `load` read it.
+    private var loaded = false
+
+    var index: [String: [String: Use]] { queue.sync { merged } }
 
     func load() {
-        index = Self.parseHistory()
-        if let data = FileManager.default.contents(atPath: Self.storePath),
-           let obj = try? JSONDecoder().decode([String: [String: Use]].self, from: data) {
-            live = obj
-            for (cmd, params) in live {
-                // Live picks re-enter ~/.zsh_history when the shell logs them, so the
-                // two counts overlap: take the larger, never their sum.
-                for (p, use) in params {
-                    index[cmd, default: [:]][p] = index[cmd]?[p]?.merged(with: use) ?? use
-                }
-            }
+        let history = Self.parseHistory()
+        let stored = Self.readStore()
+        queue.sync {
+            Self.merge(stored, into: &live)
+            pruneLive()
+            var idx = history
+            // Live picks re-enter ~/.zsh_history when the shell logs them, so the
+            // two counts overlap: take the larger, never their sum.
+            Self.merge(live, into: &idx)
+            merged = idx
+            loaded = true
         }
     }
 
@@ -59,9 +71,20 @@ final class Frecency {
     func record(cmd: String, param: String) {
         guard !cmd.isEmpty, !param.isEmpty, !param.contains("↪"), !param.contains(" ") else { return }
         let now = Date().timeIntervalSince1970 * 1000
-        Self.bump(&live, cmd, param, now)
-        Self.bump(&index, cmd, param, now)
-        persistLive()
+        queue.sync {
+            Self.bump(&live, cmd, param, now)
+            Self.bump(&merged, cmd, param, now)
+            scheduleWrite()
+        }
+    }
+
+    /// Persist a debounced pick before the process goes away (app termination).
+    func flush() {
+        queue.sync {
+            guard pendingWrite != nil else { return }
+            pendingWrite?.cancel()
+            writeStore()
+        }
     }
 
     private static func bump(_ idx: inout [String: [String: Use]],
@@ -72,12 +95,56 @@ final class Frecency {
         idx[cmd, default: [:]][param] = use
     }
 
-    private func persistLive() {
+    private static func merge(_ src: [String: [String: Use]],
+                              into dst: inout [String: [String: Use]]) {
+        for (cmd, params) in src {
+            for (p, use) in params {
+                dst[cmd, default: [:]][p] = dst[cmd]?[p]?.merged(with: use) ?? use
+            }
+        }
+    }
+
+    private func scheduleWrite() {
+        pendingWrite?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.writeStore() }
+        pendingWrite = work
+        queue.asyncAfter(deadline: .now() + Self.writeDelay, execute: work)
+    }
+
+    private func writeStore() {
+        pendingWrite = nil
+        // Writing before load() read the file would replace the whole store with
+        // this session's one pick. Retry instead of dropping it.
+        guard loaded else { scheduleWrite(); return }
+        pruneLive()
+        guard let data = try? JSONEncoder().encode(live) else { return }
         let dir = (Self.storePath as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        if let data = try? JSONEncoder().encode(live) {
-            try? data.write(to: URL(fileURLWithPath: Self.storePath))
+        try? data.write(to: URL(fileURLWithPath: Self.storePath), options: .atomic)
+    }
+
+    /// Cap the store: keep the most recently used picks, drop the rest.
+    private func pruneLive() {
+        guard live.values.reduce(0, { $0 + $1.count }) > Self.maxLiveEntries else { return }
+        let keep = live
+            .flatMap { cmd, params in params.map { (cmd: cmd, param: $0.key, use: $0.value) } }
+            .sorted { $0.use.lastUsed > $1.use.lastUsed }
+            .prefix(Self.maxLiveEntries)
+        live = keep.reduce(into: [String: [String: Use]]()) { acc, e in
+            acc[e.cmd, default: [:]][e.param] = e.use
         }
+    }
+
+    /// An unreadable store moves aside instead of staying in place for the next
+    /// write to overwrite, so the user can recover it.
+    private static func readStore() -> [String: [String: Use]] {
+        guard let data = FileManager.default.contents(atPath: storePath) else { return [:] }
+        if let obj = try? JSONDecoder().decode([String: [String: Use]].self, from: data) { return obj }
+        let backup = storePath + ".bak"
+        try? FileManager.default.removeItem(atPath: backup)
+        try? FileManager.default.moveItem(atPath: storePath, toPath: backup)
+        tlog("frecency: unreadable store moved to \(backup)")
+        return [:]
     }
 
     /// Keep only subcommand/flag-like tokens; skip paths, URLs, quoted args.
