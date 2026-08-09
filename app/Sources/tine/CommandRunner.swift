@@ -154,8 +154,8 @@ enum CommandRunner {
         kill9.cancel()
 
         return encode(
-            stdout: String(data: out, encoding: .utf8) ?? "",
-            stderr: String(data: err, encoding: .utf8) ?? "",
+            stdout: String(decoding: out, as: UTF8.self),
+            stderr: String(decoding: err, as: UTF8.self),
             exitCode: proc.terminationStatus
         )
     }
