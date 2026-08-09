@@ -200,13 +200,16 @@ zle -N _tine_detail
 
 # Send the shell's aliases (the parser expands them: pc -> plug-cli) and PATH (so
 # generators run the user's tools — a GUI-launched app gets only the minimal
-# launchd PATH, and direnv/venvs move it per directory) as one message, carrying
-# only the half that changed: "<PATH><RS><alias dump>", either half omitted.
-# Neither changes on a typical prompt, so a typical prompt sends nothing.
+# launchd PATH) as one message: "<PATH><RS><alias dump>", the dump omitted when
+# it hasn't changed. One connection per prompt instead of two, and no fork.
+#
+# PATH goes every prompt because the app holds one global slot for it: the shell
+# at the active prompt has to reassert its own, or another tab's direnv/venv PATH
+# would stay in place for this shell's whole session.
 #
 # The dump costs a fork, so it's gated on a fork-free fingerprint of zsh's own
-# alias tables. A restarted app has forgotten both; it also recreated the socket,
-# so a new inode means resend everything.
+# alias tables, committed only once the app has taken it — a restarted app has
+# forgotten it, and also recreated the socket, so a new inode forces a resend.
 _tine_send_env() {
   emulate -L zsh
   [[ -n "$TINE_SOCK" ]] || return
@@ -214,18 +217,15 @@ _tine_send_env() {
   zstat -A st +inode "$TINE_SOCK" 2>/dev/null
   if [[ "$st[1]" != "$_TINE_SOCK_INODE" ]]; then
     _TINE_SOCK_INODE=$st[1]
-    unset _TINE_ENV_PATH _TINE_ENV_ALIASES
+    unset _TINE_ENV_ALIASES
   fi
-  local payload="" sig="${(kv)aliases}${(kv)galiases}"
-  if [[ "$PATH" != "${_TINE_ENV_PATH-}" ]]; then
-    payload=$PATH
-    _TINE_ENV_PATH=$PATH
-  fi
+  local sending=0 payload=$PATH
+  # Quote each name/value and join on US, so no alias can spell another pair.
+  local sig="${(pj:\x1f:)${(qkv)aliases}}${(pj:\x1f:)${(qkv)galiases}}"
   if (( ! ${+_TINE_ENV_ALIASES} )) || [[ "$sig" != "$_TINE_ENV_ALIASES" ]]; then
-    _TINE_ENV_ALIASES=$sig
+    sending=1
     payload+="${_TINE_RS}$(alias | tr '\n' "$_TINE_US")"
   fi
-  [[ -n "$payload" ]] || return
   zmodload zsh/net/socket 2>/dev/null || return
   local fd reply
   zsocket "$TINE_SOCK" 2>/dev/null || return
@@ -233,6 +233,7 @@ _tine_send_env() {
   print -u "$fd" -r -- "env${_TINE_US}0${_TINE_US}${PWD}${_TINE_US}0;0;0;0;0;0${_TINE_US}${payload}"
   IFS= read -r -u "$fd" reply
   exec {fd}>&-
+  if (( sending )) && [[ -n "$reply" ]]; then _TINE_ENV_ALIASES=$sig; fi
 }
 # `tine` CLI — manage the app from the shell.
 #   tine dashboard   open the dashboard window
