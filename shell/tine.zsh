@@ -221,7 +221,7 @@ _tine_send_env() {
   fi
   local sending=0 payload=$PATH
   # Quote each name/value and join on US, so no alias can spell another pair.
-  local sig="${(pj:\x1f:)${(qkv)aliases}}${(pj:\x1f:)${(qkv)galiases}}"
+  local sig=${(pj:\x1f:)${(qkv)aliases}}${(pj:\x1f:)${(qkv)galiases}}
   if (( ! ${+_TINE_ENV_ALIASES} )) || [[ "$sig" != "$_TINE_ENV_ALIASES" ]]; then
     sending=1
     payload+="${_TINE_RS}$(alias | tr '\n' "$_TINE_US")"
