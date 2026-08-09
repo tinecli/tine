@@ -63,8 +63,10 @@ _tine_cellsize() {
   [[ "$_TINE_CW" == <-> && "$_TINE_CH" == <-> ]] || { _TINE_CW=0; _TINE_CH=0; }
 }
 
-# Request/response with the app. Sends "<type><US><cursor><US><cwd><US><buffer>"
-# and stores the reply line in _TINE_REPLY. Best-effort; never blocks the prompt.
+# Request/response with the app. Sends
+# "<type><US><cursor><US><cwd><US><pos;…;$$><US><buffer>" and stores the reply
+# line in _TINE_REPLY. `$$` is the last positioning field, so an app that
+# predates it just ignores it. Best-effort; never blocks the prompt.
 _tine_req() {
   local type=$1
   [[ -n "$TINE_SOCK" ]] || return 1
@@ -72,7 +74,7 @@ _tine_req() {
   local fd
   zsocket "$TINE_SOCK" 2>/dev/null || return 1
   fd=$REPLY
-  print -u "$fd" -r -- "${type}${_TINE_US}${CURSOR}${_TINE_US}${PWD}${_TINE_US}${_TINE_AROW};${_TINE_ACOL};${COLUMNS};${LINES};${_TINE_CW};${_TINE_CH}${_TINE_US}${BUFFER}"
+  print -u "$fd" -r -- "${type}${_TINE_US}${CURSOR}${_TINE_US}${PWD}${_TINE_US}${_TINE_AROW};${_TINE_ACOL};${COLUMNS};${LINES};${_TINE_CW};${_TINE_CH};$$${_TINE_US}${BUFFER}"
   _TINE_REPLY=""
   IFS= read -r -u "$fd" _TINE_REPLY
   exec {fd}>&-
@@ -240,7 +242,7 @@ _tine_send_env() {
   local fd reply
   zsocket "$TINE_SOCK" 2>/dev/null || return
   fd=$REPLY
-  print -u "$fd" -r -- "env${_TINE_US}0${_TINE_US}${PWD}${_TINE_US}0;0;0;0;0;0${_TINE_US}${payload}"
+  print -u "$fd" -r -- "env${_TINE_US}0${_TINE_US}${PWD}${_TINE_US}0;0;0;0;0;0;$$${_TINE_US}${payload}"
   IFS= read -r -u "$fd" reply
   exec {fd}>&-
   if [[ -n "$reply" ]]; then

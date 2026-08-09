@@ -7,11 +7,14 @@ let TINE_RS = "\u{1e}"
 
 /// One request from the shell feed (shell/tine.zsh).
 /// Wire format (one line): type US cursor US cwd US pos US buffer
-/// `pos` is "anchorRow;anchorCol;cols;rows;cellW;cellH" (semicolon-joined): the
-/// prompt-start cell + terminal grid + cell size in device pixels, captured once
-/// per prompt via idle-tty DSR. It lets the app place the panel in canvas
-/// terminals (Ghostty) whose Accessibility can't report the caret — the app
-/// derives the caret cell from the buffer/cursor it already holds.
+/// `pos` is "anchorRow;anchorCol;cols;rows;cellW;cellH;session" (semicolon-joined):
+/// the prompt-start cell + terminal grid + cell size in device pixels, captured
+/// once per prompt via idle-tty DSR, then the shell's `$$`. The cell fields let
+/// the app place the panel in canvas terminals (Ghostty) whose Accessibility
+/// can't report the caret — the app derives the caret cell from the
+/// buffer/cursor it already holds. The session tells one shell from another
+/// (SessionOwnership); a shell that predates it sends six fields and reads as
+/// session 0, which keeps the old app-wide behaviour.
 struct Request {
     let type: String   // dispatched by AppDelegate's socket handler (App.swift)
     let cursor: Int
@@ -22,6 +25,7 @@ struct Request {
     let rows: Int
     let cellW: Int     // device pixels
     let cellH: Int     // device pixels
+    let session: pid_t // the shell's pid, 0 when unknown
     let buffer: String
 }
 
@@ -118,6 +122,7 @@ final class SocketServer {
             rows: p(3),
             cellW: p(4),
             cellH: p(5),
+            session: pid_t(exactly: max(0, p(6))) ?? 0,
             buffer: parts[(extended ? 4 : 3)...].joined(separator: TINE_US)
         )
     }

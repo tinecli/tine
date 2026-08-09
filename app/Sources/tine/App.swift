@@ -23,6 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The app the panel belongs to: whoever was frontmost when the user last
     /// changed the line. Only that app may have the panel placed over it.
     private var ownerPID: pid_t?
+    /// The shell session the panel belongs to, so a second tine shell can't drive
+    /// it from the background.
+    private let sessions = SessionOwnership()
     /// Watches the owner for window/tab switches while the panel is up.
     private var focusWatcher: AXFocusWatcher?
     // Latest shell positioning feed: prompt-anchor cell + grid + cell size (device
@@ -93,14 +96,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return "0" }
             switch req.type {
             case "update":
+                let feed = FeedMessage(cursor: req.cursor, cwd: req.cwd, buffer: req.buffer)
+                // Only the owning shell drives the panel. Another session's async
+                // prompt redraw must not re-own, move or dismiss it.
+                guard let verdict = self.sessions.admit(session: req.session, feed) else {
+                    return "0"
+                }
                 self.lastFeed = (req.anchorRow, req.anchorCol, req.cols, req.rows,
                                  req.cellW, req.cellH, req.cursor, req.buffer)
-                let changed = self.state.update(
-                    FeedMessage(cursor: req.cursor, cwd: req.cwd, buffer: req.buffer))
-                if changed {
+                self.state.update(feed)
+                if verdict.changed, let app = verdict.appPID {
                     // Only an edited line proves who owns the panel: an async prompt
                     // redraw reaches us from a background terminal too.
-                    self.ownerPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+                    self.ownerPID = app
                     self.reflectPanel(buffer: req.buffer)
                 } else if req.buffer.isEmpty || !self.state.hasContent {
                     self.dismissPanel()
@@ -114,23 +122,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "up":
                 // Let the key fall through to the terminal (zsh history) when the
                 // panel isn't actually showing, or when already at the top row —
-                // otherwise Up could never reach history.
-                if self.panel?.isVisible != true || self.state.selectedIndex == 0 {
+                // otherwise Up could never reach history. A shell that no longer
+                // owns the panel may not move another one's selection either.
+                if self.panel?.isVisible != true || self.state.selectedIndex == 0
+                    || !self.sessions.isOwner(req.session) {
                     return "PASS"
                 }
                 self.state.moveSelection(-1)
                 return "\(self.state.suggestions.count)"
             case "down":
-                if self.panel?.isVisible != true {
+                if self.panel?.isVisible != true || !self.sessions.isOwner(req.session) {
                     return "PASS"
                 }
                 self.state.moveSelection(1)
                 return "\(self.state.suggestions.count)"
             case "accept":
-                // The panel may have idle-hidden without the shell knowing, so its
-                // _TINE_ACTIVE is stale. Only accept when actually showing; else ""
-                // lets Enter fall through to a normal accept-line.
-                if self.panel?.isVisible != true { return "" }
+                // The panel may have idle-hidden, or moved to another shell, without
+                // this one knowing — its _TINE_ACTIVE is then stale. Only accept
+                // when actually showing for this session; else "" lets Enter fall
+                // through to a normal accept-line.
+                if self.panel?.isVisible != true || !self.sessions.isOwner(req.session) {
+                    return ""
+                }
                 // Fig's auto-execute row runs the line as-is instead of inserting.
                 if self.state.selectedIsExecute {
                     self.dismissPanel()
@@ -152,8 +165,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 return ""
             case "prefix":
-                // Same guard as accept: ignore Tab when the panel isn't showing.
-                if self.panel?.isVisible != true { return "" }
+                // Same guard as accept: ignore Tab when the panel isn't showing for
+                // this session.
+                if self.panel?.isVisible != true || !self.sessions.isOwner(req.session) {
+                    return ""
+                }
                 // Fig's Tab: insert common prefix; keep the panel open.
                 if let (b, c) = self.state.commonPrefix() {
                     return "\(c)\(TINE_US)\(b)"
@@ -213,7 +229,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.panel?.relayout()
                 return "0"
             case "dismiss":
-                self.dismissPanel()
+                // Only the shell the panel belongs to may take it down: another
+                // one's line-finish must leave it alone.
+                if self.sessions.isOwner(req.session) { self.dismissPanel() }
                 return "0"
             default:
                 return "0"
@@ -304,14 +322,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ownerPID != nil && NSWorkspace.shared.frontmostApplication?.processIdentifier == ownerPID
     }
 
-    /// Hide the panel, stop watching the owner, and disown it. Cancels the pending
-    /// present and refresh too, so nothing scheduled before the dismiss can undo it
-    /// — and with no owner, nothing scheduled after it can either. The next
-    /// keystroke re-owns the panel and brings it back.
+    /// Hide the panel, stop watching the owner, and disown it — app and session
+    /// both. Cancels the pending present and refresh too, so nothing scheduled
+    /// before the dismiss can undo it — and with no owner, nothing scheduled after
+    /// it can either. The next keystroke re-owns the panel and brings it back.
     private func dismissPanel() {
         repositionWork?.cancel()
         refreshWork?.cancel()
         ownerPID = nil
+        sessions.disown()
         focusWatcher = nil
         panel?.hidePanel()
     }
