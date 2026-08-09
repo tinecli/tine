@@ -432,6 +432,11 @@ _tine_learn() {
   if ! _tine_req learn "$payload" 2>/dev/null; then
     print -u2 -- "tine: could not reach the app (is it running? try: tine restart)"; return 1
   fi
+  # One learn at a time: the app is already busy with another command, and its
+  # status belongs to that one.
+  if [[ "$_TINE_REPLY" == busy:* ]]; then
+    print -u2 -- "tine: already learning ${_TINE_REPLY#busy:} — try again shortly"; return 1
+  fi
   # An app that predates learning answers its default "0" to an unknown verb.
   if [[ "$_TINE_REPLY" != started ]]; then
     print -u2 -- "tine: the running app is older than this shell integration — run: tine restart"; return 1
@@ -449,6 +454,9 @@ _tine_learn() {
       idle)      printf '\rtine: learning %s… %s \e[K' "$cmd" "${spin:$((i%4)):1}"; (( i++ )) ;;
       running:*) printf '\rtine: %s… %s \e[K' "${_TINE_REPLY#running:}" "${spin:$((i%4)):1}"; (( i++ )) ;;
       done:*)    printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${_TINE_REPLY#done:}"; return 0 ;;
+      partial:*) printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${_TINE_REPLY#partial:}"
+                 print -- "tine: only the start of its --help fits the model — the spec may be partial"
+                 return 0 ;;
       failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${_TINE_REPLY#failed:}"; return 1 ;;
       *)         printf '\r\e[K'; return 0 ;;
     esac

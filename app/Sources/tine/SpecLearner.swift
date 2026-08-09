@@ -49,8 +49,8 @@ struct LearnedOption {
 final class SpecLearner: ObservableObject {
     enum Status: Equatable {
         case idle
-        case running(String)   // stage, shown by the shell's spinner
-        case done(String)      // the spec file that was written
+        case running(String)                    // stage, shown by the shell's spinner
+        case done(path: String, partial: Bool)  // partial = the help was truncated
         case failed(String)
     }
 
@@ -61,7 +61,7 @@ final class SpecLearner: ObservableObject {
         switch status {
         case .idle: return "idle"
         case .running(let stage): return "running:\(stage.socketSafe)"
-        case .done(let path): return "done:\(path.socketSafe)"
+        case .done(let path, let partial): return "\(partial ? "partial" : "done"):\(path.socketSafe)"
         case .failed(let message): return "failed:\(message.socketSafe)"
         }
     }
@@ -84,32 +84,57 @@ final class SpecLearner: ObservableObject {
         configuredDirs ?? TineConfig.load().localSpecsDirsExpanded
     }
 
-    func learn(command: String, force: Bool) {
-        if case .running = status { return }
+    /// The job in flight, so a second `tine learn` is told about it by name
+    /// instead of reading the first one's result as its own.
+    private var job: (command: String, startedAt: Date)?
+
+    /// A job that outlives this has stopped being one: a wedged model call can
+    /// hold its task open, and nothing else would ever release the learner.
+    private nonisolated static let jobTimeout: TimeInterval = 150
+
+    /// The reply to the `learn` socket verb: "started", or "busy:<cmd>" while
+    /// another command is being learned. A rejected request still answers
+    /// "started" — its reason is the status the shell polls for next.
+    func learn(command: String, force: Bool) -> String {
+        if let job, Date().timeIntervalSince(job.startedAt) < Self.jobTimeout {
+            return "busy:\(job.command)"
+        }
         guard Self.isCommandName(command) else {
             status = .failed("not a command name: \(command.socketSafe)")
-            return
+            return "started"
         }
         guard let dir = specDirs.first else {
             status = .failed("no spec location configured")
-            return
+            return "started"
         }
         let path = Self.destination(command: command, in: dir)
-        if !force, FileManager.default.fileExists(atPath: path) {
-            status = .failed("\(command) was learned already — see \(path), or re-run with --force")
-            return
+        if FileManager.default.fileExists(atPath: path) {
+            guard force else {
+                status = .failed("\(command) was learned already — see \(path), "
+                    + "or re-run with --force")
+                return "started"
+            }
+            // --force replaces what tine wrote. A spec the user wrote themselves
+            // sits at the same path and is never overwritten.
+            guard Self.isLearnedFile(path) else {
+                status = .failed("\(path) is your own spec, not one tine wrote — "
+                    + "move it aside to learn this command again")
+                return "started"
+            }
         }
         if !force, Self.packHasSpec(command, in: packDir) {
             status = .failed("\(command) already has a spec — write \(dir)/extend/\(command).js "
                 + "to add to it, \(dir)/override/\(command).js to replace it, "
                 + "or re-run with --force to merge in what its --help documents")
-            return
+            return "started"
         }
         if let reason = Self.unavailableReason() {
             status = .failed(reason)
-            return
+            return "started"
         }
 
+        let startedAt = Date()
+        job = (command, startedAt)
         status = .running("reading \(command) --help")
         Task.detached {
             do {
@@ -122,13 +147,28 @@ final class SpecLearner: ObservableObject {
                 }
                 try Self.write(module, to: path)
                 await MainActor.run {
-                    self.status = .done(path)
-                    self.onLearned?()
+                    self.finish(startedAt, .done(path: path,
+                                                 partial: help.count > Self.maxHelpCharacters))
                 }
             } catch {
-                await MainActor.run { self.status = .failed(error.localizedDescription) }
+                await MainActor.run { self.finish(startedAt, .failed(error.localizedDescription)) }
             }
         }
+        return "started"
+    }
+
+    /// Only the job still in flight may report: one that timed out has been
+    /// superseded, and must not write over the job that replaced it.
+    private func finish(_ startedAt: Date, _ result: Status) {
+        guard job?.startedAt == startedAt else { return }
+        job = nil
+        status = result
+        if case .done = result { onLearned?() }
+    }
+
+    /// True when tine wrote this file, by the header every learned spec carries.
+    private nonisolated static func isLearnedFile(_ path: String) -> Bool {
+        (try? String(contentsOfFile: path, encoding: .utf8))?.hasPrefix(header) ?? false
     }
 
     private struct Failure: LocalizedError {
@@ -180,8 +220,29 @@ final class SpecLearner: ObservableObject {
     /// The model's context is small, and a `--help` can be a manual.
     private nonisolated static let maxHelpCharacters = 6000
 
+    /// A generation this long has stopped making progress, and the shell is
+    /// waiting on it.
+    private nonisolated static let modelTimeout: TimeInterval = 120
+
     private nonisolated static func generate(command: String,
                                              help: String) async throws -> LearnedSpec {
+        try await withThrowingTaskGroup(of: LearnedSpec.self) { group in
+            group.addTask { try await respond(command: command, help: help) }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(modelTimeout * 1_000_000_000))
+                throw Failure("the on-device model did not answer within "
+                    + "\(Int(modelTimeout)) seconds")
+            }
+            defer { group.cancelAll() }
+            guard let spec = try await group.next() else {
+                throw Failure("the on-device model returned nothing")
+            }
+            return spec
+        }
+    }
+
+    private nonisolated static func respond(command: String,
+                                            help: String) async throws -> LearnedSpec {
         // Fixed instructions, untrusted help text as the prompt: the help text is
         // material to read, never a request to follow.
         let session = LanguageModelSession(instructions: """
@@ -235,12 +296,16 @@ final class SpecLearner: ObservableObject {
               let json = String(data: data, encoding: .utf8)
         else { return nil }
         return """
-            // Written by `tine learn \(command)` from `\(command) --help`, on device.
+            \(header) \(command)` from `\(command) --help`, on device.
             // Read it, edit it, or delete it — tine merges it onto the shipped pack.
             export default \(json);
 
             """
     }
+
+    /// Every learned file opens with this, so `--force` can tell a spec tine wrote
+    /// from one the user wrote.
+    nonisolated static let header = "// Written by `tine learn"
 
     private nonisolated static let maxEntries = 60
 
@@ -251,7 +316,7 @@ final class SpecLearner: ObservableObject {
         var taken = Set<String>()
         var subcommands: [[String: Any]] = []
         for sub in spec.subcommands.prefix(maxEntries) {
-            guard isSubcommandName(sub.name), help.contains(sub.name),
+            guard isSubcommandName(sub.name), documented(sub.name, in: help),
                   taken.insert(sub.name).inserted else { continue }
             subcommands.append(entry(names: [sub.name], description: sub.description, argument: ""))
         }
@@ -260,7 +325,8 @@ final class SpecLearner: ObservableObject {
         for option in spec.options.prefix(maxEntries) {
             var names: [String] = []
             for name in [option.name, shortFlag(option.short)] {
-                guard isFlag(name), help.contains(name), flags.insert(name).inserted else { continue }
+                guard isFlag(name), documented(name, in: help),
+                      flags.insert(name).inserted else { continue }
                 names.append(name)
             }
             guard !names.isEmpty else { continue }
@@ -313,6 +379,14 @@ final class SpecLearner: ObservableObject {
 
     nonisolated static func isSubcommandName(_ name: String) -> Bool {
         matches(name, "^[A-Za-z0-9][A-Za-z0-9._:+-]*$", max: 40)
+    }
+
+    /// Whether the help text documents this name — as a word of its own, since a
+    /// plain substring test finds the invented `-v` inside `--version`.
+    nonisolated static func documented(_ name: String, in help: String) -> Bool {
+        let word = NSRegularExpression.escapedPattern(for: name)
+        return help.range(of: "(?<![A-Za-z0-9_-])\(word)(?![A-Za-z0-9_-])",
+                          options: .regularExpression) != nil
     }
 
     /// The model reads `-v, --verbose` and writes the short form back as `--v`

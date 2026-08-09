@@ -210,9 +210,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // Reads the help and runs the model off the main thread; the shell
                 // polls `learnStatus`. This never blocks.
                 let sections = req.buffer.components(separatedBy: TINE_RS)
-                self.specLearner.learn(command: sections.first ?? "",
-                                       force: sections.count > 1 && sections[1] == "force")
-                return "started"
+                return self.specLearner.learn(command: sections.first ?? "",
+                                              force: sections.count > 1 && sections[1] == "force")
             case "learnStatus":
                 return self.specLearner.statusLine
             case "version":

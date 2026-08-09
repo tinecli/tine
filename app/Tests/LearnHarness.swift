@@ -143,6 +143,37 @@ enum LearnHarness {
         check("a spec with nothing the help documents is not written",
               SpecLearner.specModule(command: "faketool", from: sample(),
                                      help: "no flags here") == nil)
+        check("the module carries the header that marks it tine's",
+              module.hasPrefix(SpecLearner.header))
+        shortFlags()
+    }
+
+    /// A help text that documents `--version` alone contains the characters of an
+    /// invented `-v`, so only a word match keeps the invention out.
+    static func shortFlags() {
+        check("a flag inside a longer flag is not documented",
+              !SpecLearner.documented("-v", in: "  --version    Print the version"))
+        check("a flag written on its own is documented",
+              SpecLearner.documented("-v", in: "  -v, --verbose    Say more"))
+        check("a flag before its value is documented",
+              SpecLearner.documented("--out", in: "  --out=FILE   Write there"))
+        check("a subcommand inside a longer word is not documented",
+              !SpecLearner.documented("build", in: "  rebuild   Build it again"))
+
+        let invented = LearnedSpec(
+            description: "Fake tool for tests",
+            subcommands: [],
+            options: [LearnedOption(name: "--version", short: "-v",
+                                    description: "Print the version", argument: "")],
+            argument: "")
+        guard let module = SpecLearner.specModule(command: "faketool", from: invented,
+                                                  help: "  --version    Print the version"),
+              let spec = json(of: module) else {
+            check("invented short flag still serializes", false)
+            return
+        }
+        check("an invented short flag is dropped",
+              (spec["options"] as? [[String: Any]] ?? []).first?["name"] as? String == "--version")
     }
 
     /// The help text is untrusted, so the model's description is too: it must land
@@ -210,23 +241,32 @@ enum LearnHarness {
         try? fm.removeItem(atPath: specs)
         Task { @MainActor in
             let learner = SpecLearner(localSpecsDirs: [specs], packDir: "\(root)/pack")
-            learner.learn(command: "faketool", force: false)
+            check("learn starts", learner.learn(command: "faketool", force: false) == "started")
+            check("a second learn is told which command is running",
+                  learner.learn(command: "othertool", force: false) == "busy:faketool")
             while case .running = learner.status {
                 try? await Task.sleep(nanoseconds: 200_000_000)
             }
-            report(status: learner.status, path: SpecLearner.destination(command: "faketool",
-                                                                        in: specs))
+            report(learner: learner,
+                   path: SpecLearner.destination(command: "faketool", in: specs))
         }
         dispatchMain()
     }
 
     @MainActor
-    static func report(status: SpecLearner.Status, path: String) -> Never {
-        guard case .done(let written) = status else {
-            check("end-to-end learn succeeded (\(status))", false)
+    static func failure(of learner: SpecLearner) -> String {
+        guard case .failed(let message) = learner.status else { return "" }
+        return message
+    }
+
+    @MainActor
+    static func report(learner: SpecLearner, path: String) -> Never {
+        guard case .done(let written, let partial) = learner.status else {
+            check("end-to-end learn succeeded (\(learner.status))", false)
             finish()
         }
         check("spec written to extend/", written == path)
+        check("a short help is not reported as partial", !partial)
         let module = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
         print("--- \(path)\n\(module)---")
         guard let spec = json(of: module) else {
@@ -243,6 +283,16 @@ enum LearnHarness {
         let subcommands = (spec["subcommands"] as? [[String: Any]] ?? [])
             .compactMap { $0["name"] as? String }
         check("learned the build subcommand", subcommands.contains("build"))
+
+        _ = learner.learn(command: "faketool", force: false)
+        check("a learned command is not learned again by accident",
+              failure(of: learner).contains("was learned already"))
+
+        try? "export default { name: \"faketool\" };\n".write(toFile: path, atomically: true,
+                                                              encoding: .utf8)
+        _ = learner.learn(command: "faketool", force: true)
+        check("--force never overwrites a spec tine did not write",
+              failure(of: learner).contains("your own spec"))
         finish()
     }
 }
