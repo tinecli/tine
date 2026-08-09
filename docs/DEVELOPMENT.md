@@ -4,7 +4,7 @@ Build and run tine from source.
 
 ## Prerequisites
 
-macOS 14+ (which ships zsh), Swift 6, and bun (the version in `package.json`'s
+macOS 26+ (which ships zsh), Swift 6, and bun (the version in `package.json`'s
 `packageManager`). No Node install is needed — bun runs the tests, the bundler and
 tsc.
 

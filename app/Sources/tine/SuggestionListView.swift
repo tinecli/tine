@@ -74,10 +74,7 @@ struct SuggestionListView: View {
     }
 
     @ViewBuilder var body: some View {
-        // `glassEffect` only exists in the macOS 26 SDK (Swift 6.2+). Guard at
-        // compile time so older SDKs (CI runners) fall back to the material.
-        #if compiler(>=6.2)
-        if #available(macOS 26.0, *), state.config.glass {
+        if state.config.glass {
             // Apple hosts glass in a container (perf + correct edge/blend rendering);
             // the material draws its own edge, so we add no border of our own.
             GlassEffectContainer {
@@ -86,9 +83,6 @@ struct SuggestionListView: View {
         } else {
             materialContent
         }
-        #else
-        materialContent
-        #endif
     }
 
     private var materialContent: some View {

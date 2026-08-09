@@ -72,7 +72,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>NSHumanReadableCopyright</key><string>© Gustaf Eriksson. Includes code from amazon-q-developer-cli (MIT/Apache-2.0).</string>
   <key>LSUIElement</key><true/>
-  <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <key>LSMinimumSystemVersion</key><string>26.0</string>
 </dict>
 </plist>
 PLIST
