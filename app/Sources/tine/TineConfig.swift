@@ -23,6 +23,31 @@ struct TineConfig: Codable, Equatable {
         localSpecsDirs.map { ($0 as NSString).expandingTildeInPath }
     }
 
+    init() {}
+
+    /// Decoded key by key: a config written by an older tine is missing whatever
+    /// keys were added since, and the synthesized decoder would throw on the first
+    /// one — silently resetting every setting the user does have.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T {
+            ((try? c.decodeIfPresent(T.self, forKey: key)) ?? nil) ?? fallback
+        }
+        let d = TineConfig()
+        maxVisibleRows = value(.maxVisibleRows, d.maxVisibleRows)
+        glass = value(.glass, d.glass)
+        fontName = value(.fontName, d.fontName)
+        fontSize = value(.fontSize, d.fontSize)
+        firstTokenCompletion = value(.firstTokenCompletion, d.firstTokenCompletion)
+        showDetail = value(.showDetail, d.showDetail)
+        showMenuBarIcon = value(.showMenuBarIcon, d.showMenuBarIcon)
+        openWindowAtStart = value(.openWindowAtStart, d.openWindowAtStart)
+        autoUpdateSpecs = value(.autoUpdateSpecs, d.autoUpdateSpecs)
+        autoUpdateApp = value(.autoUpdateApp, d.autoUpdateApp)
+        updateNotifications = value(.updateNotifications, d.updateNotifications)
+        localSpecsDirs = value(.localSpecsDirs, d.localSpecsDirs)
+    }
+
     static let path = "\(NSHomeDirectory())/.config/tine/config.json"
 
     static func load() -> TineConfig {

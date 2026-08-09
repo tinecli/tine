@@ -103,7 +103,9 @@ final class AppUpdater: ObservableObject {
             return
         }
         newerVersion = latest
-        guard TineConfig.load().autoUpdateApp else {
+        // The config key governs the automatic channel only — asking for the
+        // update explicitly still installs it, like `tine install` does for specs.
+        guard TineConfig.load().autoUpdateApp || manual else {
             settle(.available(latest), "Run `tine update` to install it.")
             return
         }
