@@ -112,6 +112,16 @@ beforeAll(async () => {
           ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789: use(99),
         },
       },
+      // No spec anywhere for this one: history is the only source it has.
+      mytool: {
+        "-p": { "8080:8080": use(5) },
+        "--host": { "db.example.com": use(5) },
+        "": {
+          "web.example.com": use(3),
+          "cache.example.com": use(30),
+          ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789: use(99),
+        },
+      },
     },
   });
   bundle = await Bun.file(`${root}app/engine/tine-engine.js`).text();
@@ -250,6 +260,32 @@ test("history values never include a credential-shaped token", async () => {
   ]);
   // user:pass wearing an image tag's shape: admitted positionally, never here.
   expect(await names("deploy -u ")).toEqual([]);
+});
+
+test("a command with no spec at all still offers its history values", async () => {
+  const { items } = await suggest("mytool ");
+  // Frecency order, and the credential-shaped seed never surfaces.
+  expect(items.map((item) => item.name)).toEqual([
+    "cache.example.com",
+    "web.example.com",
+  ]);
+  expect(items[0].type).toBe("history");
+  // The old path threw MissingSpecError on every keystroke here.
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+  expect(await names("mytool w")).toEqual(["web.example.com"]);
+});
+
+test("a no-spec command keys its history values by the flag in front", async () => {
+  expect(await names("mytool -p ")).toEqual(["8080:8080"]);
+  expect(await names("mytool --host=")).toEqual(["db.example.com"]);
+  // Typing a flag is not typing a value: no spec means no flags to offer.
+  expect(await names("mytool -")).toEqual([]);
+});
+
+test("a no-spec command with no history values suggests nothing", async () => {
+  expect(await names("unseeded ")).toEqual([]);
+  expect(await names("unseeded arg ")).toEqual([]);
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
 });
 
 test("a generator or a spec suggestion keeps history values out", async () => {
