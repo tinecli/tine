@@ -77,13 +77,16 @@ final class Frecency {
     }
 
     /// Record a pick (cmd = raw first token, param = accepted suggestion name).
-    func record(cmd: String, param: String) {
-        guard !cmd.isEmpty, !param.isEmpty, !param.contains("↪"), !param.contains(" ") else { return }
+    /// Returns the command's params for the engine to re-bridge, or nil when the
+    /// pick is not rankable.
+    func record(cmd: String, param: String) -> [String: Use]? {
+        guard !cmd.isEmpty, !param.isEmpty, !param.contains("↪"), !param.contains(" ") else { return nil }
         let now = Date().timeIntervalSince1970 * 1000
-        queue.sync {
+        return queue.sync {
             Self.bump(&live, cmd, param, now)
             Self.bump(&merged, cmd, param, now)
             scheduleWrite()
+            return merged[cmd]
         }
     }
 

@@ -143,8 +143,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     if let name = self.state.selectedName, self.state.selectedType != "history" {
                         let cmd = req.buffer.split(whereSeparator: { $0 == " " || $0 == "\t" })
                             .first.map(String.init) ?? ""
-                        self.frecency.record(cmd: cmd, param: name)
-                        self.state.engine?.setFrecency(self.frecency.index)
+                        if let params = self.frecency.record(cmd: cmd, param: name) {
+                            self.state.engine?.setFrecencyCommand(cmd, params: params)
+                        }
                     }
                     self.dismissPanel()
                     return "\(c)\(TINE_US)\(b)"
