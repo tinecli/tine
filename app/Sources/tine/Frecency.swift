@@ -114,8 +114,8 @@ final class Frecency {
     private func writeStore() {
         pendingWrite = nil
         // Writing before load() read the file would replace the whole store with
-        // this session's one pick.
-        guard loaded else { return }
+        // this session's one pick. Retry instead of dropping it.
+        guard loaded else { scheduleWrite(); return }
         pruneLive()
         guard let data = try? JSONEncoder().encode(live) else { return }
         let dir = (Self.storePath as NSString).deletingLastPathComponent
