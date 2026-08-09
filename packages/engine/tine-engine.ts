@@ -232,11 +232,24 @@ function toItems(
 }
 
 // Command names for first-token completion: spec index ∪ aliases ∪ history.
-let cachedSpecNames: string[] | undefined;
-function specNames(): string[] {
+type SpecIndex = { names: string[]; descriptions: Record<string, string> };
+
+// index.json is external data: keep only string values, on a prototype-less
+// object so a name like "toString" cannot inherit one.
+const descriptionMap = (value: unknown): Record<string, string> => {
+  const map: Record<string, string> = Object.create(null);
+  if (typeof value !== "object" || value === null) return map;
+  for (const [name, description] of Object.entries(value)) {
+    if (typeof description === "string") map[name] = description;
+  }
+  return map;
+};
+
+let cachedSpecIndex: SpecIndex | undefined;
+function specIndex(): SpecIndex {
   // Don't cache an empty result: the pack may still be downloading on first run,
   // so re-read until the index has content (then it sticks).
-  if (cachedSpecNames && cachedSpecNames.length) return cachedSpecNames;
+  if (cachedSpecIndex && cachedSpecIndex.names.length) return cachedSpecIndex;
   try {
     const g = globalThis as {
       __tineSpecsDir?: string;
@@ -244,11 +257,15 @@ function specNames(): string[] {
     };
     const raw =
       g.__tineReadFile?.(`${g.__tineSpecsDir ?? ""}/index.json`) ?? "";
-    cachedSpecNames = (JSON.parse(raw).completions ?? []) as string[];
+    const parsed = JSON.parse(raw);
+    cachedSpecIndex = {
+      names: (parsed.completions ?? []) as string[],
+      descriptions: descriptionMap(parsed.descriptions),
+    };
   } catch {
-    cachedSpecNames = [];
+    cachedSpecIndex = { names: [], descriptions: descriptionMap(undefined) };
   }
-  return cachedSpecNames;
+  return cachedSpecIndex;
 }
 
 function commandNameResult(
@@ -258,8 +275,9 @@ function commandNameResult(
   const frec =
     (globalThis as { __tineFrecency?: Record<string, Record<string, unknown>> })
       .__tineFrecency ?? {};
+  const { names: specs, descriptions } = specIndex();
   const names = new Set<string>([
-    ...specNames(),
+    ...specs,
     ...Object.keys(aliases),
     ...Object.keys(frec),
   ]);
@@ -279,7 +297,9 @@ function commandNameResult(
       type: "subcommand",
       insertValue: name,
       shouldAddSpace: true,
-      description: aliases[name] ? `alias → ${aliases[name]}` : "",
+      description: aliases[name]
+        ? `alias → ${aliases[name]}`
+        : (descriptions[name] ?? ""),
       priority: boost ? 75 + boost : 50,
     };
   });
