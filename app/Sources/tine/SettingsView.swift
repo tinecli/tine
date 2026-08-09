@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var installer: SpecInstaller
+    @EnvironmentObject var updater: AppUpdater
 
     // Re-read externally-owned state (Accessibility grant, login item) so the UI
     // reflects changes made outside the app without needing a relaunch.
@@ -136,6 +137,7 @@ struct SettingsView: View {
                 if installer.status == .running { ProgressView().controlSize(.small) }
                 installerStatus
             }
+            Toggle("Download new specs automatically", isOn: bind(\.autoUpdateSpecs))
         }
         Section("Your specs") {
             VStack(alignment: .leading, spacing: 6) {
@@ -176,8 +178,34 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity).padding(.vertical, 12)
         }
+        Section("Updates") {
+            HStack(spacing: 10) {
+                Button("Check for Updates") { updater.check(manual: true) }
+                    .disabled(updater.status == .checking || updater.status == .downloading)
+                if updater.status == .checking || updater.status == .downloading {
+                    ProgressView().controlSize(.small)
+                }
+                updaterStatus
+            }
+            if let ready = updater.readyVersion {
+                Button("Update to \(ready) and Relaunch") { updater.applyAndRelaunch() }
+            }
+            Toggle("Update tine automatically", isOn: bind(\.autoUpdateApp))
+            Toggle("Notify me about updates", isOn: bind(\.updateNotifications))
+        }
         Section {
             Button("Quit tine", role: .destructive) { NSApplication.shared.terminate(nil) }
+        }
+    }
+
+    @ViewBuilder private var updaterStatus: some View {
+        switch updater.status {
+        case .idle, .checking, .downloading: EmptyView()
+        case .upToDate(let v): Text("\(v) is the latest version").font(.caption).foregroundStyle(.secondary)
+        case .ready(let v): Text("\(v) downloaded, relaunch to update").font(.caption).foregroundStyle(.green)
+        case .available(let v): Text("\(v) is available").font(.caption).foregroundStyle(.secondary)
+        case .blocked(let m): Text(m).font(.caption).foregroundStyle(.orange).lineLimit(2)
+        case .failed(let m): Text(m).font(.caption).foregroundStyle(.red).lineLimit(2)
         }
     }
 

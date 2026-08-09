@@ -239,6 +239,7 @@ _tine_send_env() {
 #   tine dashboard   open the dashboard window
 #   tine doctor      check tine is set up correctly
 #   tine restart     quit and relaunch the app
+#   tine update      update the app to the latest release
 tine() {
   emulate -L zsh
   case "$1" in
@@ -267,6 +268,7 @@ tine() {
       _tine_resource_if_changed
       ;;
     install) _tine_install ;;
+    update) _tine_update ;;
     doctor) _tine_doctor ;;
     version|--version|-v)
       if _tine_req version 2>/dev/null && [[ -n "$_TINE_REPLY" ]]; then
@@ -281,6 +283,7 @@ tine() {
       print -- "  doctor      check tine is set up correctly"
       print -- "  install     download the latest completion specs"
       print -- "  restart     quit and relaunch the app"
+      print -- "  update      update the app to the latest release"
       print -- "  version     print the running app version"
       ;;
     *) print -u2 -- "tine: unknown command: $1 (try: tine help)"; return 1 ;;
@@ -321,6 +324,55 @@ _tine_install() {
   done
 }
 
+# Ask the app to update itself: it checks the latest release, downloads and
+# verifies it, then swaps the bundle and comes back. The app does all the work —
+# this only drives the poll and reports why it can't proceed.
+_tine_update() {
+  emulate -L zsh
+  local releases="https://github.com/tinecli/tine/releases/latest"
+  if ! _tine_req appUpdate 2>/dev/null; then
+    print -u2 -- "tine: could not reach the app (is it running? try: tine restart)"; return 1
+  fi
+  local spin='|/-\' i=0 version
+  printf 'tine: checking for updates… '
+  while true; do
+    sleep 0.3
+    _tine_req appUpdateStatus 2>/dev/null || { printf '\r\e[K'; print -u2 -- "tine: lost contact with the app"; return 1 }
+    case "$_TINE_REPLY" in
+      idle|checking) printf '\rtine: checking for updates… %s ' "${spin:$((i%4)):1}"; (( i++ )) ;;
+      downloading)   printf '\rtine: downloading update… %s ' "${spin:$((i%4)):1}"; (( i++ )) ;;
+      uptodate:*)    printf '\rtine: %s is the latest version\e[K\n' "${_TINE_REPLY#uptodate:}"; return 0 ;;
+      staged:*)      version=${_TINE_REPLY#staged:}; break ;;
+      available:*)   printf '\r\e[K'
+                     print -- "tine: ${_TINE_REPLY#available:} is available — automatic updates are off"
+                     print -- "tine: download it from $releases"; return 0 ;;
+      blocked:*|failed:*)
+                     printf '\r\e[K'; print -u2 -- "tine: ${_TINE_REPLY#*:}"
+                     print -u2 -- "tine: download it from $releases"; return 1 ;;
+      *)             printf '\r\e[K'; return 0 ;;
+    esac
+  done
+  _tine_req appUpdateApply 2>/dev/null
+  if [[ "$_TINE_REPLY" != ok ]]; then
+    printf '\r\e[K'; print -u2 -- "tine: ${_TINE_REPLY:-could not apply the update}"; return 1
+  fi
+  printf '\rtine: installing %s… \e[K' "$version"
+  # The app quits, a helper swaps the bundle, and the new app launches — wait for
+  # it to answer again so the shell integration it rewrites can be re-sourced.
+  i=0
+  while (( i < 40 )); do
+    sleep 0.5
+    _tine_req version 2>/dev/null && [[ "$_TINE_REPLY" == "$version" ]] && break
+    (( i++ ))
+  done
+  if (( i < 40 )); then
+    printf '\rtine: updated to %s\e[K\n' "$version"
+    _tine_resource_if_changed
+  else
+    printf '\rtine: %s installed — start it with: tine dashboard\e[K\n' "$version"
+  fi
+}
+
 _tine_doctor() {
   emulate -L zsh
   local ok=$'\e[32m✓\e[0m' no=$'\e[31m✗\e[0m'
@@ -332,16 +384,26 @@ _tine_doctor() {
     print -- "  $no not in .zshrc — add: source ~/.local/share/tine/tine.zsh"
   fi
   if [[ -n "$TINE_SOCK" ]] && _tine_req doctor 2>/dev/null && [[ -n "$_TINE_REPLY" ]]; then
-    local ax specs version update kv
+    # appLatest/appStaged are absent when talking to an app older than this file.
+    local ax specs version update kv app_latest="" app_staged=""
     for kv in ${(s.;.)_TINE_REPLY}; do
       case $kv in
         (ax=*) ax=${kv#ax=} ;;
         (specs=*) specs=${kv#specs=} ;;
         (version=*) version=${kv#version=} ;;
         (update=*) update=${kv#update=} ;;
+        (appLatest=*) app_latest=${kv#appLatest=} ;;
+        (appStaged=*) app_staged=${kv#appStaged=} ;;
       esac
     done
     print -- "  $ok app running (v${version})"
+    # Silent when there's nothing to report: no check result is not proof of
+    # being current, so doctor never claims it.
+    if [[ -n "$app_staged" ]]; then
+      print -- "  $no v${app_staged} downloaded — relaunch to update (run: tine update)"
+    elif [[ -n "$app_latest" ]]; then
+      print -- "  $no v${app_latest} available (run: tine update)"
+    fi
     if [[ "$ax" == 1 ]]; then
       print -- "  $ok Accessibility granted"
     else

@@ -29,10 +29,12 @@ final class SpecInstaller: ObservableObject {
         switch status {
         case .idle: return "idle"
         case .running: return "running"
-        case .done(let m): return "done:\(m)"
-        case .failed(let m): return "failed:\(m)"
+        case .done(let m): return "done:\(m.socketSafe)"
+        case .failed(let m): return "failed:\(m.socketSafe)"
         }
     }
+
+    private var timer: Timer?
 
     /// Called after a successful install (main thread) so the app can refresh.
     var onInstalled: (() -> Void)?
@@ -65,7 +67,9 @@ final class SpecInstaller: ObservableObject {
     /// Download + install, but skip the download when the installed pack already
     /// matches the fork's (compared by ETag). Drives both first-run and `tine
     /// install`; the shell polls `statusLine` while this runs.
-    func install() {
+    /// `announce` posts a notification once the swap has happened — for installs
+    /// the user didn't ask for, so ~730 CLIs never change underneath them silently.
+    func install(announce: Bool = false) {
         guard status != .running else { return }
         status = .running
         Task {
@@ -80,24 +84,55 @@ final class SpecInstaller: ObservableObject {
                 self.updateAvailable = false
                 self.status = .done("specs updated (\(count) commands)")
                 self.onInstalled?()
+                if announce {
+                    UpdateNotice.post("Completion specs updated", "\(count) commands are ready.")
+                }
             } catch {
                 self.status = .failed(error.localizedDescription)
             }
         }
     }
 
-    /// Background HEAD check to populate `updateAvailable` for `tine doctor`.
-    /// Fails closed — any error leaves the flag untouched.
+    /// What a check should do about the pack the fork is currently serving.
+    enum UpdateAction: Equatable { case none, adoptBaseline, flag, autoInstall }
+
+    nonisolated static func updateAction(remote: String?, stored: String?,
+                                         autoInstall: Bool) -> UpdateAction {
+        // Fails closed: no ETag means no network, which is never a reason to act.
+        guard let remote else { return .none }
+        // No marker yet (installed before ETag tracking): adopt the current pack
+        // as the baseline instead of nagging everyone once, post-upgrade.
+        guard let stored else { return .adoptBaseline }
+        guard remote != stored else { return .none }
+        return autoInstall ? .autoInstall : .flag
+    }
+
+    /// Check now, then daily — the agent stays up for days, so a launch-only check
+    /// would leave a long-running session on a stale pack forever.
+    func startChecking() {
+        checkForUpdate()
+        timer = Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.checkForUpdate() }
+        }
+    }
+
+    /// Background HEAD check: install the newer pack, or just flag it for `tine
+    /// doctor` when the user turned automatic spec updates off.
     func checkForUpdate() {
         Task {
-            guard Self.isInstalled(), let remote = try? await Self.remoteETag() else { return }
-            // No marker yet (installed before ETag tracking): adopt the current pack
-            // as the baseline instead of nagging everyone once, post-upgrade.
-            guard let stored = Self.storedETag() else {
-                try? remote.write(toFile: Self.markerPath, atomically: true, encoding: .utf8)
-                return
+            guard Self.isInstalled() else { return }
+            let remote = try? await Self.remoteETag()
+            switch Self.updateAction(remote: remote, stored: Self.storedETag(),
+                                     autoInstall: TineConfig.load().autoUpdateSpecs) {
+            case .none:
+                break
+            case .adoptBaseline:
+                try? remote?.write(toFile: Self.markerPath, atomically: true, encoding: .utf8)
+            case .flag:
+                self.updateAvailable = true
+            case .autoInstall:
+                self.install(announce: true)
             }
-            self.updateAvailable = remote != stored
         }
     }
 

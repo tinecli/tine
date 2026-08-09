@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Update Specs" button shares this instance's status guard and onInstalled
     /// refresh instead of installing behind the app's back.
     @MainActor let specInstaller = SpecInstaller()
+    /// Self-update: checks daily, stages a verified release, swaps it in on quit.
+    @MainActor let appUpdater = AppUpdater()
     private var panel: SuggestionPanel?
     private var server: SocketServer?
     /// The SwiftUI dashboard window, captured once it exists (WindowAccessor), so
@@ -61,17 +63,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Keep the installer around so `tine install` / doctor can use it. First
         // run (or a wiped pack): download in the background — suggestions are just
-        // empty until it lands, nothing blocks. Otherwise, quietly check whether
-        // the fork has a newer pack so doctor can flag it.
+        // empty until it lands, nothing blocks. Otherwise, keep the pack current
+        // on a daily check.
         specInstaller.onInstalled = { [weak self] in self?.scheduleRefresh() }
         if SpecInstaller.isInstalled() {
             // Keep the app's built-in specs current with this app version, then
             // check whether the fork has a newer pack.
             SpecInstaller.refreshBuiltins()
-            specInstaller.checkForUpdate()
+            specInstaller.startChecking()
         } else {
             specInstaller.install()
         }
+        appUpdater.start()
 
         state.engine?.setFirstTokenEnabled(state.config.firstTokenCompletion)
 
@@ -169,13 +172,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return "started"
             case "installStatus":
                 return self.specInstaller.statusLine
+            case "appUpdate":
+                // `tine update`: check now, download if there is something newer.
+                // The shell polls `appUpdateStatus`; this never blocks.
+                self.appUpdater.check(manual: true)
+                return "started"
+            case "appUpdateStatus":
+                return self.appUpdater.statusLine
+            case "appUpdateApply":
+                if let reason = self.appUpdater.applyAndRelaunch() { return reason.socketSafe }
+                return "ok"
             case "version":
                 return (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
             case "doctor":
                 // Health report for `tine doctor` (semicolon-joined key=value).
                 let v = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
                 let update = self.specInstaller.updateAvailable ? 1 : 0
-                return "ax=\(AXCaret.isTrusted ? 1 : 0);specs=\(SpecInstaller.installedCount());version=\(v);update=\(update)"
+                return "ax=\(AXCaret.isTrusted ? 1 : 0);specs=\(SpecInstaller.installedCount());"
+                    + "version=\(v);update=\(update);"
+                    + "appLatest=\(self.appUpdater.newerVersion ?? "");"
+                    + "appStaged=\(self.appUpdater.readyVersion ?? "")"
             case "aliases":
                 return "\(self.applyAliases(req.buffer))"
             case "env":
@@ -391,6 +407,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // accept has to write the debounced one now.
     func applicationWillTerminate(_ notification: Notification) {
         frecency.flush()
+        // The session is over, so the bundle is free to be replaced. The helper
+        // outlives us and waits for this pid before touching anything.
+        appUpdater.applyOnQuit()
     }
 
     // Relaunching the app (open again) re-shows the GUI.
@@ -445,6 +464,7 @@ struct TineApp: App {
             SettingsView()
                 .environmentObject(delegate.state)
                 .environmentObject(delegate.specInstaller)
+                .environmentObject(delegate.appUpdater)
         }
         .windowToolbarStyle(.unified)
         .windowResizability(.contentMinSize)
