@@ -93,6 +93,13 @@ final class JSEngine {
         ctx.setObject(bridged as NSDictionary, forKeyedSubscript: "__tineHistoryValues" as NSString)
     }
 
+    /// Drop the cached specs so a spec written after launch (`tine learn`) is used
+    /// on the next keystroke instead of after a restart.
+    func resetSpecCache() {
+        guard ready else { return }
+        ctx.evaluateScript("if (typeof tineResetSpecs === 'function') tineResetSpecs();")
+    }
+
     /// Toggle first-token (command-name) completion.
     func setFirstTokenEnabled(_ on: Bool) {
         guard ready else { return }

@@ -11,6 +11,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor let specInstaller = SpecInstaller()
     /// Self-update: checks daily, stages a verified release, swaps it in on quit.
     @MainActor let appUpdater = AppUpdater()
+    /// `tine learn <cmd>`: writes a spec derived from the command's own `--help`.
+    @MainActor let specLearner = SpecLearner(
+        packDir: ProcessInfo.processInfo.environment["TINE_SPECS_DIR"] ?? SpecInstaller.specsDir)
     private var panel: SuggestionPanel?
     private var server: SocketServer?
     /// The SwiftUI dashboard window, captured once it exists (WindowAccessor), so
@@ -80,6 +83,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appUpdater.start()
 
         state.engine?.setFirstTokenEnabled(state.config.firstTokenCompletion)
+        // A learned spec is a new file in a location the engine already reads, so
+        // only its cache stands between writing it and completing with it.
+        specLearner.onLearned = { [weak self] in self?.state.engine?.resetSpecCache() }
 
         // Frecency: bootstrap from ~/.zsh_history off the main thread, then feed
         // the index to the engine so most-used subcommands/flags rank first.
@@ -199,6 +205,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "appUpdateApply":
                 if let reason = self.appUpdater.applyAndRelaunch() { return reason.socketSafe }
                 return "ok"
+            case "learn":
+                // `tine learn <cmd>`: buffer is "<cmd>" or "<cmd>" RS "force".
+                // Reads the help and runs the model off the main thread; the shell
+                // polls `learnStatus`. This never blocks.
+                let sections = req.buffer.components(separatedBy: TINE_RS)
+                self.specLearner.learn(command: sections.first ?? "",
+                                       force: sections.count > 1 && sections[1] == "force")
+                return "started"
+            case "learnStatus":
+                return self.specLearner.statusLine
             case "version":
                 return (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
             case "doctor":

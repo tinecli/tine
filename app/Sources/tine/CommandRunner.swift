@@ -85,8 +85,10 @@ enum CommandRunner {
                 // Clearing the marker must survive every path out of here: a leaked
                 // marker pins `isLoading` on and blocks that key from running again.
                 defer { lock.lock(); inflight.remove(key); lock.unlock() }
-                let result = execute(executable: executable, args: args, cwd: cwd,
+                let output = execute(executable: executable, args: args, cwd: cwd,
                                      env: env, timeoutMs: timeoutMs)
+                let result = encode(stdout: output.stdout, stderr: output.stderr,
+                                    exitCode: output.exitCode)
                 lock.lock()
                 let prev = cache[key]?.output
                 cache[key] = (result, Date())
@@ -104,8 +106,17 @@ enum CommandRunner {
         return hit?.output ?? encode(stdout: "", stderr: "", exitCode: 0)
     }
 
+    /// One run, straight past the suggestion cache: `tine learn` needs this
+    /// command's real output now, not a stale-while-revalidate answer. Blocking —
+    /// call it off the main thread.
+    static func runOnce(executable: String, args: [String], timeoutMs: Double) -> Output {
+        execute(executable: executable, args: args, cwd: "", env: [:], timeoutMs: timeoutMs)
+    }
+
+    typealias Output = (stdout: String, stderr: String, exitCode: Int32)
+
     private static func execute(executable: String, args: [String], cwd: String,
-                                env: [String: String], timeoutMs: Double?) -> String {
+                                env: [String: String], timeoutMs: Double?) -> Output {
         var environment = ProcessInfo.processInfo.environment
         // Use the shell's PATH so Homebrew/pyenv/npm tools resolve; a generator's
         // own env still wins if it sets PATH explicitly.
@@ -117,7 +128,7 @@ enum CommandRunner {
             child = try spawn(argv: ["/usr/bin/env", executable] + args,   // resolve via PATH
                               env: environment.map { "\($0)=\($1)" }, cwd: cwd)
         } catch {
-            return encode(stdout: "", stderr: "\(error)", exitCode: 127)
+            return ("", "\(error)", 127)
         }
 
         // A spec's timeout is a request, not a cap: honour it up to 20 s — the
@@ -149,11 +160,7 @@ enum CommandRunner {
         term.cancel()
         kill9.cancel()
 
-        return encode(
-            stdout: String(decoding: out, as: UTF8.self),
-            stderr: String(decoding: err, as: UTF8.self),
-            exitCode: status
-        )
+        return (String(decoding: out, as: UTF8.self), String(decoding: err, as: UTF8.self), status)
     }
 
     /// A generator's child, in a process group of its own. Signals go to the whole

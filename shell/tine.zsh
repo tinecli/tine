@@ -64,17 +64,19 @@ _tine_cellsize() {
 }
 
 # Request/response with the app. Sends
-# "<type><US><cursor><US><cwd><US><pos;…;$$><US><buffer>" and stores the reply
-# line in _TINE_REPLY. `$$` is the last positioning field, so an app that
-# predates it just ignores it. Best-effort; never blocks the prompt.
+# "<type><US><cursor><US><cwd><US><pos;…;$$><US><payload>" and stores the reply
+# line in _TINE_REPLY. The payload is the edit buffer, unless the caller passes
+# one (the `tine` CLI verbs, which run outside ZLE). `$$` is the last positioning
+# field, so an app that predates it just ignores it. Best-effort; never blocks
+# the prompt.
 _tine_req() {
-  local type=$1
+  local type=$1 payload=${2-$BUFFER}
   [[ -n "$TINE_SOCK" ]] || return 1
   zmodload zsh/net/socket 2>/dev/null || return 1
   local fd
   zsocket "$TINE_SOCK" 2>/dev/null || return 1
   fd=$REPLY
-  print -u "$fd" -r -- "${type}${_TINE_US}${CURSOR}${_TINE_US}${PWD}${_TINE_US}${_TINE_AROW};${_TINE_ACOL};${COLUMNS};${LINES};${_TINE_CW};${_TINE_CH};$$${_TINE_US}${BUFFER}"
+  print -u "$fd" -r -- "${type}${_TINE_US}${CURSOR}${_TINE_US}${PWD}${_TINE_US}${_TINE_AROW};${_TINE_ACOL};${COLUMNS};${LINES};${_TINE_CW};${_TINE_CH};$$${_TINE_US}${payload}"
   _TINE_REPLY=""
   IFS= read -r -u "$fd" _TINE_REPLY
   exec {fd}>&-
@@ -253,6 +255,7 @@ _tine_send_env() {
 # `tine` CLI — manage the app from the shell.
 #   tine dashboard   open the dashboard window
 #   tine doctor      check tine is set up correctly
+#   tine learn <cmd> write a spec for <cmd> from its own --help
 #   tine restart     quit and relaunch the app
 #   tine update      update the app to the latest release
 tine() {
@@ -284,6 +287,7 @@ tine() {
       ;;
     install) _tine_install ;;
     update) _tine_update ;;
+    learn) shift; _tine_learn "$@" ;;
     doctor) _tine_doctor ;;
     version|--version|-v)
       if _tine_req version 2>/dev/null && [[ -n "$_TINE_REPLY" ]]; then
@@ -297,6 +301,7 @@ tine() {
       print -- "  dashboard   open the dashboard window"
       print -- "  doctor      check tine is set up correctly"
       print -- "  install     download the latest completion specs"
+      print -- "  learn <cmd> write a spec for <cmd> from its own --help"
       print -- "  restart     quit and relaunch the app"
       print -- "  update      update the app to the latest release"
       print -- "  version     print the running app version"
@@ -396,6 +401,58 @@ _tine_update() {
   else
     printf '\rtine: %s installed — start it with: tine dashboard\e[K\n' "$version"
   fi
+}
+
+# Ask the app to write a spec for <cmd> from the command's own `--help`, using
+# the on-device model. The app runs the help and the model off its main thread;
+# this only drives the poll. Generation takes seconds, so the spinner reports the
+# stage the app is in.
+_tine_learn() {
+  emulate -L zsh
+  local force=0 cmd=""
+  while (( $# )); do
+    case "$1" in
+      -f|--force) force=1 ;;
+      -*) print -u2 -- "tine: unknown option: $1"; return 1 ;;
+      *) if [[ -n "$cmd" ]]; then
+           print -u2 -- "tine: learn takes one command"; return 1
+         fi
+         cmd=$1 ;;
+    esac
+    shift
+  done
+  if [[ -z "$cmd" ]]; then
+    print -u2 -- "usage: tine learn <command> [--force]"; return 1
+  fi
+  if ! whence -p -- "$cmd" >/dev/null 2>&1; then
+    print -u2 -- "tine: not a command in your PATH: $cmd"; return 1
+  fi
+  local payload=$cmd
+  (( force )) && payload+="${_TINE_RS}force"
+  if ! _tine_req learn "$payload" 2>/dev/null; then
+    print -u2 -- "tine: could not reach the app (is it running? try: tine restart)"; return 1
+  fi
+  # An app that predates learning answers its default "0" to an unknown verb.
+  if [[ "$_TINE_REPLY" != started ]]; then
+    print -u2 -- "tine: the running app is older than this shell integration — run: tine restart"; return 1
+  fi
+  local spin='|/-\' i=0 waited=0
+  printf 'tine: learning %s… ' "$cmd"
+  while true; do
+    sleep 0.3
+    _tine_req learnStatus "" 2>/dev/null || { printf '\r\e[K'; print -u2 -- "tine: lost contact with the app"; return 1 }
+    (( waited++ ))
+    if (( waited > 600 )); then
+      printf '\r\e[K'; print -u2 -- "tine: gave up waiting for the model"; return 1
+    fi
+    case "$_TINE_REPLY" in
+      idle)      printf '\rtine: learning %s… %s \e[K' "$cmd" "${spin:$((i%4)):1}"; (( i++ )) ;;
+      running:*) printf '\rtine: %s… %s \e[K' "${_TINE_REPLY#running:}" "${spin:$((i%4)):1}"; (( i++ )) ;;
+      done:*)    printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${_TINE_REPLY#done:}"; return 0 ;;
+      failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${_TINE_REPLY#failed:}"; return 1 ;;
+      *)         printf '\r\e[K'; return 0 ;;
+    esac
+  done
 }
 
 _tine_doctor() {
