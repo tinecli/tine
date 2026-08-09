@@ -10,8 +10,11 @@ import { getCustomSuggestions } from "./src/generators/customSuggestionsGenerato
 import { getScriptSuggestions } from "./src/generators/scriptSuggestionsGenerator.js";
 import { getTemplateSuggestions } from "./src/generators/templateSuggestionsGenerator.js";
 import { parseArguments } from "./src/parser/index.js";
+import type { Suggestion } from "./src/shared/internal.js";
+import { SuggestionFlag } from "./src/shared/utils.js";
 import { getCommand } from "./src/shell-parser/index.js";
 import { getQueryTermForSuggestion } from "./src/suggestions/helpers.js";
+import { getHistoryValueSuggestions } from "./src/suggestions/history.js";
 import {
   filterSuggestions,
   getAllSuggestions,
@@ -150,7 +153,10 @@ async function suggest(
   // first token) and sort so most-used surface first — including the empty
   // search-term case, which filterSuggestions leaves unsorted.
   const rawCmd = upToCursor.trim().split(/\s+/)[0] ?? "";
-  const ranked = (updatePriorities(all as never, rawCmd) as typeof all).sort(
+  const ranked = [
+    ...(updatePriorities(all as never, rawCmd) as typeof all),
+    ...historyValues(upToCursor, rawCmd, parsed),
+  ].sort(
     (a, b) =>
       ((b as { priority?: number }).priority ?? 0) -
       ((a as { priority?: number }).priority ?? 0),
@@ -160,6 +166,32 @@ async function suggest(
     searchTerm: parsed.searchTerm ?? "",
     items: toItems(filtered, parsed.searchTerm ?? ""),
   };
+}
+
+// Values the user typed before, offered only where the spec has nothing to say
+// about the current arg: no generator to run and no suggestions listed. Keyed by
+// the flag in front of the cursor, so `-p` and `-e` pools never mix.
+function historyValues(
+  upToCursor: string,
+  cmd: string,
+  parsed: {
+    currentArg: { generators?: unknown[]; suggestions?: unknown[] } | null;
+    suggestionFlags: number;
+  },
+): Suggestion[] {
+  const arg = parsed.currentArg;
+  const specIsSilent =
+    Boolean(parsed.suggestionFlags & SuggestionFlag.Args) &&
+    arg !== null &&
+    !arg.generators?.length &&
+    !arg.suggestions?.length;
+  if (!specIsSilent) return [];
+
+  const tokens = upToCursor.split(/\s+/);
+  const previous = tokens[tokens.length - 2] ?? "";
+  const flag =
+    previous.startsWith("-") && !previous.includes("=") ? previous : "";
+  return getHistoryValueSuggestions(cmd, flag);
 }
 
 function toItems(

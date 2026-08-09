@@ -4,7 +4,12 @@ import vm from "node:vm";
 // A bare vm context has no window/TextEncoder/timers, so the bundle only runs
 // here if app/engine/shims.js works — same contract as the app's JSC context.
 
-type Item = { name: string; insertValue: string; queryTerm: string };
+type Item = {
+  name: string;
+  insertValue: string;
+  queryTerm: string;
+  type: string;
+};
 type Result = { searchTerm: string; items: Item[] };
 type Suggest = (
   line: string,
@@ -18,9 +23,20 @@ const specsDir = "/tine-smoke-specs";
 const home = "/home/smoke";
 const files: Record<string, string> = {
   [`${specsDir}/index.json`]: JSON.stringify({
-    completions: ["git", "cd", "cat"],
+    completions: ["git", "cd", "cat", "deploy"],
     diffVersionedCompletions: [],
   }),
+  [`${specsDir}/deploy.js`]: `var completionSpec = {
+    name: "deploy",
+    options: [
+      { name: "-p", args: { name: "port" } },
+      { name: "-e", args: { name: "env" } },
+      { name: "--config", args: { name: "file", template: "filepaths" } },
+      { name: "--mode", args: { name: "mode", suggestions: ["fast"] } },
+    ],
+    args: { name: "target" },
+  };
+  export default completionSpec;`,
   [`${specsDir}/git.js`]: `var completionSpec = {
     name: "git",
     subcommands: [{ name: "checkout" }, { name: "cherry-pick" }],
@@ -45,6 +61,8 @@ const listings: Record<string, string> = {
   "/tmp/app/": "Sources/\nPackage.swift\n",
   [`${home}/`]: "Documents/\n.config/\n",
 };
+
+const use = (count: number) => ({ count, lastUsed: Date.now() });
 
 let context: vm.Context;
 let tineSuggest: Suggest;
@@ -76,6 +94,18 @@ beforeAll(async () => {
           ? (listings[input.workingDirectory ?? ""] ?? "")
           : "";
       return JSON.stringify({ stdout, stderr: "", exitCode: 0 });
+    },
+    __tineHistoryValues: {
+      deploy: {
+        "-p": { "8080:8080": use(20), "3000:3000": use(2) },
+        "-e": { "NODE_ENV=production": use(4) },
+        "--config": { "override.yml": use(9) },
+        "--mode": { turbo: use(9) },
+        "": {
+          "web.example.com": use(3),
+          ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789: use(99),
+        },
+      },
     },
   });
   vm.runInContext(
@@ -129,4 +159,32 @@ test("a folder with a space is escaped on insert", async () => {
   const { items } = await suggest("cd my");
   expect(items.map((item) => item.name)).toEqual(["my dir/"]);
   expect(items[0].insertValue).toBe("my\\ dir/");
+});
+
+test("an arg the spec says nothing about falls back to history values", async () => {
+  const { items } = await suggest("deploy -p ");
+  expect(items.map((item) => item.name)).toEqual(["8080:8080", "3000:3000"]);
+  expect(items[0].type).toBe("history");
+  expect(await names("deploy -e ")).toEqual(["NODE_ENV=production"]);
+});
+
+test("history values never include a credential-shaped token", async () => {
+  expect(await names("deploy ")).toEqual([
+    "web.example.com",
+    "--config",
+    "--mode",
+    "-e",
+    "-p",
+  ]);
+});
+
+test("a generator or a spec suggestion keeps history values out", async () => {
+  expect(await names("deploy --config ")).toEqual([
+    "app/",
+    "my dir/",
+    "README.md",
+    ".hidden/",
+    "../",
+  ]);
+  expect(await names("deploy --mode ")).toEqual(["fast"]);
 });

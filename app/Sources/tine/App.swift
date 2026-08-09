@@ -75,7 +75,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
             self.frecency.load()
-            DispatchQueue.main.async { self.state.engine?.setFrecency(self.frecency.index) }
+            DispatchQueue.main.async {
+                self.state.engine?.setFrecency(self.frecency.index)
+                self.state.engine?.setHistoryValues(self.frecency.valueIndex)
+            }
         }
 
         let server = SocketServer(path: sockPath) { [weak self] req in
