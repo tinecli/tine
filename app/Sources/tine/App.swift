@@ -263,19 +263,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ownerPID != nil && NSWorkspace.shared.frontmostApplication?.processIdentifier == ownerPID
     }
 
-    /// Hide the panel and stop watching the owner. Also cancels a present that was
-    /// already scheduled, so a dismiss can't be undone one frame later.
+    /// Hide the panel, stop watching the owner, and disown it. Cancels the pending
+    /// present and refresh too, so nothing scheduled before the dismiss can undo it
+    /// — and with no owner, nothing scheduled after it can either. The next
+    /// keystroke re-owns the panel and brings it back.
     private func dismissPanel() {
         repositionWork?.cancel()
+        refreshWork?.cancel()
+        ownerPID = nil
         focusWatcher = nil
         panel?.hidePanel()
-    }
-
-    /// The owner switched window, tab or split: the panel's caret no longer exists.
-    /// Drop the owner too, so a late generator waits for the next keystroke.
-    private func focusChanged() {
-        ownerPID = nil
-        dismissPanel()
     }
 
     private var repositionWork: DispatchWorkItem?
@@ -311,7 +308,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// frontmost-app guard as the only protection.
     private func watchFocus(of pid: pid_t) {
         if focusWatcher?.pid == pid { return }
-        focusWatcher = AXFocusWatcher(pid: pid) { [weak self] in self?.focusChanged() }
+        // Hop off the AX callout: the dismiss deallocates the watcher, which must
+        // not happen while its own callback frame is still on the stack.
+        focusWatcher = AXFocusWatcher(pid: pid) { [weak self] in
+            DispatchQueue.main.async { self?.dismissPanel() }
+        }
     }
 
     /// Panel top-left just below the caret in a canvas terminal (Ghostty, Canario), derived
