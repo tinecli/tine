@@ -119,7 +119,10 @@ enum CommandRunner {
             return encode(stdout: "", stderr: "\(error)", exitCode: 127)
         }
 
-        let timeout = min(timeoutMs.map { $0 / 1000.0 } ?? 2.0, 2.0)
+        // A spec's timeout is a request, not a cap: honour it up to 20 s — the
+        // longest any shipped spec asks for. 2 s only when a spec asks for nothing.
+        let requested = timeoutMs.flatMap { $0.isFinite && $0 > 0 ? $0 / 1000.0 : nil }
+        let timeout = min(requested ?? 2.0, 20.0)
         let killer = DispatchWorkItem { if proc.isRunning { proc.terminate() } }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: killer)
 

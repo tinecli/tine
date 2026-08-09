@@ -131,7 +131,7 @@ describe("getScriptSuggestions", () => {
       5000,
     );
     expect(executeCommand).toHaveBeenCalledWith(
-      { args: [], command: "ascript", cwd: "/" },
+      { args: [], command: "ascript", cwd: "/", timeout: 6000 },
       6000,
     );
   });
@@ -143,7 +143,7 @@ describe("getScriptSuggestions", () => {
       7000,
     );
     expect(executeCommand).toHaveBeenCalledWith(
-      { args: [], command: "ascript", cwd: "/" },
+      { args: [], command: "ascript", cwd: "/", timeout: 3500 },
       7000,
     );
   });
