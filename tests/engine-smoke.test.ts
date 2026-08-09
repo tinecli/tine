@@ -33,6 +33,7 @@ const files: Record<string, string> = {
       { name: "-e", args: { name: "env" } },
       { name: "--config", args: { name: "file", template: "filepaths" } },
       { name: "--mode", args: { name: "mode", suggestions: ["fast"] } },
+      { name: "--net", requiresEquals: true, args: { name: "net" } },
     ],
     args: { name: "target" },
   };
@@ -101,6 +102,7 @@ beforeAll(async () => {
         "-e": { "NODE_ENV=production": use(4) },
         "--config": { "override.yml": use(9) },
         "--mode": { turbo: use(9) },
+        "--net": { "host.local": use(9) },
         "": {
           "web.example.com": use(3),
           ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789: use(99),
@@ -168,11 +170,17 @@ test("an arg the spec says nothing about falls back to history values", async ()
   expect(await names("deploy -e ")).toEqual(["NODE_ENV=production"]);
 });
 
+test("a `--flag=` value reads that flag's pool, not the positional one", async () => {
+  expect(await names("deploy --net=")).toEqual(["host.local"]);
+  expect(await names("deploy --net=ho")).toEqual(["host.local"]);
+});
+
 test("history values never include a credential-shaped token", async () => {
   expect(await names("deploy ")).toEqual([
     "web.example.com",
     "--config",
     "--mode",
+    "--net",
     "-e",
     "-p",
   ]);

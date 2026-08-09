@@ -187,11 +187,19 @@ function historyValues(
     !arg.suggestions?.length;
   if (!specIsSilent) return [];
 
+  return getHistoryValueSuggestions(cmd, historyFlagKey(upToCursor));
+}
+
+// The flag whose value the cursor sits in: the one being typed on in `--net=h`,
+// otherwise the token before. "" is the positional pool.
+function historyFlagKey(upToCursor: string): string {
   const tokens = upToCursor.split(/\s+/);
+  const current = tokens[tokens.length - 1] ?? "";
+  const separator = current.startsWith("-") ? current.indexOf("=") : -1;
+  if (separator > 0) return current.slice(0, separator);
   const previous = tokens[tokens.length - 2] ?? "";
-  const flag =
-    previous.startsWith("-") && !previous.includes("=") ? previous : "";
-  return getHistoryValueSuggestions(cmd, flag);
+  if (!previous.startsWith("-") || previous.includes("=")) return "";
+  return previous;
 }
 
 function toItems(
