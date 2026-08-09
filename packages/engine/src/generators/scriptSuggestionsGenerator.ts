@@ -46,18 +46,22 @@ export async function getScriptSuggestions(
       };
     }
 
-    // Use the longest duration timeout
-    const timeout = Math.max(
-      defaultTimeout,
+    const requested = Math.max(
       generator.scriptTimeout ?? 0,
       executeCommandInput.timeout ?? 0,
     );
+    const timeout = Math.max(defaultTimeout, requested);
+    // The host enforces the real deadline, so send it the request as well.
+    const commandInput =
+      requested > 0
+        ? { ...executeCommandInput, timeout: requested }
+        : executeCommandInput;
 
     const { stdout } = await runCachedGenerator(
       generator,
       context,
-      () => executeCommandTimeout(executeCommandInput, timeout),
-      generator.cache?.cacheKey ?? JSON.stringify(executeCommandInput),
+      () => executeCommandTimeout(commandInput, timeout),
+      generator.cache?.cacheKey ?? JSON.stringify(commandInput),
     );
 
     let result: Array<Fig.Suggestion | string> = [];
