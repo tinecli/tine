@@ -36,7 +36,7 @@ they launch normally.
 
 ## Requirements
 
-macOS 14+ and zsh.
+macOS 26+ and zsh.
 
 ## Configure
 
