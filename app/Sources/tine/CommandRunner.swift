@@ -106,22 +106,17 @@ enum CommandRunner {
 
     private static func execute(executable: String, args: [String], cwd: String,
                                 env: [String: String], timeoutMs: Double?) -> String {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")   // resolve via PATH
-        proc.arguments = [executable] + args
-        if !cwd.isEmpty { proc.currentDirectoryURL = URL(fileURLWithPath: cwd) }
         var environment = ProcessInfo.processInfo.environment
         // Use the shell's PATH so Homebrew/pyenv/npm tools resolve; a generator's
         // own env still wins if it sets PATH explicitly.
         if let path = shellPath() { environment["PATH"] = path }
         for (k, v) in env { environment[k] = v }
-        proc.environment = environment
 
-        let outPipe = Pipe(), errPipe = Pipe()
-        proc.standardOutput = outPipe
-        proc.standardError = errPipe
-
-        do { try proc.run() } catch {
+        let child: Child
+        do {
+            child = try spawn(argv: ["/usr/bin/env", executable] + args,   // resolve via PATH
+                              env: environment.map { "\($0)=\($1)" }, cwd: cwd)
+        } catch {
             return encode(stdout: "", stderr: "\(error)", exitCode: 127)
         }
 
@@ -132,40 +127,120 @@ enum CommandRunner {
         let start = DispatchTime.now()
         // SIGTERM is a request; a child that ignores it holds its stdout open and
         // wedges the read. Escalate to SIGKILL, which it cannot ignore.
-        let term = DispatchWorkItem { if proc.isRunning { proc.terminate() } }
-        let kill9 = DispatchWorkItem { if proc.isRunning { kill(proc.processIdentifier, SIGKILL) } }
+        let term = DispatchWorkItem { child.signal(SIGTERM) }
+        let kill9 = DispatchWorkItem { child.signal(SIGKILL) }
         DispatchQueue.global().asyncAfter(deadline: start + timeout, execute: term)
         DispatchQueue.global().asyncAfter(deadline: start + timeout + grace, execute: kill9)
 
-        // The reads need a deadline of their own, strictly after the SIGKILL: a
-        // grandchild that inherited the write end keeps the pipe open even once
-        // the child is dead, and would otherwise block here forever.
-        // Both at once, sharing one deadline: a child that fills the stderr pipe
+        // The reads keep a deadline of their own as a backstop, strictly after the
+        // SIGKILL. Both at once, sharing it: a child that fills the stderr pipe
         // buffer blocks there and never closes stdout, so draining in sequence
         // would spend the whole deadline on stdout and lose stderr entirely.
         let readDeadline = start + timeout + grace * 2
+        var status: Int32 = 0
+        let reaper = DispatchWorkItem { status = child.reap() }
+        queue.async(execute: reaper)
         var err = Data()
-        let errDrain = DispatchWorkItem { err = drain(errPipe, until: readDeadline) }
+        let errDrain = DispatchWorkItem { err = drain(child.errFD, until: readDeadline) }
         queue.async(execute: errDrain)
-        let out = drain(outPipe, until: readDeadline)
+        let out = drain(child.outFD, until: readDeadline)
         errDrain.wait()
-        proc.waitUntilExit()
+        reaper.wait()
         term.cancel()
         kill9.cancel()
 
         return encode(
             stdout: String(decoding: out, as: UTF8.self),
             stderr: String(decoding: err, as: UTF8.self),
-            exitCode: proc.terminationStatus
+            exitCode: status
         )
     }
 
-    /// Reads a pipe to EOF, giving up at `deadline` with whatever arrived so far.
-    /// Dispatch I/O rather than `readDataToEndOfFile` so an abandoned read releases
-    /// its thread instead of blocking one for as long as the writer lives.
-    private static func drain(_ pipe: Pipe, until deadline: DispatchTime) -> Data {
-        let fd = dup(pipe.fileHandleForReading.fileDescriptor)
-        guard fd >= 0 else { return Data() }
+    /// A generator's child, in a process group of its own. Signals go to the whole
+    /// group, so work the generator backgrounded dies with it instead of holding
+    /// the pipe open; they stop once the child is reaped, so a recycled pid is safe.
+    private final class Child {
+        let outFD: Int32
+        let errFD: Int32
+        private let pid: pid_t
+        private var reaped = false
+        private let lock = NSLock()
+
+        init(pid: pid_t, outFD: Int32, errFD: Int32) {
+            self.pid = pid
+            self.outFD = outFD
+            self.errFD = errFD
+        }
+
+        func signal(_ sig: Int32) {
+            lock.lock(); defer { lock.unlock() }
+            if !reaped { kill(-pid, sig) }
+        }
+
+        /// Waits for the child, then kills what it left behind: only then do the
+        /// pipes reach EOF at once instead of at the read deadline.
+        func reap() -> Int32 {
+            var status: Int32 = 0
+            while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
+            lock.lock(); kill(-pid, SIGKILL); reaped = true; lock.unlock()
+            return status & 0x7f == 0 ? (status >> 8) & 0xff : status & 0x7f
+        }
+    }
+
+    private struct SpawnFailure: Error, CustomStringConvertible {
+        let code: Int32
+        var description: String { "tine: \(String(cString: strerror(code)))" }
+    }
+
+    /// `posix_spawn` rather than `Process`, for the process group only Foundation
+    /// cannot ask for.
+    private static func spawn(argv: [String], env: [String], cwd: String) throws -> Child {
+        var outFDs: [Int32] = [-1, -1]
+        var errFDs: [Int32] = [-1, -1]
+        guard pipe(&outFDs) == 0 else { throw SpawnFailure(code: errno) }
+        guard pipe(&errFDs) == 0 else {
+            let code = errno
+            close(outFDs[0]); close(outFDs[1])
+            throw SpawnFailure(code: code)
+        }
+
+        var actions: posix_spawn_file_actions_t?
+        posix_spawn_file_actions_init(&actions)
+        defer { posix_spawn_file_actions_destroy(&actions) }
+        posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0)
+        posix_spawn_file_actions_adddup2(&actions, outFDs[1], STDOUT_FILENO)
+        posix_spawn_file_actions_adddup2(&actions, errFDs[1], STDERR_FILENO)
+        if !cwd.isEmpty { posix_spawn_file_actions_addchdir(&actions, cwd) }
+
+        var attrs: posix_spawnattr_t?
+        posix_spawnattr_init(&attrs)
+        defer { posix_spawnattr_destroy(&attrs) }
+        // Own process group, and none of our other descriptors: the generator queue
+        // is concurrent, so another run's pipe would otherwise leak into this child
+        // and keep that run reading until its deadline.
+        posix_spawnattr_setflags(&attrs, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT))
+        posix_spawnattr_setpgroup(&attrs, 0)
+
+        let cArgv: [UnsafeMutablePointer<CChar>?] = argv.map { strdup($0) } + [nil]
+        let cEnv: [UnsafeMutablePointer<CChar>?] = env.map { strdup($0) } + [nil]
+        defer { for p in cArgv + cEnv { free(p) } }
+
+        var pid: pid_t = 0
+        let code = posix_spawn(&pid, argv[0], &actions, &attrs, cArgv, cEnv)
+        close(outFDs[1])
+        close(errFDs[1])
+        guard code == 0 else {
+            close(outFDs[0]); close(errFDs[0])
+            throw SpawnFailure(code: code)
+        }
+        return Child(pid: pid, outFD: outFDs[0], errFD: errFDs[0])
+    }
+
+    /// Reads a pipe to EOF, giving up at `deadline` with whatever arrived so far,
+    /// and closes `fd`. Dispatch I/O rather than `readDataToEndOfFile` so an
+    /// abandoned read releases its thread instead of blocking one for as long as
+    /// the writer lives.
+    private static func drain(_ fd: Int32, until deadline: DispatchTime) -> Data {
         let reader = DispatchQueue(label: "dev.gustaf.tine.generator.read")
         let done = DispatchSemaphore(value: 0)
         var buffer = Data()
