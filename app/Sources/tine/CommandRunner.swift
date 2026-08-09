@@ -178,11 +178,17 @@ enum CommandRunner {
         }
 
         /// Waits for the child, then kills what it left behind: only then do the
-        /// pipes reach EOF at once instead of at the read deadline.
+        /// pipes reach EOF at once instead of at the read deadline. `WNOWAIT` leaves
+        /// the zombie in place until the group kill has landed, so the pid stays
+        /// taken and no signal of ours can reach a recycled one.
         func reap() -> Int32 {
-            var status: Int32 = 0
-            while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
+            var info = siginfo_t()
+            while waitid(P_PID, id_t(pid), &info, WEXITED | WNOWAIT) < 0 && errno == EINTR {}
             lock.lock(); kill(-pid, SIGKILL); reaped = true; lock.unlock()
+            var status: Int32 = 0
+            while waitpid(pid, &status, 0) < 0 {
+                if errno != EINTR { return 127 }
+            }
             return status & 0x7f == 0 ? (status >> 8) & 0xff : status & 0x7f
         }
     }
