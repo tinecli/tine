@@ -37,6 +37,9 @@ final class Frecency {
     static let storePath = "\(NSHomeDirectory())/.local/share/tine/frecency.json"
     private static let defaultHistoryPath = "\(NSHomeDirectory())/.zsh_history"
     private static let maxHistoryLines = 8000
+    /// A longer line is skipped, never truncated: a truncated line can miss the
+    /// HISTORY_IGNORE pattern that covers it, and it bounds the pattern match.
+    private static let maxLineLength = 4096
     /// Live picks kept in the store; past this the least recently used go.
     private static let maxLiveEntries = 5000
     /// Values kept per (command, flag); past this the least frecent go.
@@ -85,6 +88,9 @@ final class Frecency {
         queue.sync {
             guard pattern != ignore.source else { return false }
             ignore = HistoryIgnore(pattern)
+            // Length only: a pattern names the commands the user hides, and the
+            // log is world-readable.
+            tlog("history ignore: \(pattern.count) chars, compiled: \(ignore.isCompiled)")
             rebuild()
             return true
         }
@@ -409,7 +415,7 @@ final class Frecency {
         var idx: [String: [String: Use]] = [:]
         var values: [String: [String: [String: Use]]] = [:]
         let nowMs = Date().timeIntervalSince1970 * 1000
-        for (i, line) in lines.enumerated() {
+        for (i, line) in lines.enumerated() where line.count <= maxLineLength {
             var cmd = line
             var ts = nowMs - Double(lines.count - i)            // fallback: preserve order
             // zsh extended history: ": <epoch>:<dur>;<command>"
@@ -449,14 +455,18 @@ final class Frecency {
 ///
 /// The value is one zsh pattern matched against the whole line. Translated here:
 /// `*`, `?`, `[…]` (`!`/`^` negation, ranges, `[:class:]`), `(…|…)` alternation
-/// at any depth, top-level `|`, and `\` escapes. Not translated — such a pattern
-/// matches no line, so its history stays visible: extendedglob (`#`, `##`, `^`,
-/// `~`, `(#i)`) and numeric ranges (`<->`, `<n-m>`).
+/// at any depth, top-level `|`, `\` escapes, and numeric ranges (`<->`, `<n-m>`)
+/// — the bounds are dropped, so `<1-9>` ignores every digit run and drops more
+/// than zsh would, the safe direction for an exclusion. Not translated — such a
+/// pattern matches no line, so its history stays visible: extendedglob (`#`,
+/// `##`, `^`, `~`, `(#i)`).
 struct HistoryIgnore {
     static let none = HistoryIgnore("")
 
     let source: String
     private let regex: NSRegularExpression?
+
+    var isCompiled: Bool { regex != nil }
 
     init(_ pattern: String) {
         source = pattern
@@ -497,6 +507,10 @@ struct HistoryIgnore {
                 guard let (cls, next) = charClass(pattern, i) else { return nil }
                 out += cls
                 i = next
+            case "<":
+                guard let next = numericRange(pattern, i) else { out += quote(c); break }
+                out += "[0-9]+"
+                i = next
             default: out += quote(c)
             }
         }
@@ -506,6 +520,18 @@ struct HistoryIgnore {
 
     private static func quote(_ c: Character) -> String {
         NSRegularExpression.escapedPattern(for: String(c))
+    }
+
+    /// End of a `<n-m>` range that starts after the `<`, both bounds optional.
+    /// Only that exact shape is a range: `a<b` and `a<1-b` are literal in zsh too.
+    private static func numericRange(_ p: String, _ start: String.Index) -> String.Index? {
+        var i = start
+        while i < p.endIndex, p[i].isASCII, p[i].isNumber { i = p.index(after: i) }
+        guard i < p.endIndex, p[i] == "-" else { return nil }
+        i = p.index(after: i)
+        while i < p.endIndex, p[i].isASCII, p[i].isNumber { i = p.index(after: i) }
+        guard i < p.endIndex, p[i] == ">" else { return nil }
+        return p.index(after: i)
     }
 
     /// Copy a `[…]` class through, mapping zsh's `!` negation to the regex `^`.

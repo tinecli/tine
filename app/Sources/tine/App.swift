@@ -252,10 +252,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return map.count
     }
 
+    /// Serial, so two pattern changes can never apply out of order — the later
+    /// rebuild must be the one that reaches the engine.
+    private let historyIgnoreQueue = DispatchQueue(label: "tine.historyIgnore", qos: .utility)
+
     /// Re-read history under the shell's HISTORY_IGNORE, off the prompt's socket
     /// call: rebuilding rescans ~/.zsh_history, and only a changed pattern does it.
     private func applyHistoryIgnore(_ pattern: String) {
-        DispatchQueue.global(qos: .utility).async { [weak self] in
+        historyIgnoreQueue.async { [weak self] in
             guard let self, self.frecency.setHistoryIgnore(pattern) else { return }
             let (index, values) = (self.frecency.index, self.frecency.valueIndex)
             DispatchQueue.main.async {

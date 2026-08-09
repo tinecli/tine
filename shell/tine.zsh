@@ -223,7 +223,10 @@ _tine_send_env() {
   local aliases_sent=0 histign_sent=0 payload=$PATH
   # Quote each name/value and join on US, so no alias can spell another pair.
   local sig=${(pj:\x1f:)${(qkv)aliases}}${(pj:\x1f:)${(qkv)galiases}}
-  local histign=${HISTORY_IGNORE-}
+  # Strip the framing bytes at the source, so the cache compares what was sent:
+  # a newline would truncate the request and RS/US would shift the sections, and
+  # the reply would still commit the cache and never resend.
+  local histign=${${HISTORY_IGNORE-}//[$'\n\x1e\x1f']/}
   if (( ! ${+_TINE_ENV_ALIASES} )) || [[ "$sig" != "$_TINE_ENV_ALIASES" ]]; then
     aliases_sent=1
   fi
