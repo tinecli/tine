@@ -18,6 +18,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let frecency = Frecency()
     private var idleHide: DispatchWorkItem?
     private var sockPath = ""
+    /// The app the panel belongs to: whoever was frontmost when the user last
+    /// changed the line. Only that app may have the panel placed over it.
+    private var ownerPID: pid_t?
+    /// Watches the owner for window/tab switches while the panel is up.
+    private var focusWatcher: AXFocusWatcher?
     // Latest shell positioning feed: prompt-anchor cell + grid + cell size (device
     // px), for computing the caret in canvas terminals (Ghostty) where AX can't.
     private var lastFeed: (anchorRow: Int, anchorCol: Int, cols: Int, rows: Int,
@@ -87,9 +92,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let changed = self.state.update(
                     FeedMessage(cursor: req.cursor, cwd: req.cwd, buffer: req.buffer))
                 if changed {
+                    // Only an edited line proves who owns the panel: an async prompt
+                    // redraw reaches us from a background terminal too.
+                    self.ownerPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
                     self.reflectPanel(buffer: req.buffer)
                 } else if req.buffer.isEmpty || !self.state.hasContent {
-                    self.panel?.hidePanel()
+                    self.dismissPanel()
                 } else {
                     self.scheduleIdleHide() // keep visible, don't move
                 }
@@ -119,7 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if self.panel?.isVisible != true { return "" }
                 // Fig's auto-execute row runs the line as-is instead of inserting.
                 if self.state.selectedIsExecute {
-                    self.panel?.hidePanel()
+                    self.dismissPanel()
                     return "EXEC"
                 }
                 if let (b, c) = self.state.accept() {
@@ -130,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         self.frecency.record(cmd: cmd, param: name)
                         self.state.engine?.setFrecency(self.frecency.index)
                     }
-                    self.panel?.hidePanel()
+                    self.dismissPanel()
                     return "\(c)\(TINE_US)\(b)"
                 }
                 return ""
@@ -181,7 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.panel?.relayout()
                 return "0"
             case "dismiss":
-                self.panel?.hidePanel()
+                self.dismissPanel()
                 return "0"
             default:
                 return "0"
@@ -232,9 +240,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // itself; only (re)position when it wasn't showing yet. If the generator
             // finished with nothing (no suggestions, no longer loading), hide.
             if self.state.hasContent {
-                if panel.isVisible != true { self.reflectPanel(buffer: self.state.buffer) }
+                if panel.isVisible != true, self.ownerIsFrontmost {
+                    self.reflectPanel(buffer: self.state.buffer)
+                }
             } else {
-                panel.hidePanel()
+                self.dismissPanel()
             }
         }
         refreshWork = work
@@ -244,22 +254,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func appActivated(_ note: Notification) {
         let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
         if app?.bundleIdentifier == Bundle.main.bundleIdentifier { return }
+        dismissPanel()
+    }
+
+    /// The panel may only be placed over the app that fed us the line — never over
+    /// an app the user switched to while a generator was still running.
+    private var ownerIsFrontmost: Bool {
+        ownerPID != nil && NSWorkspace.shared.frontmostApplication?.processIdentifier == ownerPID
+    }
+
+    /// Hide the panel and stop watching the owner. Also cancels a present that was
+    /// already scheduled, so a dismiss can't be undone one frame later.
+    private func dismissPanel() {
+        repositionWork?.cancel()
+        focusWatcher = nil
         panel?.hidePanel()
+    }
+
+    /// The owner switched window, tab or split: the panel's caret no longer exists.
+    /// Drop the owner too, so a late generator waits for the next keystroke.
+    private func focusChanged() {
+        ownerPID = nil
+        dismissPanel()
     }
 
     private var repositionWork: DispatchWorkItem?
 
     /// Position/show the panel at the caret, or hide it if there's nothing to show.
     private func reflectPanel(buffer: String) {
-        guard let panel else { return }
-        guard !buffer.isEmpty, state.hasContent else { panel.hidePanel(); return }
+        guard panel != nil else { return }
+        guard !buffer.isEmpty, state.hasContent else { dismissPanel(); return }
         // The caret is read one frame late: this handler runs during zsh's
         // line-pre-redraw, before the terminal has drawn the just-typed char, so
         // AX still reports the previous cursor spot (the "first space doesn't
         // move it" bug). Defer the read until after the terminal redraws.
         repositionWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let self, let panel = self.panel else { return }
+            guard let self, let panel = self.panel, let owner = self.ownerPID,
+                  self.ownerIsFrontmost else { return }
+            self.watchFocus(of: owner)
             let ax = AXCaret.caretTopLeftBelow()
             let axOnScreen = ax.map { p in NSScreen.screens.contains { $0.frame.contains(p.point) } } ?? false
             // Prefer Accessibility (Terminal, iTerm2, VSCode); fall back to the
@@ -271,6 +304,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         repositionWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.02, execute: work)
         scheduleIdleHide()
+    }
+
+    /// Watch this app for focus moves, reusing the existing watcher when the app
+    /// hasn't changed. A failure (app gone, Accessibility not trusted) leaves the
+    /// frontmost-app guard as the only protection.
+    private func watchFocus(of pid: pid_t) {
+        if focusWatcher?.pid == pid { return }
+        focusWatcher = AXFocusWatcher(pid: pid) { [weak self] in self?.focusChanged() }
     }
 
     /// Panel top-left just below the caret in a canvas terminal (Ghostty, Canario), derived
@@ -327,7 +368,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// shell exited, or line-finish never fired).
     private func scheduleIdleHide() {
         idleHide?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.panel?.hidePanel() }
+        let work = DispatchWorkItem { [weak self] in self?.dismissPanel() }
         idleHide = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 6, execute: work)
     }
