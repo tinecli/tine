@@ -333,13 +333,23 @@ _tine_update() {
   if ! _tine_req appUpdate 2>/dev/null; then
     print -u2 -- "tine: could not reach the app (is it running? try: tine restart)"; return 1
   fi
-  local spin='|/-\' i=0 version
+  # An app that predates self-update answers its default "0" to an unknown verb.
+  if [[ "$_TINE_REPLY" != started ]]; then
+    print -u2 -- "tine: the running app is older than this shell integration — run: tine restart"; return 1
+  fi
+  # The check is one HEAD, so it either lands quickly or isn't going to. The
+  # download is not capped the same way: a big dmg on a slow link is legitimate.
+  local spin='|/-\' i=0 waited=0 version
   printf 'tine: checking for updates… '
   while true; do
     sleep 0.3
     _tine_req appUpdateStatus 2>/dev/null || { printf '\r\e[K'; print -u2 -- "tine: lost contact with the app"; return 1 }
     case "$_TINE_REPLY" in
-      idle|checking) printf '\rtine: checking for updates… %s ' "${spin:$((i%4)):1}"; (( i++ )) ;;
+      idle|checking) (( waited++ ))
+                     if (( waited > 200 )); then
+                       printf '\r\e[K'; print -u2 -- "tine: could not check for updates"; return 1
+                     fi
+                     printf '\rtine: checking for updates… %s ' "${spin:$((i%4)):1}"; (( i++ )) ;;
       downloading)   printf '\rtine: downloading update… %s ' "${spin:$((i%4)):1}"; (( i++ )) ;;
       uptodate:*)    printf '\rtine: %s is the latest version\e[K\n' "${_TINE_REPLY#uptodate:}"; return 0 ;;
       staged:*)      version=${_TINE_REPLY#staged:}; break ;;

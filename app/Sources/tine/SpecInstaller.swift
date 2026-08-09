@@ -48,20 +48,43 @@ final class SpecInstaller: ObservableObject {
     /// Distinct CLIs covered by the pack — unique top-level entries (one `foo.js`
     /// or one `foo/` directory each), NOT index.json entries (which list one per
     /// spec *file*; `aws` alone fragments into hundreds).
-    nonisolated static func installedCount() -> Int {
-        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: specsDir) else { return 0 }
+    nonisolated static func installedCount() -> Int { commandCount(in: specsDir) }
+
+    nonisolated static func commandCount(in dir: String) -> Int {
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return 0 }
         var clis = Set<String>()
         for e in entries {
             if e.hasSuffix(".js") {
                 clis.insert(String(e.dropLast(3)))
             } else {
                 var isDir: ObjCBool = false
-                if FileManager.default.fileExists(atPath: "\(specsDir)/\(e)", isDirectory: &isDir), isDir.boolValue {
+                if FileManager.default.fileExists(atPath: "\(dir)/\(e)", isDirectory: &isDir), isDir.boolValue {
                     clis.insert(e)
                 }
             }
         }
         return clis.count
+    }
+
+    /// A pack this small isn't a pack. The fork ships ~730 commands, so anything
+    /// near zero means a truncated or empty tarball — which would otherwise wipe
+    /// the installed specs down to the app's own builtins.
+    nonisolated static let minimumPackCommands = 100
+
+    /// Throws unless the freshly extracted pack looks like one. Called before the
+    /// installed pack is touched and before the ETag is recorded, so a bad
+    /// download leaves the user's specs alone and the next check tries again.
+    nonisolated static func validate(pack dir: String) throws {
+        guard FileManager.default.fileExists(atPath: "\(dir)/index.json") else {
+            throw NSError(domain: "tine", code: 3,
+                          userInfo: [NSLocalizedDescriptionKey: "spec pack has no index — keeping the installed one"])
+        }
+        let count = commandCount(in: dir)
+        guard count > minimumPackCommands else {
+            throw NSError(domain: "tine", code: 4,
+                          userInfo: [NSLocalizedDescriptionKey:
+                            "spec pack looks incomplete (\(count) commands) — keeping the installed one"])
+        }
     }
 
     /// Download + install, but skip the download when the installed pack already
@@ -183,6 +206,7 @@ final class SpecInstaller: ObservableObject {
         }
 
         mergeBuiltins(into: staging)
+        try validate(pack: staging)
 
         // Swap into place: remove the old dir, move staging in.
         try fm.createDirectory(atPath: (specsDir as NSString).deletingLastPathComponent,

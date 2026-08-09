@@ -99,6 +99,9 @@ final class AppUpdater: ObservableObject {
             return
         }
         guard Self.isNewer(latest, than: Self.currentVersion) else {
+            // Clears a version reported by an earlier check that this app has
+            // since caught up with, so doctor stops offering it.
+            newerVersion = nil
             status = .upToDate(Self.currentVersion)
             return
         }
@@ -158,6 +161,13 @@ final class AppUpdater: ObservableObject {
     private func spawnSwap(relaunch: Bool) -> String? {
         guard !swapping else { return nil }
         guard let staged else { return "no update downloaded" }
+        // The staged bundle can be hours old: something else (a manual reinstall,
+        // `brew upgrade --greedy`) may have replaced the app underneath us since.
+        // Read the target back off disk so the swap can never be a downgrade.
+        let installed = Self.bundleVersion(of: Bundle.main.bundleURL)
+        guard Self.mayInstall(staged.version, over: installed) else {
+            return "\(installed ?? "?") is already installed"
+        }
         guard FileManager.default.isWritableFile(atPath: Self.installDir.path) else {
             return "\(Self.installDir.path) is not writable"
         }
@@ -190,8 +200,18 @@ final class AppUpdater: ObservableObject {
     nonisolated static func version(fromLocation location: String) -> String? {
         guard let tag = location.split(separator: "/").last else { return nil }
         let v = tag.hasPrefix("v") ? String(tag.dropFirst()) : String(tag)
-        guard !v.isEmpty, v.allSatisfy({ $0.isNumber || $0 == "." }) else { return nil }
+        // ASCII digits only: `isNumber` alone also accepts other scripts' digits,
+        // which Int() would reject later — after the URL had been built from them.
+        guard !v.isEmpty, v.allSatisfy({ ($0.isASCII && $0.isNumber) || $0 == "." })
+        else { return nil }
         return v
+    }
+
+    /// An unreadable target is a broken install, not a newer one — replacing it
+    /// is a repair. Anything readable must be strictly older to be replaced.
+    nonisolated static func mayInstall(_ staged: String, over installed: String?) -> Bool {
+        guard let installed else { return true }
+        return isNewer(staged, than: installed)
     }
 
     nonisolated static func isNewer(_ remote: String, than local: String) -> Bool {
