@@ -144,37 +144,6 @@ export function memoizeOne<S extends unknown[], T>(
   };
 }
 
-function isNonNullObj(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null;
-}
-
-function isEmptyObject(v: unknown): v is Record<string, never> {
-  return isNonNullObj(v) && Object.keys(v).length === 0;
-}
-
-// TODO: to fix this we may want to have the default fields as Object.keys(A)
-/**
- * If no fields are specified and A,B are not equal primitives/empty objects, this returns false
- * even if the objects are actually equal.
- */
-export function fieldsAreEqual<T>(A: T, B: T, fields: (keyof T)[]): boolean {
-  if (A === B || (isEmptyObject(A) && isEmptyObject(B))) return true;
-  if (!fields.length || !A || !B) return false;
-  return fields.every((field) => {
-    const aField = A[field];
-    const bField = B[field];
-
-    if (typeof aField !== typeof bField) return false;
-    if (isNonNullObj(aField) && isNonNullObj(bField)) {
-      if (Object.keys(aField).length !== Object.keys(bField).length) {
-        return false;
-      }
-      return fieldsAreEqual(aField, bField, Object.keys(aField) as never[]);
-    }
-    return aField === bField;
-  });
-}
-
 export const splitPath = (path: string): [string, string] => {
   const idx = path.lastIndexOf("/") + 1;
   return [path.slice(0, idx), path.slice(idx)];
