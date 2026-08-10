@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var ownerPID: pid_t?
     private let sessions = SessionOwnership()
     private var focusWatcher: AXFocusWatcher?
+    private var lastPanelPlacement: DoctorReport.PanelPlacement = .awaitingInput
     private var lastFeed: (anchorRow: Int, anchorCol: Int, cols: Int, rows: Int,
                            cellW: Int, cellH: Int, cursor: Int, buffer: String)?
 
@@ -180,12 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "version":
                 return (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
             case "doctor":
-                let v = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
-                let update = self.specInstaller.updateAvailable ? 1 : 0
-                return "ax=\(AXCaret.isTrusted ? 1 : 0);specs=\(SpecInstaller.installedCount());"
-                    + "version=\(v);update=\(update);"
-                    + "appLatest=\(self.appUpdater.newerVersion ?? "");"
-                    + "appStaged=\(self.appUpdater.readyVersion ?? "")"
+                return self.doctorReport().socketValue
             case "aliases":
                 return "\(self.applyAliases(req.buffer))"
             case "env":
@@ -235,6 +231,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.engine?.setAliases(map)
         historyIgnoreQueue.async { [weak self] in self?.frecency.setAliases(map) }
         return map.count
+    }
+
+    @MainActor func doctorReport() -> DoctorReport {
+        DoctorReport.build(
+            accessibilityGranted: AXCaret.isTrusted,
+            shellInstalled: FileManager.default.fileExists(
+                atPath: "\(NSHomeDirectory())/.local/share/tine/tine.zsh"),
+            specCount: SpecInstaller.installedCount(),
+            packUpdateAvailable: specInstaller.updateAvailable,
+            appVersion: (Bundle.main.object(
+                forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?",
+            latestAppVersion: appUpdater.newerVersion,
+            stagedAppVersion: appUpdater.readyVersion,
+            socketPath: sockPath,
+            panelPlacement: lastPanelPlacement
+        )
     }
 
     /// Must stay serial — a concurrent queue could apply an older pattern after a newer one.
@@ -311,8 +323,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.watchFocus(of: owner)
             let ax = AXCaret.caretTopLeftBelow()
             let axOnScreen = ax.map { p in NSScreen.screens.contains { $0.frame.contains(p.point) } } ?? false
-            let placement = (ax != nil && axOnScreen) ? ax!
-                : (self.terminalCellPoint() ?? (self.fallbackCorner(), 16))
+            let placement: (point: CGPoint, lineHeight: CGFloat)
+            if let ax, axOnScreen {
+                self.lastPanelPlacement = .accessibilityCaret
+                placement = ax
+            } else if let terminal = self.terminalCellPoint() {
+                self.lastPanelPlacement = .terminalGrid
+                placement = terminal
+            } else {
+                self.lastPanelPlacement = .cornerFallback
+                placement = (self.fallbackCorner(), 16)
+            }
             panel.present(at: placement.point, lineHeight: placement.lineHeight)
         }
         repositionWork = work

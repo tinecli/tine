@@ -6,20 +6,21 @@ struct SettingsView: View {
     @EnvironmentObject var installer: SpecInstaller
     @EnvironmentObject var updater: AppUpdater
 
-    @State private var axTrusted = AXCaret.isTrusted
+    @State private var report: DoctorReport?
     @State private var selectedSpecDir: Int?
     @State private var startAtLogin = SMAppService.mainApp.status == .enabled
-    @State private var pane: Pane? = .general
+    @State private var pane: Pane? = .status
     @StateObject private var previewState = AppState.appearancePreview()
     private let previewTopInset: CGFloat = 18
     private let refresh = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
 
     enum Pane: String, CaseIterable, Identifiable {
-        case general = "General", appearance = "Appearance", suggestions = "Suggestions"
+        case status = "Status", general = "General", appearance = "Appearance", suggestions = "Suggestions"
         case specs = "Specs", about = "About"
         var id: String { rawValue }
         var icon: String {
             switch self {
+            case .status: return "checkmark.circle"
             case .general: return "gearshape"
             case .appearance: return "paintbrush"
             case .suggestions: return "text.and.command.macwindow"
@@ -32,12 +33,7 @@ struct SettingsView: View {
     private let fonts = [("", "System Monospaced"), ("Menlo", "Menlo"),
                          ("Monaco", "Monaco"), ("SF Mono", "SF Mono"),
                          ("Courier New", "Courier New")]
-    private let shellLine = "source ~/.local/share/tine/tine.zsh"
     static let appVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
-
-    private var shellInstalled: Bool {
-        FileManager.default.fileExists(atPath: "\(NSHomeDirectory())/.local/share/tine/tine.zsh")
-    }
 
     var body: some View {
         NavigationSplitView {
@@ -51,15 +47,17 @@ struct SettingsView: View {
         } detail: {
             Form { paneBody }
                 .formStyle(.grouped)
-                .navigationTitle((pane ?? .general).rawValue)
+                .navigationTitle((pane ?? .status).rawValue)
         }
         .frame(minWidth: 440, idealWidth: 590, minHeight: 360, idealHeight: 520)
         .background(WindowAccessor())
-        .onReceive(refresh) { _ in axTrusted = AXCaret.isTrusted }
+        .onAppear { refreshReport() }
+        .onReceive(refresh) { _ in refreshReport() }
     }
 
     @ViewBuilder private var paneBody: some View {
-        switch pane ?? .general {
+        switch pane ?? .status {
+        case .status: statusPane
         case .general: generalPane
         case .appearance: appearancePane
         case .suggestions: suggestionsPane
@@ -68,19 +66,74 @@ struct SettingsView: View {
         }
     }
 
-    @ViewBuilder private var generalPane: some View {
-        Section("Setup") {
-            setupRow("Accessibility", ok: axTrusted,
-                     detail: "Positions the panel at your cursor (Terminal & iTerm).") {
-                Button("Grant") {
-                    AXCaret.ensureTrusted()
-                    openPane("com.apple.preference.security?Privacy_Accessibility")
+    @ViewBuilder private var statusPane: some View {
+        if let report {
+            Section("Setup") {
+                setupRow("Accessibility", ok: report.accessibilityGranted,
+                         detail: report.accessibilityGranted
+                            ? "Granted"
+                            : "Required to place the panel at the terminal caret.") {
+                    if !report.accessibilityGranted {
+                        Button("Grant") {
+                            AXCaret.ensureTrusted()
+                            openPane("com.apple.preference.security?Privacy_Accessibility")
+                        }
+                    }
+                }
+                setupRow("Shell integration", ok: report.shellInstalled,
+                         detail: report.shellInstalled ? "Installed" : "Not installed") {
+                    Text(DoctorReport.shellSourceLine)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                    Button("Copy line") { copy(DoctorReport.shellSourceLine) }
                 }
             }
-            setupRow("Shell integration", ok: shellInstalled, detail: shellLine) {
-                Button("Copy line") { copy(shellLine) }
+            Section("Updates") {
+                setupRow("Completion specs", ok: !report.packUpdateAvailable,
+                         detail: "\(report.specCount) CLIs available"
+                            + (report.packUpdateAvailable ? " — update available" : "")) {
+                    if report.packUpdateAvailable {
+                        Button("Install Update") { installer.install() }
+                            .disabled(installer.status == .running)
+                    }
+                }
+                setupRow("App version", ok: report.latestAppVersion == nil,
+                         detail: appVersionDetail(report)) { EmptyView() }
+                setupRow("Staged app update", ok: report.stagedAppVersion == nil,
+                         detail: report.stagedAppVersion.map { "v\($0) is ready to install" }
+                            ?? "No update staged") {
+                    if let version = report.stagedAppVersion {
+                        Button("Update to \(version) and Relaunch") {
+                            updater.applyAndRelaunch()
+                        }
+                    }
+                }
             }
+            Section("Runtime") {
+                setupRow("Socket", ok: !report.socketPath.isEmpty,
+                         detail: report.socketPath.isEmpty ? "Not listening" : report.socketPath) {
+                    EmptyView()
+                }
+                setupRow("Panel placement",
+                         ok: report.panelPlacement == .accessibilityCaret
+                            || report.panelPlacement == .terminalGrid,
+                         detail: report.panelPlacement.rawValue) { EmptyView() }
+            }
+            Section {
+                Button("Copy diagnostics") {
+                    copy(report.diagnostics(logTail: TineLog.tail()))
+                }
+            } footer: {
+                Text("Copies these values and up to the last 4 KB of the tine log.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        } else {
+            Section { ProgressView() }
         }
+    }
+
+    @ViewBuilder private var generalPane: some View {
         Section {
             Toggle("Start at login", isOn: $startAtLogin)
                 .onChange(of: startAtLogin) { _, on in setStartAtLogin(on) }
@@ -260,6 +313,15 @@ struct SettingsView: View {
         } catch {
             startAtLogin = SMAppService.mainApp.status == .enabled
         }
+    }
+
+    private func refreshReport() {
+        report = (NSApp.delegate as? AppDelegate)?.doctorReport()
+    }
+
+    private func appVersionDetail(_ report: DoctorReport) -> String {
+        if let latest = report.latestAppVersion { return "v\(report.appVersion) — v\(latest) available" }
+        return "v\(report.appVersion)"
     }
 
     @ViewBuilder private var installerStatus: some View {
