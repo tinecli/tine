@@ -359,9 +359,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ownerPID != nil && NSWorkspace.shared.frontmostApplication?.processIdentifier == ownerPID
     }
 
-    /// Resize a live panel after a setting changed its geometry (detail pane, font
-    /// size, row limit). Settings never hides the panel — activating tine's own app
-    /// is not a terminal switch — so without this it keeps the stale size.
+    /// Settings changes the panel's geometry while it stays visible.
     func relayoutPanel() {
         panel?.relayout()
     }

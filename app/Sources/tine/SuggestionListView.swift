@@ -61,8 +61,6 @@ struct SuggestionListView: View {
     static let detailWidth: CGFloat = 260
     static let listWidth: CGFloat = 520
 
-    /// The size this view draws at for `rows` suggestions — row height times the
-    /// visible rows, plus the list's vertical padding.
     static func panelSize(rows: Int, config: TineConfig) -> CGSize {
         let visible = min(max(rows, 1), max(1, config.maxVisibleRows))
         return CGSize(width: listWidth + (config.showDetail ? detailWidth : 0),

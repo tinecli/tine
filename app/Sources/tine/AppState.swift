@@ -18,8 +18,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// False for the Appearance preview's throwaway state: it mirrors the live
-    /// config to draw the panel, and must never write it back.
+    /// The Appearance preview mirrors live config and must never write it back.
     private let persists: Bool
 
     init(persists: Bool = true) {

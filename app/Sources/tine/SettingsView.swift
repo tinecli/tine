@@ -119,8 +119,6 @@ struct SettingsView: View {
         }
     }
 
-    /// The shipping SuggestionListView, fed by throwaway state that mirrors the live
-    /// config, scaled down when the window is narrower than the panel.
     private var preview: some View {
         let size = SuggestionListView.panelSize(rows: previewState.suggestions.count,
                                                 config: previewState.config)
@@ -143,9 +141,6 @@ struct SettingsView: View {
         .onChange(of: state.config, initial: true) { _, cfg in previewState.config = cfg }
     }
 
-    /// Terminal text the panel floats over, so glass has something real to refract —
-    /// over the Form's opaque background it would read as flat grey and tell nothing
-    /// about the over-terminal look.
     private var terminalBackdrop: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(verbatim: "~/dev/tine $ git status").foregroundStyle(.green.opacity(0.8))
@@ -341,8 +336,6 @@ struct SettingsView: View {
 }
 
 private extension AppState {
-    /// One row of each kind the panel draws — matched subcommand, described option,
-    /// dangerous option, history value. No engine, no sockets, never persisted.
     static func appearancePreview() -> AppState {
         let state = AppState(persists: false)
         state.suggestions = [
