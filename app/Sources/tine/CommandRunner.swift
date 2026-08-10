@@ -37,7 +37,8 @@ enum CommandRunner {
     static func setShellPath(_ path: String) {
         lock.lock(); _shellPath = path.isEmpty ? nil : path; lock.unlock()
     }
-    private static func shellPath() -> String? {
+    /// Also what `tine ask` indexes: the tools this user can actually run.
+    static func shellPath() -> String? {
         lock.lock(); defer { lock.unlock() }; return _shellPath
     }
 

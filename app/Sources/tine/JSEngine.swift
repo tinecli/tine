@@ -106,6 +106,33 @@ final class JSEngine {
         ctx.setObject(NSNumber(value: on), forKeyedSubscript: "__tineFirstToken" as NSString)
     }
 
+    /// Does this command line parse against the installed spec? `tine ask` puts
+    /// a model's answer through the same parser the panel uses, so a flag the
+    /// tool does not document never reaches the user.
+    func validate(line: String) -> AskValidation {
+        guard ready else { return .unchecked }
+        ctx.setObject(line as NSString, forKeyedSubscript: "__v_line" as NSString)
+        ctx.evaluateScript(
+            "globalThis.__vout=null; tineValidate(__v_line, function(r){ globalThis.__vout=r; });")
+        guard let out = ctx.objectForKeyedSubscript("__vout"), !out.isNull, !out.isUndefined,
+              let result = out.toDictionary() as? [String: Any]
+        else { return .unchecked }
+        switch result["status"] as? String {
+        case "ok": return .ok(dangerous: result["dangerous"] as? Bool ?? false)
+        case "invalid": return .invalid(result["token"] as? String ?? "")
+        default: return .unchecked
+        }
+    }
+
+    /// The flags and subcommands a tool's spec documents — what the model is
+    /// allowed to use when its first answer failed to parse.
+    func outline(command: String) -> [String] {
+        let line = "\(command) "
+        return suggest(line: line, cursor: line.count, cwd: NSHomeDirectory())
+            .filter { $0.type == "option" || $0.type == "subcommand" }
+            .map { $0.name }
+    }
+
     /// Synchronous because the spec read hook is synchronous, so the engine's
     /// promise chain drains within JSC's microtask flush before this returns.
     func suggest(line: String, cursor: Int, cwd: String) -> [Suggestion] {

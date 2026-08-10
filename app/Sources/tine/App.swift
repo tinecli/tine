@@ -14,6 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `tine learn <cmd>`: writes a spec derived from the command's own `--help`.
     @MainActor let specLearner = SpecLearner(
         packDir: ProcessInfo.processInfo.environment["TINE_SPECS_DIR"] ?? SpecInstaller.specsDir)
+    /// `tine ask <question>` / `tine index`: retrieval over the tools on PATH.
+    @MainActor let asker = Asker(
+        packDir: ProcessInfo.processInfo.environment["TINE_SPECS_DIR"] ?? SpecInstaller.specsDir)
     private var panel: SuggestionPanel?
     private var server: SocketServer?
     /// The SwiftUI dashboard window, captured once it exists (WindowAccessor), so
@@ -86,6 +89,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A learned spec is a new file in a location the engine already reads, so
         // only its cache stands between writing it and completing with it.
         specLearner.onLearned = { [weak self] in self?.state.engine?.resetSpecCache() }
+
+        // `tine ask`: the model's answer is checked against the same parser and
+        // specs the panel uses, and indexed from the shell's PATH — not the
+        // launchd one this process was started with.
+        asker.validate = { [weak self] line in
+            self?.state.engine?.validate(line: line) ?? .unchecked
+        }
+        asker.outline = { [weak self] tool in self?.state.engine?.outline(command: tool) ?? [] }
+        asker.shellPath = { CommandRunner.shellPath() ?? "" }
 
         // Frecency: bootstrap from ~/.zsh_history off the main thread, then feed
         // the index to the engine so most-used subcommands/flags rank first.
@@ -214,6 +226,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                               force: sections.count > 1 && sections[1] == "force")
             case "learnStatus":
                 return self.specLearner.statusLine
+            case "ask":
+                // `tine ask <question>`: retrieval over the tools on PATH, then
+                // the model. Both run off the main thread; the shell polls
+                // `askStatus`. This never blocks.
+                return self.asker.ask(question: req.buffer)
+            case "index":
+                // `tine index`: rebuild the corpus `tine ask` searches.
+                return self.asker.index()
+            case "askStatus":
+                return self.asker.statusLine
             case "version":
                 return (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
             case "doctor":

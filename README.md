@@ -57,6 +57,22 @@ for you: it runs `<cmd> --help` and turns the output into a spec with Apple's
 on-device model (macOS 26 with Apple Intelligence on; nothing leaves the Mac).
 The result is a plain file — read it, edit it, delete it. `--force` learns again.
 
+## Which tool does this?
+
+```sh
+tine ask "delete a directory and everything in it"
+```
+
+Tine indexes every binary on your `PATH` by its man page's `NAME` line — built on
+this machine, on the first ask, and never shipped (`tine index` rebuilds it). The
+question is answered with the tools you actually have installed, ranked, with what
+each one is for. Where a tool's spec is known, the on-device model also composes a
+command line from the flags that spec documents — parsed against the same spec
+before you see it, so an invented flag never reaches you.
+
+Nothing is ever run. The command is printed and pushed onto your next prompt, for
+you to read and run yourself.
+
 ## Development
 
 Build and run from source: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Cutting a

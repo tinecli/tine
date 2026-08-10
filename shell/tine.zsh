@@ -253,8 +253,10 @@ _tine_send_env() {
   fi
 }
 # `tine` CLI — manage the app from the shell.
+#   tine ask <q>     name the installed tool that answers a question
 #   tine dashboard   open the dashboard window
 #   tine doctor      check tine is set up correctly
+#   tine index       rebuild the tool index `tine ask` searches
 #   tine learn <cmd> write a spec for <cmd> from its own --help
 #   tine restart     quit and relaunch the app
 #   tine update      update the app to the latest release
@@ -288,6 +290,8 @@ tine() {
     install) _tine_install ;;
     update) _tine_update ;;
     learn) shift; _tine_learn "$@" ;;
+    ask) shift; _tine_ask "$@" ;;
+    index) _tine_index ;;
     doctor) _tine_doctor ;;
     version|--version|-v)
       if _tine_req version 2>/dev/null && [[ -n "$_TINE_REPLY" ]]; then
@@ -298,8 +302,10 @@ tine() {
       ;;
     ""|help|-h|--help)
       print -- "usage: tine <command>"
+      print -- "  ask <q>     name the installed tool that answers a question"
       print -- "  dashboard   open the dashboard window"
       print -- "  doctor      check tine is set up correctly"
+      print -- "  index       rebuild the tool index that ask searches"
       print -- "  install     download the latest completion specs"
       print -- "  learn <cmd> write a spec for <cmd> from its own --help"
       print -- "  restart     quit and relaunch the app"
@@ -461,6 +467,93 @@ _tine_learn() {
       *)         printf '\r\e[K'; return 0 ;;
     esac
   done
+}
+
+# Ask the app which installed tool answers a question, and — where the on-device
+# model is available — what to run. The app retrieves and generates off its main
+# thread; this only drives the poll and prints what comes back. Nothing here runs
+# a command: the answer is printed, and pushed onto the next prompt's edit buffer
+# for the user to read and run themselves.
+_tine_ask() {
+  emulate -L zsh
+  local question="$*"
+  question=${question//$'\n'/ }
+  if [[ -z "${question// /}" ]]; then
+    print -u2 -- 'usage: tine ask "convert an image to jpeg"'; return 1
+  fi
+  if ! _tine_req ask "$question" 2>/dev/null; then
+    print -u2 -- "tine: could not reach the app (is it running? try: tine restart)"; return 1
+  fi
+  _tine_started "$_TINE_REPLY" || return 1
+  _tine_await_ask "thinking"
+}
+
+# Rebuild the corpus `tine ask` searches: every binary on this PATH, described by
+# its man page. Built here, never shipped — it describes this machine.
+_tine_index() {
+  emulate -L zsh
+  if ! _tine_req index "" 2>/dev/null; then
+    print -u2 -- "tine: could not reach the app (is it running? try: tine restart)"; return 1
+  fi
+  _tine_started "$_TINE_REPLY" || return 1
+  _tine_await_ask "indexing"
+}
+
+# One job at a time in the app, and an app older than this file answers its
+# default "0" to a verb it doesn't know.
+_tine_started() {
+  case "$1" in
+    started) return 0 ;;
+    busy:*)  print -u2 -- "tine: already busy with \"${1#busy:}\" — try again shortly" ;;
+    *)       print -u2 -- "tine: the running app is older than this shell integration — run: tine restart" ;;
+  esac
+  return 1
+}
+
+_tine_await_ask() {
+  emulate -L zsh
+  local label=$1 spin='|/-\' i=0 waited=0
+  printf 'tine: %s… ' "$label"
+  while true; do
+    sleep 0.2
+    _tine_req askStatus "" 2>/dev/null || { printf '\r\e[K'; print -u2 -- "tine: lost contact with the app"; return 1 }
+    (( waited++ ))
+    if (( waited > 900 )); then
+      printf '\r\e[K'; print -u2 -- "tine: gave up waiting for an answer"; return 1
+    fi
+    case "$_TINE_REPLY" in
+      idle)      printf '\rtine: %s… %s \e[K' "$label" "${spin:$((i%4)):1}"; (( i++ )) ;;
+      running:*) printf '\rtine: %s… %s \e[K' "${_TINE_REPLY#running:}" "${spin:$((i%4)):1}"; (( i++ )) ;;
+      done:*)    printf '\r\e[K'; _tine_show_answer "${_TINE_REPLY#done:}"; return 0 ;;
+      failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${_TINE_REPLY#failed:}"; return 1 ;;
+      *)         printf '\r\e[K'; return 0 ;;
+    esac
+  done
+}
+
+# The answer, one row per US-separated field: a composed command line, the tools
+# retrieval found, or a note. The command is pushed onto the edit buffer with
+# `print -z`, so it lands in the next prompt for the user to review — never run.
+_tine_show_answer() {
+  emulate -L zsh
+  local row kind rest name text command=""
+  for row in ${(ps:$_TINE_US:)1}; do
+    kind=${row%%$_TINE_RS*}
+    rest=${row#*$_TINE_RS}
+    name=${rest%%$_TINE_RS*}
+    text=${rest#*$_TINE_RS}
+    case "$kind" in
+      cmd)  command=$name
+            print -- "$name"
+            [[ "$text" == danger ]] &&
+              print -- $'\e[31m'"tine: this one destroys data — read it before you run it"$'\e[0m' ;;
+      tool) if [[ -n "$text" ]]; then printf '  %-16s %s\n' "$name" "$text"
+            else printf '  %s\n' "$name"; fi ;;
+      note) print -- "tine: $name" ;;
+    esac
+  done
+  [[ -n "$command" ]] && print -z -- "$command"
+  return 0
 }
 
 _tine_doctor() {

@@ -18,13 +18,15 @@ type Suggest = (
   cwd: string,
   cb: (r: Result) => void,
 ) => void;
+type Validation = { status: string; token: string; dangerous: boolean };
+type Validate = (line: string, cb: (r: Validation) => void) => void;
 
 const root = new URL("..", import.meta.url).pathname;
 const specsDir = "/tine-smoke-specs";
 const home = "/home/smoke";
 const files: Record<string, string> = {
   [`${specsDir}/index.json`]: JSON.stringify({
-    completions: ["git", "cd", "cat", "deploy"],
+    completions: ["git", "cd", "cat", "deploy", "wipe"],
     diffVersionedCompletions: [],
   }),
   [`${specsDir}/deploy.js`]: `var completionSpec = {
@@ -56,6 +58,12 @@ const files: Record<string, string> = {
     args: { name: "file", template: "filepaths" },
   };
   export default completionSpec;`,
+  [`${specsDir}/wipe.js`]: `var completionSpec = {
+    name: "wipe",
+    options: [{ name: ["-r", "--recursive"] }],
+    args: { name: "target", isDangerous: true, template: "filepaths" },
+  };
+  export default completionSpec;`,
 };
 
 // `ls -1ApL` output per directory, for the filepaths/folders generators.
@@ -69,6 +77,7 @@ const use = (count: number) => ({ count, lastUsed: Date.now() });
 
 let context: vm.Context;
 let tineSuggest: Suggest;
+let tineValidate: Validate;
 let bundle: string;
 
 const suggest = (line: string): Promise<Result> =>
@@ -127,6 +136,7 @@ beforeAll(async () => {
   bundle = await Bun.file(`${root}app/engine/tine-engine.js`).text();
   vm.runInContext(bundle, context);
   tineSuggest = vm.runInContext("globalThis.tineSuggest", context);
+  tineValidate = vm.runInContext("globalThis.tineValidate", context);
 });
 
 // A fresh context per index fixture: the engine caches the parsed index.json.
@@ -297,4 +307,48 @@ test("a generator or a spec suggestion keeps history values out", async () => {
     "../",
   ]);
   expect(await names("deploy --mode ")).toEqual(["fast"]);
+});
+
+// `tine ask` runs the model's answer through the parser before showing it.
+const validate = (line: string): Promise<Validation> =>
+  new Promise((resolve) => tineValidate(line, resolve));
+
+test("a command line that matches the spec validates", async () => {
+  expect(await validate("git checkout")).toMatchObject({ status: "ok" });
+  expect(await validate("deploy --mode fast target")).toMatchObject({
+    status: "ok",
+  });
+  // The last word is checked like every other one: the parser is lenient with
+  // the final token, so validation appends a space of its own.
+  expect(await validate("git --version")).toMatchObject({ status: "ok" });
+});
+
+test("an invented flag or subcommand is rejected, and named", async () => {
+  expect(await validate("git --quantum")).toEqual({
+    status: "invalid",
+    token: "--quantum",
+    dangerous: false,
+  });
+  expect(await validate("git chekout")).toMatchObject({ status: "invalid" });
+});
+
+test("a tool with no spec is reported as unchecked, not as invalid", async () => {
+  expect(await validate("mytool --whatever")).toEqual({
+    status: "nospec",
+    token: "",
+    dangerous: false,
+  });
+});
+
+test("a spec's own isDangerous reaches the answer", async () => {
+  expect(await validate("wipe -r photos")).toEqual({
+    status: "ok",
+    token: "",
+    dangerous: true,
+  });
+  expect(await validate("git checkout")).toMatchObject({ dangerous: false });
+});
+
+test("nothing that is not a single command validates", async () => {
+  expect(await validate("")).toMatchObject({ status: "unparsed" });
 });
