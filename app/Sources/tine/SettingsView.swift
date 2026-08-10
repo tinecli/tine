@@ -125,14 +125,16 @@ struct SettingsView: View {
         let size = SuggestionListView.panelSize(rows: previewState.suggestions.count,
                                                 config: previewState.config)
         let scale = previewWidth > 0 ? min(1, previewWidth / size.width) : 1
-        return VStack(alignment: .leading, spacing: 6) {
+        return ZStack(alignment: .topLeading) {
             terminalBackdrop
             SuggestionListView()
                 .environmentObject(previewState)
                 .allowsHitTesting(false)
                 .frame(width: size.width, height: size.height)
                 .scaleEffect(scale, anchor: .topLeading)
-                .frame(width: size.width * scale, height: size.height * scale)
+                .frame(width: size.width * scale, height: size.height * scale,
+                       alignment: .topLeading)
+                .padding(.top, 18)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { previewWidth = $0 }
@@ -141,12 +143,17 @@ struct SettingsView: View {
         .onChange(of: state.config, initial: true) { _, cfg in previewState.config = cfg }
     }
 
-    /// Terminal-ish ground behind the panel — glass and vibrancy read as grey over
-    /// the Form's opaque background, and tell nothing about the over-terminal look.
+    /// Terminal text the panel floats over, so glass has something real to refract —
+    /// over the Form's opaque background it would read as flat grey and tell nothing
+    /// about the over-terminal look.
     private var terminalBackdrop: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(verbatim: "~/dev/tine $ git status").foregroundStyle(.green.opacity(0.8))
-            Text(verbatim: "On branch main").foregroundStyle(.white.opacity(0.5))
+            Text(verbatim: "On branch main").foregroundStyle(.white.opacity(0.45))
+            Text(verbatim: "Your branch is up to date with 'origin/main'.")
+                .foregroundStyle(.white.opacity(0.45))
+            Text(verbatim: "nothing to commit, working tree clean")
+                .foregroundStyle(.white.opacity(0.45))
             Text(verbatim: "~/dev/tine $ git pu").foregroundStyle(.green.opacity(0.8))
         }
         .font(.system(size: 10, design: .monospaced))
@@ -290,7 +297,10 @@ struct SettingsView: View {
 
     private func bind<V>(_ keyPath: WritableKeyPath<TineConfig, V>) -> Binding<V> {
         Binding(get: { state.config[keyPath: keyPath] },
-                set: { state.config[keyPath: keyPath] = $0 })
+                set: {
+                    state.config[keyPath: keyPath] = $0
+                    (NSApp.delegate as? AppDelegate)?.relayoutPanel()
+                })
     }
 
     private func openPane(_ path: String) {
