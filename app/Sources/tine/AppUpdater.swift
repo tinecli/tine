@@ -34,10 +34,17 @@ final class AppUpdater: ObservableObject {
 
     private var staged: (version: String, app: URL)?
     private var timer: Timer?
+    private var wakeObserver: NSObjectProtocol?
     private var swapping = false
 
     /// The verified version waiting to replace this one on quit.
     var readyVersion: String? { staged?.version }
+
+    var updateActionable: Bool {
+        guard newerVersion != nil else { return false }
+        guard case .blocked = status else { return true }
+        return false
+    }
 
     /// Plain status line for the `tine update` poll (appUpdateStatus socket case).
     var statusLine: String {
@@ -63,6 +70,13 @@ final class AppUpdater: ObservableObject {
     /// The swap renames the bundle, so its parent is what has to be writable.
     nonisolated static var installDir: URL { Bundle.main.bundleURL.deletingLastPathComponent() }
 
+    deinit {
+        timer?.invalidate()
+        if let wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+        }
+    }
+
     /// Check now, then daily. A staged bundle from a previous run is discarded:
     /// only a bundle this process verified itself is ever installed.
     func start() {
@@ -73,6 +87,11 @@ final class AppUpdater: ObservableObject {
         Self.clearStaging()
         check()
         timer = Timer.scheduledTimer(withTimeInterval: Self.checkInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.check() }
+        }
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
             Task { @MainActor in self?.check() }
         }
     }
@@ -89,13 +108,20 @@ final class AppUpdater: ObservableObject {
             status = .ready(staged.version)
             return
         }
+        let previousStatus = status
         status = .checking
-        Task { await runCheck(manual: manual) }
+        Task { await runCheck(manual: manual, previousStatus: previousStatus) }
     }
 
-    private func runCheck(manual: Bool) async {
+    private func runCheck(manual: Bool, previousStatus: Status) async {
         guard let latest = await Self.latestVersion() else {
-            status = manual ? .failed("could not reach github.com") : .idle
+            if manual {
+                status = .failed("could not reach github.com")
+            } else if newerVersion != nil {
+                status = previousStatus
+            } else {
+                status = .idle
+            }
             return
         }
         guard Self.isNewer(latest, than: Self.currentVersion) else {
@@ -109,12 +135,13 @@ final class AppUpdater: ObservableObject {
         // The config key governs the automatic channel only — asking for the
         // update explicitly still installs it, like `tine install` does for specs.
         guard TineConfig.load().autoUpdateApp || manual else {
-            settle(.available(latest), "Run `tine update` to install it.")
+            settle(.available(latest), "Run `tine update` to install it.", once: "app-\(latest)")
             return
         }
         guard FileManager.default.isWritableFile(atPath: Self.installDir.path) else {
             settle(.blocked("\(Self.installDir.path) is not writable"),
-                   "tine can't update itself where it is installed — download it instead.")
+                   "tine can't update itself where it is installed — download it instead.",
+                   once: "app-\(latest)")
             if manual { NSWorkspace.shared.open(Self.releasesURL) }
             return
         }
@@ -122,7 +149,8 @@ final class AppUpdater: ObservableObject {
         do {
             let app = try await Self.downloadVerified(version: latest)
             staged = (latest, app)
-            settle(.ready(latest), "Downloaded — relaunch tine to finish the update.")
+            settle(.ready(latest), "Downloaded — relaunch tine to finish the update.",
+                   once: "app-ready-\(latest)")
         } catch {
             // Fail closed and stay quiet: the next check retries, and the reason
             // is there for anyone who asks (Settings, `tine update`).
@@ -133,10 +161,10 @@ final class AppUpdater: ObservableObject {
     }
 
     /// Land on a final status and tell the user once per new version.
-    private func settle(_ next: Status, _ notice: String) {
+    private func settle(_ next: Status, _ notice: String, once key: String) {
         status = next
         guard let version = newerVersion else { return }
-        UpdateNotice.post("tine \(version) is available", notice, once: "app-\(version)")
+        UpdateNotice.post("tine \(version) is available", notice, once: key)
     }
 
     /// Swap now and come back. The helper waits for this process to exit, so the
@@ -166,6 +194,8 @@ final class AppUpdater: ObservableObject {
         // Read the target back off disk so the swap can never be a downgrade.
         let installed = Self.bundleVersion(of: Bundle.main.bundleURL)
         guard Self.mayInstall(staged.version, over: installed) else {
+            self.staged = nil
+            Self.clearStaging()
             return "\(installed ?? "?") is already installed"
         }
         guard FileManager.default.isWritableFile(atPath: Self.installDir.path) else {
@@ -371,14 +401,17 @@ enum UpdateNotice {
               Bundle.main.bundleURL.pathExtension == "app",
               Bundle.main.bundleIdentifier != nil
         else { return }
-        if let key {
-            let seen = "tine.notified.\(key)"
+        let seen = key.map { "tine.notified.\($0)" }
+        if let seen {
             guard !UserDefaults.standard.bool(forKey: seen) else { return }
             UserDefaults.standard.set(true, forKey: seen)
         }
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert]) { granted, _ in
-            guard granted else { return }
+            guard granted else {
+                if let seen { UserDefaults.standard.removeObject(forKey: seen) }
+                return
+            }
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
