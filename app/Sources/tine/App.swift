@@ -305,7 +305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !name.isEmpty { map[name] = value }
         }
         state.engine?.setAliases(map)
-        frecency.setAliases(map)
+        historyIgnoreQueue.async { [weak self] in self?.frecency.setAliases(map) }
         return map.count
     }
 

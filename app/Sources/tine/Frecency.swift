@@ -397,32 +397,35 @@ final class Frecency {
         Double(use.count) * pow(2, -max(0, now - use.lastUsed) / halfLifeMs)
     }
 
-    /// A rank call gets one immutable history view and one clock reading. Joining
-    /// lives here because only history knows that `/usr/bin/python3`, an alias,
-    /// or the command after `sudo`/an environment assignment names a PATH entry.
+    /// A rank call gets one immutable history view and one clock reading. Resolve
+    /// it once because the returned closure runs for every corpus scoring hit.
     func commandScorer() -> (String) -> Double {
         let snapshot = queue.sync { (merged, aliases) }
         let now = Date().timeIntervalSince1970 * 1000
-        return { name in
-            Self.commandScore(for: name, in: snapshot.0, aliases: snapshot.1, now: now)
-        }
+        let scores = Self.commandScores(in: snapshot.0, aliases: snapshot.1, now: now)
+        return { scores[$0] ?? 0 }
     }
 
     static func commandScore(for name: String, in index: [String: [String: Use]],
                              aliases: [String: String] = [:], now: Double) -> Double {
-        var best = 0.0
+        commandScores(in: index, aliases: aliases, now: now)[name] ?? 0
+    }
+
+    /// Flatten history into PATH command names, resolving basenames, aliases, and
+    /// command prefixes (`sudo`, `env`, and assignments) while building the map.
+    private static func commandScores(in index: [String: [String: Use]],
+                                      aliases: [String: String], now: Double) -> [String: Double] {
+        var scores: [String: Double] = [:]
         for (rawCommand, uses) in index {
-            if resolvedCommandName(rawCommand, aliases: aliases) == name {
-                best = max(best, commandScore(uses, now: now))
-                continue
-            }
+            let name = resolvedCommandName(rawCommand, aliases: aliases)
+            scores[name] = max(scores[name] ?? 0, commandScore(uses, now: now))
             guard isCommandPrefix(rawCommand) else { continue }
-            for (token, use) in uses
-                where resolvedCommandName(token, aliases: aliases) == name {
-                best = max(best, score(use, now))
+            for (token, use) in uses {
+                let name = resolvedCommandName(token, aliases: aliases)
+                scores[name] = max(scores[name] ?? 0, score(use, now))
             }
         }
-        return best
+        return scores
     }
 
     private static func commandScore(_ uses: [String: Use], now: Double) -> Double {
