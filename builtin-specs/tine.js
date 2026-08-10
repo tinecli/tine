@@ -11,10 +11,7 @@ export default {
     },
     { name: "dashboard", description: "Open the dashboard window" },
     { name: "doctor", description: "Check tine is set up correctly" },
-    {
-      name: "index",
-      description: "Rebuild the tool index that ask searches",
-    },
+    { name: "index", description: "Rebuild the tool index that ask searches" },
     { name: "install", description: "Download the latest completion specs" },
     {
       name: "learn",
