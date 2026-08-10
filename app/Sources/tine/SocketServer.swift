@@ -27,10 +27,10 @@ final class SocketServer {
         self.handler = handler
     }
 
-    func start() {
+    func start() -> Bool {
         unlink(path)
         fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { perror("tine socket"); return }
+        guard fd >= 0 else { perror("tine socket"); return false }
 
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
@@ -45,12 +45,13 @@ final class SocketServer {
         let bound = withUnsafePointer(to: &addr) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, len) }
         }
-        guard bound == 0 else { perror("tine bind"); return }
-        guard listen(fd, 16) == 0 else { perror("tine listen"); return }
+        guard bound == 0 else { perror("tine bind"); return false }
+        guard listen(fd, 16) == 0 else { perror("tine listen"); return false }
 
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             self?.acceptLoop()
         }
+        return true
     }
 
     private func acceptLoop() {

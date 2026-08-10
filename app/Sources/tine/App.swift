@@ -17,9 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let frecency = Frecency()
     private var idleHide: DispatchWorkItem?
     private var sockPath = ""
+    private var socketListening = false
     private var ownerPID: pid_t?
     private let sessions = SessionOwnership()
     private var focusWatcher: AXFocusWatcher?
+    private var lastPanelPlacement: DoctorReport.PanelPlacement = .awaitingInput
     private var lastFeed: (anchorRow: Int, anchorCol: Int, cols: Int, rows: Int,
                            cellW: Int, cellH: Int, cursor: Int, buffer: String)?
 
@@ -189,12 +191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "version":
                 return (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
             case "doctor":
-                let v = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
-                let update = self.specInstaller.updateAvailable ? 1 : 0
-                return "ax=\(AXCaret.isTrusted ? 1 : 0);specs=\(SpecInstaller.installedCount());"
-                    + "version=\(v);update=\(update);"
-                    + "appLatest=\(self.appUpdater.newerVersion ?? "");"
-                    + "appStaged=\(self.appUpdater.readyVersion ?? "")"
+                return self.doctorReport().socketValue
             case "aliases":
                 return "\(self.applyAliases(req.buffer))"
             case "env":
@@ -217,7 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return "0"
             }
         }
-        server.start()
+        socketListening = server.start()
         self.server = server
 
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -258,6 +255,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.engine?.setAliases(map)
         historyIgnoreQueue.async { [weak self] in self?.frecency.setAliases(map) }
         return map.count
+    }
+
+    @MainActor func doctorReport() -> DoctorReport {
+        let zshrcPath = (ProcessInfo.processInfo.environment["ZDOTDIR"] ?? NSHomeDirectory())
+            + "/.zshrc"
+        let shellInstalled = FileManager.default.contents(atPath: zshrcPath)
+            .map { String(decoding: $0, as: UTF8.self).contains("tine.zsh") } ?? false
+        return DoctorReport(
+            accessibilityGranted: AXCaret.isTrusted,
+            shellInstalled: shellInstalled,
+            specCount: SpecInstaller.installedCount(),
+            packUpdateAvailable: specInstaller.updateAvailable,
+            appVersion: (Bundle.main.object(
+                forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?",
+            latestAppVersion: appUpdater.newerVersion,
+            stagedAppVersion: appUpdater.readyVersion,
+            socketPath: sockPath,
+            socketListening: socketListening,
+            panelPlacement: lastPanelPlacement
+        )
     }
 
     /// Must stay serial — a concurrent queue could apply an older pattern after a newer one.
@@ -334,8 +351,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.watchFocus(of: owner)
             let ax = AXCaret.caretTopLeftBelow()
             let axOnScreen = ax.map { p in NSScreen.screens.contains { $0.frame.contains(p.point) } } ?? false
-            let placement = (ax != nil && axOnScreen) ? ax!
-                : (self.terminalCellPoint() ?? (self.fallbackCorner(), 16))
+            let placement: (point: CGPoint, lineHeight: CGFloat)
+            if let ax, axOnScreen {
+                self.lastPanelPlacement = .accessibilityCaret
+                placement = ax
+            } else if let terminal = self.terminalCellPoint() {
+                self.lastPanelPlacement = .terminalGrid
+                placement = terminal
+            } else {
+                self.lastPanelPlacement = .cornerFallback
+                placement = (self.fallbackCorner(), 16)
+            }
             panel.present(at: placement.point, lineHeight: placement.lineHeight)
         }
         repositionWork = work
