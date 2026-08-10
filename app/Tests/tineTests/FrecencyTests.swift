@@ -202,6 +202,11 @@ struct ProjectFrecencyTests {
         }
     }
 
+    static func makeRepo(_ root: String) throws {
+        try FileManager.default.createDirectory(
+            atPath: root + "/.git", withIntermediateDirectories: true)
+    }
+
     @Test func recordsAndReloadsTheProjectPool() async throws {
         let dir = Scratch.dir("project-frecency")
         let repo = dir + "/repo"
@@ -310,5 +315,171 @@ struct ProjectFrecencyTests {
 
         let count = frecency.scopedIndex(for: repo).values.reduce(0) { $0 + $1.count }
         #expect(count == 5_000)
+    }
+
+    @Test func evictsStaleAndLeastRecentlyUsedProjectPoolsByTheirNewestEntry() async throws {
+        let dir = Scratch.dir("project-pool-eviction")
+        let store = dir + "/frecency.json"
+        let active = dir + "/active"
+        let recent = dir + "/recent"
+        let older = dir + "/older"
+        let stale = dir + "/stale"
+        for root in [active, recent, older, stale] { try Self.makeRepo(root) }
+
+        let scoped: [String: Any] = [
+            active: ["tool": [
+                "ancient": ["count": 1, "lastUsed": 1.0],
+                "newest": ["count": 1, "lastUsed": 999_000.0]
+            ]],
+            recent: ["tool": ["pick": ["count": 1, "lastUsed": 998_000.0]]],
+            older: ["tool": ["pick": ["count": 1, "lastUsed": 997_000.0]]],
+            stale: ["tool": ["pick": ["count": 1, "lastUsed": 800_000.0]]]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: ["global": [:], "scoped": scoped])
+        try data.write(to: URL(fileURLWithPath: store))
+
+        let frecency = Frecency(
+            historyPath: dir + "/missing-history",
+            storePath: store,
+            maxProjectPools: 2,
+            projectPoolTTL: 100,
+            now: { 1_000 })
+        frecency.load()
+        for root in [active, recent, older, stale] { await Self.resolve(frecency, cwd: root) }
+
+        #expect(frecency.scopedIndex(for: active)["tool"]?["ancient"] != nil,
+                "a fresh newest entry keeps the whole active pool")
+        #expect(frecency.scopedIndex(for: recent)["tool"]?["pick"] != nil)
+        #expect(frecency.scopedIndex(for: older).isEmpty, "the oldest fresh pool loses the LRU race")
+        #expect(frecency.scopedIndex(for: stale).isEmpty)
+    }
+
+    @Test func symlinkedAndCanonicalWorkingDirectoriesShareOnePool() async throws {
+        let dir = Scratch.dir("project-root-symlink")
+        let repo = dir + "/repo"
+        let cwd = repo + "/Sources"
+        let link = dir + "/linked-repo"
+        try Self.makeRepo(repo)
+        try FileManager.default.createDirectory(atPath: cwd, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: repo)
+
+        let frecency = Frecency(
+            historyPath: dir + "/missing-history",
+            storePath: dir + "/frecency.json")
+        frecency.load()
+        await Self.resolve(frecency, cwd: link + "/Sources")
+        _ = frecency.record(cmd: "git", param: "status", cwd: link + "/Sources")
+        await Self.resolve(frecency, cwd: cwd)
+        let result = frecency.record(cmd: "git", param: "status", cwd: cwd)
+
+        #expect(result?.scoped?["status"]?.count == 2)
+        #expect(frecency.projectRoot(for: link + "/Sources") == repo)
+    }
+
+    @Test func positiveRootTTLNoticesRemovedGitDirectory() async throws {
+        let dir = Scratch.dir("project-root-positive-ttl")
+        let repo = dir + "/repo"
+        var clock = 1_000.0
+        try Self.makeRepo(repo)
+        let frecency = Frecency(
+            historyPath: dir + "/missing-history",
+            storePath: dir + "/frecency.json",
+            projectRootTTL: 10,
+            now: { clock })
+
+        await Self.resolve(frecency, cwd: repo)
+        #expect(frecency.projectRoot(for: repo) == repo)
+        try FileManager.default.removeItem(atPath: repo + "/.git")
+        clock += 11
+        guard frecency.projectRoot(for: repo) == nil else {
+            Issue.record("an expired positive entry still reports a deleted repository")
+            return
+        }
+        await Self.resolve(frecency, cwd: repo)
+        #expect(frecency.projectRoot(for: repo) == nil)
+    }
+
+    @Test func projectRootCacheEvictsItsLeastRecentlyUsedWorkingDirectory() async throws {
+        let dir = Scratch.dir("project-root-cache-cap")
+        let first = dir + "/first"
+        let second = dir + "/second"
+        let third = dir + "/third"
+        for root in [first, second, third] { try Self.makeRepo(root) }
+        let frecency = Frecency(
+            historyPath: dir + "/missing-history",
+            storePath: dir + "/frecency.json",
+            maxProjectRootCacheEntries: 2)
+
+        await Self.resolve(frecency, cwd: first)
+        await Self.resolve(frecency, cwd: second)
+        #expect(frecency.projectRoot(for: first) == first)
+        await Self.resolve(frecency, cwd: third)
+
+        #expect(frecency.projectRoot(for: first) == first)
+        #expect(frecency.projectRoot(for: second) == nil)
+        #expect(frecency.projectRoot(for: third) == third)
+    }
+
+    @Test func projectRootLookupNeverBlocksItsCallerAndCompletesOnce() throws {
+        let dir = Scratch.dir("project-root-async-lookup")
+        let repo = dir + "/repo"
+        try Self.makeRepo(repo)
+        let queue = DispatchQueue(label: "tine.frecency.blocked-test")
+        let queueStarted = DispatchSemaphore(value: 0)
+        queue.async {
+            queueStarted.signal()
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        queueStarted.wait()
+
+        let frecency = Frecency(
+            historyPath: dir + "/missing-history",
+            storePath: dir + "/frecency.json",
+            queue: queue)
+        let completed = DispatchSemaphore(value: 0)
+        let lock = NSLock()
+        var deliveries = 0
+        var applied = 0
+        let started = Date()
+        frecency.resolveProjectRoot(for: repo) { _ in
+            lock.lock()
+            deliveries += 1
+            if Frecency.shouldApplyProjectIndex(
+                resolvedFor: repo, currentCWD: dir + "/new-cwd") {
+                applied += 1
+            }
+            lock.unlock()
+            completed.signal()
+        }
+        #expect(Date().timeIntervalSince(started) < 0.05,
+                "lookup must enqueue work without waiting behind the frecency queue")
+        #expect(completed.wait(timeout: .now() + 1) == .success)
+        Thread.sleep(forTimeInterval: 0.02)
+        lock.lock()
+        let deliveryCount = deliveries
+        let appliedCount = applied
+        lock.unlock()
+        #expect(deliveryCount == 1)
+        #expect(appliedCount == 0, "a result for an old cwd must not replace the current pool")
+
+        let cachedCompleted = DispatchSemaphore(value: 0)
+        frecency.resolveProjectRoot(for: repo) { _ in
+            lock.lock()
+            deliveries += 1
+            if Frecency.shouldApplyProjectIndex(resolvedFor: repo, currentCWD: repo) {
+                applied += 1
+            }
+            lock.unlock()
+            cachedCompleted.signal()
+        }
+        #expect(cachedCompleted.wait(timeout: .now() + 1) == .success,
+                "a cache hit must still deliver through the completion")
+        Thread.sleep(forTimeInterval: 0.02)
+        lock.lock()
+        let finalDeliveryCount = deliveries
+        let finalAppliedCount = applied
+        lock.unlock()
+        #expect(finalDeliveryCount == 2, "each lookup must deliver exactly once")
+        #expect(finalAppliedCount == 1, "only the current cwd may apply its delivery")
     }
 }

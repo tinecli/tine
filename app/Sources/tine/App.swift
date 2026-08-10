@@ -90,8 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.lastFeed = (req.anchorRow, req.anchorCol, req.cols, req.rows,
                                  req.cellW, req.cellH, req.cursor, req.buffer)
                 if req.cwd != self.state.cwd {
-                    self.state.engine?.setProjectFrecency(
-                        self.frecency.scopedIndex(for: req.cwd))
+                    self.state.engine?.setProjectFrecency([:])
                 }
                 self.resolveProjectFrecency(for: req.cwd)
                 self.state.update(feed)
@@ -231,14 +230,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func selectProjectFrecency(for cwd: String) {
-        state.engine?.setProjectFrecency(frecency.scopedIndex(for: cwd))
+        state.engine?.setProjectFrecency([:])
         resolveProjectFrecency(for: cwd)
     }
 
     private func resolveProjectFrecency(for cwd: String) {
         frecency.resolveProjectRoot(for: cwd) { [weak self] index in
             DispatchQueue.main.async {
-                guard let self, self.state.cwd == cwd else { return }
+                guard let self,
+                      Frecency.shouldApplyProjectIndex(resolvedFor: cwd,
+                                                       currentCWD: self.state.cwd) else { return }
                 self.state.engine?.setProjectFrecency(index)
             }
         }
