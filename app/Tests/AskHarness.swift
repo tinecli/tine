@@ -32,7 +32,7 @@ enum AskHarness {
         }
     }
 
-    static func main() {
+    static func main() async {
         // The harness writes an index, so it must never run against real user data.
         let root = ProcessInfo.processInfo.environment["TINE_DATA_DIR"] ?? ""
         guard root.hasPrefix("/private/tmp/") || root.hasPrefix("/var/folders/") else {
@@ -44,11 +44,15 @@ enum AskHarness {
         descriptions()
         names()
         ranking()
+        phrasing()
         answers()
         store()
-        MainActor.assumeIsolated { jobs() }
+        await MainActor.run { jobs() }
         if CommandLine.arguments.contains("--live") { live() }
-        if CommandLine.arguments.contains("--answer") { MainActor.assumeIsolated { answering() } }
+        if CommandLine.arguments.contains("--measure-expansion") {
+            await measureExpansion()
+        }
+        if CommandLine.arguments.contains("--answer") { await MainActor.run { answering() } }
         print("\n\(pass) passed, \(fail) failed")
         exit(fail == 0 ? 0 : 1)
     }
@@ -233,6 +237,83 @@ enum AskHarness {
         check("limit honoured", AskIndex.rank("json", in: corpus, limit: 1).count == 1)
     }
 
+    // MARK: - Phrasing stability
+
+    static let phrasingCorpus = [
+        AskEntry(name: "magick", description: "convert transform encode image file format jpg jpeg png"),
+        AskEntry(name: "jpegtran", description: "transform jpeg files"),
+        AskEntry(name: "pngcrush", description: "optimize png images"),
+        AskEntry(name: "ffmpeg", description: "compress shrink reduce resize encode transcode video file size"),
+        AskEntry(name: "handbrake", description: "encode and transcode video files"),
+        AskEntry(name: "zip", description: "compress files into an archive"),
+        AskEntry(name: "truncate", description: "shrink a file to a specified size"),
+    ]
+
+    static let imageQuestions = [
+        "convert jpg to png",
+        "convert jpeg to other formats",
+        "turn a jpg into a png",
+    ]
+
+    static let videoQuestions = ["shrink a video", "compress a video"]
+
+    static func phrasing() {
+        let imageExpansion = "convert transform encode image file format jpg jpeg png"
+        let videoExpansion = "compress shrink reduce resize encode transcode video file size"
+        let rawImages = imageQuestions.map { pool($0, expansion: nil) }
+        let normalizedImages = imageQuestions.map(normalizedPool)
+        let expandedImages = imageQuestions.map { pool($0, expansion: imageExpansion) }
+        let rawVideos = videoQuestions.map { pool($0, expansion: nil) }
+        let normalizedVideos = videoQuestions.map(normalizedPool)
+        let expandedVideos = videoQuestions.map { pool($0, expansion: videoExpansion) }
+
+        print(String(format: "\nphrasing: image overlap raw %.2f, normalized %.2f, expanded %.2f",
+                     meanOverlap(rawImages), meanOverlap(normalizedImages),
+                     meanOverlap(expandedImages)))
+        print(String(format: "phrasing: video overlap raw %.2f, normalized %.2f, expanded %.2f",
+                     meanOverlap(rawVideos), meanOverlap(normalizedVideos),
+                     meanOverlap(expandedVideos)))
+        print("phrasing: image top " + expandedImages.compactMap(\.first).joined(separator: " "))
+        print("phrasing: video top " + expandedVideos.compactMap(\.first).joined(separator: " "))
+        printRetention(questions: imageQuestions, raw: rawImages, expanded: expandedImages)
+        printRetention(questions: videoQuestions, raw: rawVideos, expanded: expandedVideos)
+        check("image phrasings share a top tool",
+              Set(expandedImages.compactMap(\.first)) == ["magick"])
+        check("video phrasings share a top tool",
+              Set(expandedVideos.compactMap(\.first)) == ["ffmpeg"])
+    }
+
+    static func printRetention(questions: [String], raw: [[String]], expanded: [[String]]) {
+        for index in questions.indices {
+            let rawTop = Set(raw[index].prefix(3))
+            let retained = rawTop.intersection(expanded[index]).count
+            print("phrasing: \(questions[index]) raw-top-3 retention \(retained)/\(rawTop.count)")
+        }
+    }
+
+    static func pool(_ question: String, expansion: String?) -> [String] {
+        Asker.candidatePool(question: question, expansion: expansion,
+                            in: phrasingCorpus, limit: 3).map(\.name)
+    }
+
+    static func normalizedPool(_ question: String) -> [String] {
+        let normalized = AskIndex.weighted(AskIndex.terms(question)).keys.sorted()
+            .joined(separator: " ")
+        return AskIndex.rank(normalized, in: phrasingCorpus, limit: 3).map(\.entry.name)
+    }
+
+    static func meanOverlap(_ pools: [[String]]) -> Double {
+        var overlaps: [Double] = []
+        for left in pools.indices {
+            for right in pools.indices where right > left {
+                let a = Set(pools[left])
+                let b = Set(pools[right])
+                overlaps.append(Double(a.intersection(b).count) / Double(a.union(b).count))
+            }
+        }
+        return overlaps.reduce(0, +) / Double(max(overlaps.count, 1))
+    }
+
     // MARK: - Answer validation
 
     static func answers() {
@@ -330,7 +411,55 @@ enum AskHarness {
         let query = "pretty print json"
         let t0 = Date()
         for _ in 0..<20 { _ = AskIndex.rank(query, in: built.entries, limit: 5) }
-        print(String(format: "  rank: %.1f ms", Date().timeIntervalSince(t0) * 1000 / 20))
+        print(String(format: "  rank raw: %.1f ms", Date().timeIntervalSince(t0) * 1000 / 20))
+        let normalized = AskIndex.weighted(AskIndex.terms(query)).keys.sorted()
+            .joined(separator: " ")
+        let t1 = Date()
+        for _ in 0..<20 {
+            _ = AskIndex.rank(query, in: built.entries, limit: 5)
+            _ = AskIndex.rank(normalized, in: built.entries, limit: 5)
+        }
+        print(String(format: "  rank dual-pool: %.1f ms",
+                     Date().timeIntervalSince(t1) * 1000 / 20))
+        let t2 = Date()
+        for _ in 0..<20 {
+            _ = Asker.candidatePool(question: query,
+                                    expansion: "json format pretty print serialize",
+                                    in: built.entries, limit: 5)
+        }
+        print(String(format: "  rank expanded: %.1f ms",
+                     Date().timeIntervalSince(t2) * 1000 / 20))
+    }
+
+    static func measureExpansion() async {
+        let path = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        let entries = AskIndex.build(shellPath: path, packDescriptions: [:]).entries
+        let questions = imageQuestions + videoQuestions
+        var milliseconds: [Double] = []
+        var successes = 0
+        var firstPools: [String: [String]] = [:]
+        for run in 0..<15 {
+            let question = questions[run % questions.count]
+            let started = Date()
+            let expansion = await Asker.boundedExpansion(
+                question: question, timeout: 2,
+                expand: { try await Asker.expandedSearchTerms($0) }
+            )
+            milliseconds.append(Date().timeIntervalSince(started) * 1000)
+            if expansion != nil { successes += 1 }
+            if firstPools[question] == nil {
+                firstPools[question] = Asker.candidatePool(
+                    question: question, expansion: expansion, in: entries, limit: 10
+                ).map(\.name)
+            }
+        }
+        let sorted = milliseconds.sorted()
+        let p50 = sorted[sorted.count / 2]
+        print(String(format: "\nexpansion: 15 runs, %d succeeded, p50 %.1f ms, max %.1f ms",
+                     successes, p50, sorted.last ?? 0))
+        for question in questions {
+            print("  \(question): " + (firstPools[question] ?? []).joined(separator: " "))
+        }
     }
 
     // MARK: - The job gate

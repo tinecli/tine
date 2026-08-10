@@ -88,3 +88,62 @@ struct AskExampleTests {
         #expect(!Asker.isSafeExample("ls scratch.txt", validation: .ok(dangerous: true)))
     }
 }
+
+struct AskRetrievalTests {
+    static let corpus = [
+        AskEntry(name: "shrinker", description: "shrink media files"),
+        AskEntry(name: "encoder", description: "compress and encode movies"),
+        AskEntry(name: "jq", description: "process JSON"),
+    ]
+
+    @Test func expansionUnionsRawAndExpandedTerms() {
+        let raw = Asker.candidatePool(question: "shrink a video", expansion: nil,
+                                      in: Self.corpus, limit: 3)
+        let expanded = Asker.candidatePool(
+            question: "shrink a video", expansion: "compress encode movie",
+            in: Self.corpus, limit: 3
+        )
+
+        #expect(raw.map(\.name) == ["shrinker"])
+        #expect(Set(expanded.map(\.name)) == ["shrinker", "encoder"])
+    }
+
+    @Test func expansionDropsStopwordsBeforeTruncatingTerms() {
+        let entries = [AskEntry(name: "metadata-tool", description: "read heic jpeg exif metadata")]
+        let expansion = "Here are some command-line tools that can help you with what you need: "
+            + "heic jpeg exif"
+        let expanded = Asker.candidatePool(
+            question: "something unrelated", expansion: expansion, in: entries, limit: 3
+        )
+
+        #expect(expanded.map(\.name) == ["metadata-tool"])
+    }
+
+    @Test func expansionErrorFailsOpenToRawRanking() async {
+        struct Unavailable: Error {}
+        let raw = Asker.candidatePool(question: "shrink a video", expansion: nil,
+                                      in: Self.corpus, limit: 3)
+        let failed = await Asker.retrievalCandidates(
+            question: "shrink a video", in: Self.corpus, limit: 3,
+            expansionTimeout: 0.1,
+            expand: { _ in throw Unavailable() }
+        )
+
+        #expect(failed == raw)
+    }
+
+    @Test func expansionTimeoutFailsOpenToRawRanking() async {
+        let raw = Asker.candidatePool(question: "shrink a video", expansion: nil,
+                                      in: Self.corpus, limit: 3)
+        let timedOut = await Asker.retrievalCandidates(
+            question: "shrink a video", in: Self.corpus, limit: 3,
+            expansionTimeout: 0.01,
+            expand: { _ in
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+                return "compress encode video"
+            }
+        )
+
+        #expect(timedOut == raw)
+    }
+}

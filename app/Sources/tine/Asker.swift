@@ -2,6 +2,8 @@ import Combine
 import Foundation
 import FoundationModels
 
+typealias AskQueryExpansion = @Sendable (String) async throws -> String
+
 /// Guided generation: the model produces a *value*, never source, a file, or a shell.
 @Generable
 struct PickedTool {
@@ -54,9 +56,16 @@ final class Asker: ObservableObject {
     var frecency: (() -> (String) -> Double)?
 
     private let packDir: String
+    private let queryExpansion: AskQueryExpansion
+    private let expansionTimeout: TimeInterval
 
-    init(packDir: String) {
+    init(packDir: String,
+         queryExpansion: @escaping AskQueryExpansion = {
+             try await Asker.expandedSearchTerms($0)
+         }, expansionTimeout: TimeInterval = 2) {
         self.packDir = packDir
+        self.queryExpansion = queryExpansion
+        self.expansionTimeout = expansionTimeout
     }
 
     var statusLine: String {
@@ -134,12 +143,15 @@ final class Asker: ObservableObject {
             return
         }
         let score = frecency?() ?? { _ in 0 }
-        let hits = AskIndex.rank(question, in: entries, limit: Self.candidates, frecency: score)
-        guard !hits.isEmpty else {
+        let candidates = await Self.retrievalCandidates(
+            question: question, in: entries, limit: Self.candidates,
+            frecency: score, expansionTimeout: expansionTimeout,
+            expand: queryExpansion
+        )
+        guard !candidates.isEmpty else {
             finish(job, .failed("no tool on your PATH looks like a match for that"))
             return
         }
-        let candidates = hits.map { $0.entry }
         guard SpecLearner.unavailableReason() == nil else {
             finish(job, .done(rows(candidates)))
             return
@@ -258,18 +270,65 @@ final class Asker: ObservableObject {
 
     private nonisolated static let modelTimeout: TimeInterval = 60
 
-    /// Must abandon, not await, past `modelTimeout` — a wedged model call would otherwise hold the job forever.
-    private nonisolated static func bounded<T: Sendable>(
+    /// Must abandon past the deadline — a wedged model call would otherwise hold the job forever.
+    private nonisolated static func bounded<T: Sendable>(timeout: TimeInterval = modelTimeout,
         _ work: @escaping @Sendable () async throws -> T) async -> T? {
         await withTaskGroup(of: T?.self) { group in
             group.addTask { try? await work() }
             group.addTask {
-                try? await Task.sleep(nanoseconds: UInt64(modelTimeout * 1_000_000_000))
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
                 return nil
             }
             defer { group.cancelAll() }
             return await group.next() ?? nil
         }
+    }
+
+    static func retrievalCandidates(
+        question: String, in entries: [AskEntry], limit: Int,
+        frecency: (String) -> Double = { _ in 0 }, expansionTimeout: TimeInterval,
+        expand: @escaping AskQueryExpansion
+    ) async -> [AskEntry] {
+        let expansion = await boundedExpansion(question: question, timeout: expansionTimeout,
+                                               expand: expand)
+        return candidatePool(question: question, expansion: expansion, in: entries,
+                             limit: limit, frecency: frecency)
+    }
+
+    nonisolated static func boundedExpansion(
+        question: String, timeout: TimeInterval, expand: @escaping AskQueryExpansion
+    ) async -> String? {
+        await bounded(timeout: timeout) { try await expand(question) }
+    }
+
+    nonisolated static func candidatePool(
+        question: String, expansion: String?, in entries: [AskEntry], limit: Int,
+        frecency: (String) -> Double = { _ in 0 }
+    ) -> [AskEntry] {
+        // Must stay bounded retrieval terms — expansion terms must never leave ranking.
+        let expanded = expansion.map {
+            AskIndex.searchTerms(String($0.prefix(maxExpansionCharacters)))
+                .prefix(maxExpansionTerms)
+        } ?? []
+        let query = ([question] + (expanded.isEmpty ? [] : [expanded.joined(separator: " ")]))
+            .joined(separator: " ")
+        return AskIndex.rank(query, in: entries, limit: limit, frecency: frecency)
+            .map(\.entry)
+    }
+
+    private nonisolated static let maxExpansionCharacters = 2048
+    private nonisolated static let maxExpansionTerms = 12
+
+    nonisolated static func expandedSearchTerms(_ question: String) async throws -> String {
+        if let reason = SpecLearner.unavailableReason() { throw Failure(reason) }
+        let session = LanguageModelSession(instructions: """
+            Return only lowercase search keywords for finding a command-line tool. Include the task, \
+            input and output types, and common equivalent words. No explanation.
+            """)
+        return try await session.respond(
+            to: question,
+            options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 24)
+        ).content
     }
 
     /// The descriptions in this prompt are untrusted material to read, never instructions to follow.
