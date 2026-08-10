@@ -191,6 +191,7 @@ enum AskIndex {
         let toolName = explicitName ?? mdocToolName(in: source)
         let text = lines.compactMap { line -> String? in
             if line.hasPrefix(".\\\"") || line.hasPrefix(".\"") { return nil }
+            if isHeading(line) { return nil }
             guard line.hasPrefix(".") || line.hasPrefix("'") else { return String(line) }
             return mdocExampleLine(String(line), toolName: toolName)
         }.joined(separator: " ")
@@ -222,22 +223,24 @@ enum AskIndex {
         let quoted: Bool
     }
 
-    private static let mdocWrappers: Set<String> = ["D1", "Dl", "It", "Ss"]
-    private static let mdocDroppedLineMacros: Set<String> = ["Bd", "Bl", "Ed", "El", "Pp"]
+    private static let mdocWrappers: Set<String> = ["D1", "Dl", "It"]
+    private static let mdocDroppedLineMacros: Set<String> = [
+        "Bd", "Bl", "Ed", "El", "Pp", "Ss", "Vb", "Ve",
+    ]
     private static let mdocArguments: Set<String> = [
         "Ar", "Cm", "Dv", "Em", "Ev", "Ic", "Li", "No", "Pa", "Sy", "Va",
     ]
     private static let mdocQuoteDelimiters: [String: (String, String)] = [
         "Aq": ("<", ">"), "Bq": ("[", "]"), "Brq": ("{", "}"),
-        "Dq": ("\"", "\""), "Pq": ("(", ")"), "Ql": ("`", "'"),
-        "Qq": ("\"", "\""), "Sq": ("`", "'"),
+        "Dq": ("\"", "\""), "Pq": ("(", ")"), "Ql": ("'", "'"),
+        "Qq": ("\"", "\""), "Sq": ("'", "'"),
     ]
     private static let mdocDroppedInlineMacros: Set<String> = [
         "Dc", "Do", "Oc", "Oo", "Op", "Qc", "Qo", "Sc", "So",
     ]
     private static let translatedMdocMacros = mdocArguments
         .union(mdocQuoteDelimiters.keys).union(mdocDroppedInlineMacros)
-        .union(["Fl", "Nm", "Ns", "Pf"])
+        .union(["Fl", "Nm", "Ns", "Pf", "Xr"])
 
     private static func mdocExampleLine(_ line: String, toolName: String?) -> String? {
         let fields = line.split(maxSplits: 1, whereSeparator: \.isWhitespace)
@@ -293,13 +296,14 @@ enum AskIndex {
                     piece = toolName
                 }
             case "Fl":
-                piece = "-"
-                if index + 1 < tokens.count,
-                   tokens[index + 1].quoted
-                    || !translatedMdocMacros.contains(tokens[index + 1].text) {
-                    piece += tokens[index + 1].text
+                var flags: [String] = []
+                while index + 1 < tokens.count,
+                      tokens[index + 1].quoted
+                        || !translatedMdocMacros.contains(tokens[index + 1].text) {
+                    flags.append("-" + tokens[index + 1].text)
                     index += 1
                 }
+                piece = flags.isEmpty ? "-" : flags.joined(separator: " ")
             case "Ns":
                 joinNext = true
             case "Pf":
@@ -323,6 +327,15 @@ enum AskIndex {
                 piece = delimiters.0
                 pieceJoinsFollowing = true
                 quoteClosings.append(delimiters.1)
+            case "Xr":
+                guard index + 2 < tokens.count else { return nil }
+                let name = tokens[index + 1]
+                let section = tokens[index + 2]
+                guard name.quoted || !translatedMdocMacros.contains(name.text),
+                      section.quoted || !translatedMdocMacros.contains(section.text)
+                else { return nil }
+                piece = "\(name.text)(\(section.text))"
+                index += 2
             default:
                 break
             }
@@ -357,7 +370,12 @@ enum AskIndex {
             let next = source.index(after: index)
             if !quoted, character == "\\", next < source.endIndex, source[next] == "\"" { break }
             if character == "\"", !previousWasBackslash {
-                if quoted {
+                if quoted, next < source.endIndex, source[next] == "\"" {
+                    text.append(character)
+                    index = source.index(after: next)
+                    previousWasBackslash = false
+                    continue
+                } else if quoted {
                     quoted = false
                     if !tokenWasQuoted { text.append(character) }
                 } else {

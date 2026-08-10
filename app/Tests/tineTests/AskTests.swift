@@ -5,6 +5,7 @@ struct AskExampleTests {
     static let translations: [(String, String)] = [
         (".Dl Nm", "tool"),
         (".Dl Nm Fl x", "tool -x"),
+        (".Dl Nm Fl a b", "tool -a -b"),
         (".Dl Nm Pa /tmp/archive", "tool /tmp/archive"),
         (".Dl Nm Ar source", "tool source"),
         (#".It Li "tool --literal value""#, "tool --literal value"),
@@ -14,12 +15,18 @@ struct AskExampleTests {
         (".Dl Nm No text", "tool text"),
         (".Dl Nm replacement", "replacement"),
         (".Dl Nm Qq Li value", "tool \"value\""),
+        (".Dl Nm Ql value", "tool 'value'"),
+        (".Dl Nm Sq value", "tool 'value'"),
         (".Dl Nm Pq Fl x", "tool (-x)"),
+        (".Dl Xr ls 1", "ls(1)"),
+        (#".Dl "date ""+%Y%m%d""""#, #"date "+%Y%m%d""#),
         (".Dl Dq multi word arg", "\"multi word arg\""),
         (#".Dl csreq -r="identifier com.foo.test" -b output.csreq"#,
          #"csreq -r="identifier com.foo.test" -b output.csreq"#),
         (#".It Li "tool --list" \" trailing comment"#, "tool --list"),
         (".Dl Nm Ns Pa suffix", "toolsuffix"),
+        (".Vb 1\ntool --verbatim\n.Ve", "tool --verbatim"),
+        (".Ss First form\n.Dl Nm Fl first", "tool -first"),
     ]
 
     static func page(example: String) -> String {
@@ -55,13 +62,29 @@ struct AskExampleTests {
     @Test func examplesContinueThroughSubsectionHeadings() {
         let page = ".SH NAME\ntool \\- a tool\n.SH EXAMPLES\n"
             + ".SS First form\n.B tool --first\n.SH SEE ALSO\n"
-        #expect(AskIndex.examples(inManPage: page) == "First form tool --first")
+        #expect(AskIndex.examples(inManPage: page) == "tool --first")
     }
 
     @Test func mdocExamplesContinueThroughSubsectionHeadings() {
         let page = ".Sh NAME\n.Nm tool\n.Sh EXAMPLES\n"
             + ".Ss First form\n.Dl Nm Fl first\n.Sh SEE ALSO\n"
-        #expect(AskIndex.examples(inManPage: page) == "First form tool -first")
+        #expect(AskIndex.examples(inManPage: page) == "tool -first")
+    }
+
+    @Test func mdocLiteralQuotesDoNotHideRejectedShellSyntax() {
+        let example = AskIndex.examples(
+            inManPage: Self.page(example: ".Dl Nm Ql value | Nm Ar file")
+        )
+        #expect(example == "tool 'value | tool file'")
+        #expect(Asker.checked(example ?? "", installed: ["tool"]) == nil)
+    }
+
+    @Test(arguments: ["Ql", "Sq"])
+    func mdocLiteralQuotesRemainCheckedEligible(_ macro: String) {
+        let example = AskIndex.examples(
+            inManPage: Self.page(example: ".Dl Nm \(macro) value")
+        )
+        #expect(Asker.checked(example ?? "", installed: ["tool"]) == "tool 'value'")
     }
 
     @Test func nameStopsAtRoffSubsectionHeadings() {
