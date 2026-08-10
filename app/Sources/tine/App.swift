@@ -359,6 +359,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ownerPID != nil && NSWorkspace.shared.frontmostApplication?.processIdentifier == ownerPID
     }
 
+    /// Settings changes the panel's geometry while it stays visible.
+    func relayoutPanel() {
+        panel?.relayout()
+    }
+
     /// Hide the panel, stop watching the owner, and disown it — app and session
     /// both. Cancels the pending present and refresh too, so nothing scheduled
     /// before the dismiss can undo it — and with no owner, nothing scheduled after

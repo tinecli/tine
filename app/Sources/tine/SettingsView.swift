@@ -12,6 +12,8 @@ struct SettingsView: View {
     @State private var selectedSpecDir: Int?
     @State private var startAtLogin = SMAppService.mainApp.status == .enabled
     @State private var pane: Pane? = .general
+    @StateObject private var previewState = AppState.appearancePreview()
+    @State private var previewWidth: CGFloat = 0
     private let refresh = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
 
     /// Sidebar sections of the settings window.
@@ -94,6 +96,7 @@ struct SettingsView: View {
     @ViewBuilder private var appearancePane: some View {
         Section {
             Toggle("Liquid glass", isOn: bind(\.glass))
+            Toggle("Detail pane (⌃K)", isOn: bind(\.showDetail))
             Picker("Font", selection: bind(\.fontName)) {
                 ForEach(fonts, id: \.0) { Text($0.1).tag($0.0) }
             }
@@ -106,6 +109,49 @@ struct SettingsView: View {
                 }
             }
         }
+        Section {
+            preview
+        } header: {
+            Text("Preview")
+        } footer: {
+            Text("Four sample rows, drawn by the real panel over a mock terminal.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private var preview: some View {
+        let size = SuggestionListView.panelSize(rows: previewState.suggestions.count,
+                                                config: previewState.config)
+        let scale = previewWidth > 0 ? min(1, previewWidth / size.width) : 1
+        return ZStack(alignment: .topLeading) {
+            terminalBackdrop
+            SuggestionListView()
+                .environmentObject(previewState)
+                .allowsHitTesting(false)
+                .frame(width: size.width, height: size.height)
+                .scaleEffect(scale, anchor: .topLeading)
+                .frame(width: size.width * scale, height: size.height * scale,
+                       alignment: .topLeading)
+                .padding(.top, 18)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { previewWidth = $0 }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(.black.opacity(0.88)))
+        .onChange(of: state.config, initial: true) { _, cfg in previewState.config = cfg }
+    }
+
+    private var terminalBackdrop: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(verbatim: "~/dev/tine $ git status").foregroundStyle(.green.opacity(0.8))
+            Text(verbatim: "On branch main").foregroundStyle(.white.opacity(0.45))
+            Text(verbatim: "Your branch is up to date with 'origin/main'.")
+                .foregroundStyle(.white.opacity(0.45))
+            Text(verbatim: "nothing to commit, working tree clean")
+                .foregroundStyle(.white.opacity(0.45))
+            Text(verbatim: "~/dev/tine $ git pu").foregroundStyle(.green.opacity(0.8))
+        }
+        .font(.system(size: 10, design: .monospaced))
     }
 
     @ViewBuilder private var suggestionsPane: some View {
@@ -246,7 +292,10 @@ struct SettingsView: View {
 
     private func bind<V>(_ keyPath: WritableKeyPath<TineConfig, V>) -> Binding<V> {
         Binding(get: { state.config[keyPath: keyPath] },
-                set: { state.config[keyPath: keyPath] = $0 })
+                set: {
+                    state.config[keyPath: keyPath] = $0
+                    (NSApp.delegate as? AppDelegate)?.relayoutPanel()
+                })
     }
 
     private func openPane(_ path: String) {
@@ -283,5 +332,27 @@ struct SettingsView: View {
             try? FileManager.default.createDirectory(atPath: "\(dir)/\(sub)", withIntermediateDirectories: true)
         }
         NSWorkspace.shared.open(URL(fileURLWithPath: dir))
+    }
+}
+
+private extension AppState {
+    static func appearancePreview() -> AppState {
+        let state = AppState(persists: false)
+        state.suggestions = [
+            Suggestion(name: "push", description: "Update remote refs along with associated objects",
+                       insertValue: "push", shouldAddSpace: true, type: "subcommand",
+                       queryTerm: "pu", isDangerous: false, matchIndices: [0, 1]),
+            Suggestion(name: "--set-upstream", description: "Set the upstream for the current branch",
+                       insertValue: "--set-upstream", shouldAddSpace: true, type: "option",
+                       queryTerm: "", isDangerous: false, matchIndices: []),
+            Suggestion(name: "--force", description: "Overwrite the remote branch",
+                       insertValue: "--force", shouldAddSpace: true, type: "option",
+                       queryTerm: "", isDangerous: true, matchIndices: []),
+            Suggestion(name: "origin", description: "from history",
+                       insertValue: "origin", shouldAddSpace: true, type: "history",
+                       queryTerm: "", isDangerous: false, matchIndices: []),
+        ]
+        state.selectedIndex = 1
+        return state
     }
 }

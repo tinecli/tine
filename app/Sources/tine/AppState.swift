@@ -12,9 +12,17 @@ final class AppState: ObservableObject {
     @Published var isLoading = false
     @Published var config = TineConfig.load() {
         didSet {
+            guard persists else { return }
             config.save()
             engine?.setFirstTokenEnabled(config.firstTokenCompletion)
         }
+    }
+
+    /// The Appearance preview mirrors live config and must never write it back.
+    private let persists: Bool
+
+    init(persists: Bool = true) {
+        self.persists = persists
     }
 
     var engine: JSEngine?
