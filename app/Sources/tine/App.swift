@@ -72,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.frecency.load()
             DispatchQueue.main.async {
                 self.state.engine?.setFrecency(self.frecency.index)
+                self.selectProjectFrecency(for: self.state.cwd)
                 self.state.engine?.setHistoryValues(self.frecency.valueIndex)
             }
         }
@@ -86,6 +87,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 self.lastFeed = (req.anchorRow, req.anchorCol, req.cols, req.rows,
                                  req.cellW, req.cellH, req.cursor, req.buffer)
+                if req.cwd != self.state.cwd {
+                    self.state.engine?.setProjectFrecency(
+                        self.frecency.scopedIndex(for: req.cwd))
+                }
+                self.resolveProjectFrecency(for: req.cwd)
                 self.state.update(feed)
                 if verdict.changed, let app = verdict.appPID {
                     // Must only update here — an async redraw from a background terminal
@@ -129,8 +135,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                        self.state.selectedType != "learn-it" {
                         let cmd = req.buffer.split(whereSeparator: { $0 == " " || $0 == "\t" })
                             .first.map(String.init) ?? ""
-                        if let params = self.frecency.record(cmd: cmd, param: name) {
-                            self.state.engine?.setFrecencyCommand(cmd, params: params)
+                        if let result = self.frecency.record(cmd: cmd, param: name, cwd: req.cwd) {
+                            self.state.engine?.setFrecencyCommand(cmd, params: result.global)
+                            if let scoped = result.scoped {
+                                self.state.engine?.setProjectFrecencyCommand(cmd, params: scoped)
+                            }
                         }
                     }
                     self.dismissPanel()
@@ -222,6 +231,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tlog("listening on \(sockPath) (AX trusted: \(AXCaret.isTrusted))")
 
         CommandRunner.onRefresh = { [weak self] in self?.scheduleRefresh() }
+    }
+
+    private func selectProjectFrecency(for cwd: String) {
+        state.engine?.setProjectFrecency(frecency.scopedIndex(for: cwd))
+        resolveProjectFrecency(for: cwd)
+    }
+
+    private func resolveProjectFrecency(for cwd: String) {
+        frecency.resolveProjectRoot(for: cwd) { [weak self] index in
+            DispatchQueue.main.async {
+                guard let self, self.state.cwd == cwd else { return }
+                self.state.engine?.setProjectFrecency(index)
+            }
+        }
     }
 
     private func applyAliases(_ dump: String) -> Int {

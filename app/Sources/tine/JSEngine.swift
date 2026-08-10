@@ -69,6 +69,23 @@ final class JSEngine {
         index.setObject(bridged as NSDictionary, forKeyedSubscript: cmd as NSString)
     }
 
+    func setProjectFrecency(_ index: Frecency.Index) {
+        guard ready else { return }
+        let bridged = index.mapValues {
+            $0.mapValues { ["count": Double($0.count), "lastUsed": $0.lastUsed] }
+        }
+        ctx.setObject(bridged as NSDictionary,
+                      forKeyedSubscript: "__tineProjectFrecency" as NSString)
+    }
+
+    func setProjectFrecencyCommand(_ cmd: String, params: [String: Frecency.Use]) {
+        guard ready,
+              let index = ctx.objectForKeyedSubscript("__tineProjectFrecency"),
+              index.isObject else { return }
+        let bridged = params.mapValues { ["count": Double($0.count), "lastUsed": $0.lastUsed] }
+        index.setObject(bridged as NSDictionary, forKeyedSubscript: cmd as NSString)
+    }
+
     func setHistoryValues(_ index: [String: [String: [String: Frecency.Use]]]) {
         guard ready else { return }
         let bridged = index.mapValues {

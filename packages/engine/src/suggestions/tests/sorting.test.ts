@@ -51,10 +51,14 @@ describe("frecencyBoost", () => {
 
 describe("updatePriorities", () => {
   const sub = (name: string): Suggestion => ({ name, type: "subcommand" });
-  const host = globalThis as { __tineFrecency?: unknown };
+  const host = globalThis as {
+    __tineFrecency?: unknown;
+    __tineProjectFrecency?: unknown;
+  };
 
   afterEach(() => {
     host.__tineFrecency = undefined;
+    host.__tineProjectFrecency = undefined;
   });
 
   it("orders the used band by frequency, not by timestamp alone", () => {
@@ -71,5 +75,52 @@ describe("updatePriorities", () => {
     expect(commit.priority).toBeGreaterThan(bisect.priority ?? 0);
     expect(bisect.priority).toBeGreaterThan(unused.priority ?? 0);
     expect(commit.priority).toBeLessThan(76);
+  });
+
+  it("blends project frecency strongly enough to rank the local Terraform command first", () => {
+    const usedAt = Date.now();
+    host.__tineFrecency = {
+      git: {
+        checkout: { count: 20, lastUsed: usedAt },
+        bisect: { count: 1, lastUsed: usedAt - 60 * 60 * 1000 },
+      },
+    };
+    host.__tineProjectFrecency = {
+      git: { bisect: { count: 15, lastUsed: usedAt } },
+    };
+
+    const [checkout, bisect] = updatePriorities(
+      [sub("checkout"), sub("bisect")],
+      "git",
+    );
+    expect(checkout.name).toBe("checkout");
+    expect(bisect.name).toBe("bisect");
+    expect(bisect.priority).toBeGreaterThan(checkout.priority ?? 0);
+
+    const ranked = [checkout, bisect].sort(
+      (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
+    );
+    expect(ranked[0]?.name).toBe("bisect");
+  });
+
+  it("never lets project frecency cross a priority band", () => {
+    host.__tineFrecency = {
+      git: {
+        lower: { count: 1, lastUsed: now },
+      },
+    };
+    host.__tineProjectFrecency = {
+      git: { lower: { count: 10_000, lastUsed: now } },
+    };
+
+    const [lower, higher] = updatePriorities(
+      [
+        { ...sub("lower"), priority: 75 },
+        { ...sub("higher"), priority: 76 },
+      ],
+      "git",
+    );
+    expect(lower.priority).toBeLessThan(76);
+    expect(higher.priority).toBe(76);
   });
 });

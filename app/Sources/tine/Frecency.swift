@@ -2,6 +2,8 @@ import Foundation
 
 /// The write is debounced behind `queue` — accepting a suggestion must never block on disk I/O.
 final class Frecency {
+    typealias Index = [String: [String: Use]]
+
     struct Use: Codable {
         var count: Int
         var lastUsed: Double
@@ -26,6 +28,26 @@ final class Frecency {
         }
     }
 
+    struct RecordResult {
+        let global: [String: Use]
+        let scoped: [String: Use]?
+    }
+
+    private struct Store: Codable {
+        var global: Index
+        var scoped: [String: Index]
+    }
+
+    private enum CachedProjectRoot {
+        case root(String)
+        case missing(expiresAt: TimeInterval)
+    }
+
+    private enum ProjectRootCacheLookup {
+        case hit(String?)
+        case miss(String)
+    }
+
     static let storePath = "\(NSHomeDirectory())/.local/share/tine/frecency.json"
     private static let defaultHistoryPath = "\(NSHomeDirectory())/.zsh_history"
     private static let maxHistoryLines = 8000
@@ -34,11 +56,15 @@ final class Frecency {
     private static let maxLiveEntries = 5000
     private static let maxValuesPerKey = 20
     private static let writeDelay = 1.0
+    private static let projectRootMissTTL: TimeInterval = 30
     private static let halfLifeMs = 7.0 * 24 * 60 * 60 * 1000
 
     private let queue = DispatchQueue(label: "tine.frecency", qos: .utility)
-    private var merged: [String: [String: Use]] = [:]
-    private var live: [String: [String: Use]] = [:]
+    private var merged: Index = [:]
+    private var live: Index = [:]
+    private var scoped: [String: Index] = [:]
+    private var projectRoots: [String: CachedProjectRoot] = [:]
+    private var projectRootCallbacks: [String: [(Index) -> Void]] = [:]
     private var aliases: [String: String] = [:]
     /// Must never be persisted — a value is more likely than a flag to be a secret.
     private var values: [String: [String: [String: Use]]] = [:]
@@ -46,24 +72,74 @@ final class Frecency {
     private var loaded = false
     private var ignore = HistoryIgnore.none
     private let historyPath: String
+    private let storePath: String
     private let logPath: String
+    private let projectRootMissTTL: TimeInterval
 
-    init(historyPath: String = Frecency.defaultHistoryPath, logPath: String = TineLog.path) {
+    init(historyPath: String = Frecency.defaultHistoryPath,
+         storePath: String = Frecency.storePath,
+         logPath: String = TineLog.path,
+         projectRootMissTTL: TimeInterval = Frecency.projectRootMissTTL) {
         self.historyPath = historyPath
+        self.storePath = storePath
         self.logPath = logPath
+        self.projectRootMissTTL = projectRootMissTTL
     }
 
-    var index: [String: [String: Use]] { queue.sync { merged } }
+    var index: Index { queue.sync { merged } }
     var valueIndex: [String: [String: [String: Use]]] { queue.sync { values } }
+
+    func scopedIndex(for cwd: String) -> Index {
+        queue.sync {
+            guard case let .hit(root?) = cachedProjectRoot(for: cwd) else { return [:] }
+            return scoped[root] ?? [:]
+        }
+    }
+
+    func projectRoot(for cwd: String) -> String? {
+        queue.sync {
+            guard case let .hit(root) = cachedProjectRoot(for: cwd) else { return nil }
+            return root
+        }
+    }
+
+    func resolveProjectRoot(for cwd: String, completion: @escaping (Index) -> Void) {
+        let start = queue.sync { () -> String? in
+            guard case let .miss(standardized) = cachedProjectRoot(for: cwd) else {
+                return nil
+            }
+            projectRootCallbacks[standardized, default: []].append(completion)
+            return projectRootCallbacks[standardized]?.count == 1 ? standardized : nil
+        }
+        guard let start else { return }
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let root = Self.findProjectRoot(startingAt: start)
+            self?.queue.async { [weak self] in
+                guard let self else { return }
+                self.projectRoots[start] = root.map(CachedProjectRoot.root)
+                    ?? .missing(expiresAt: Date().timeIntervalSince1970
+                        + self.projectRootMissTTL)
+                let index = root.flatMap { self.scoped[$0] } ?? [:]
+                let callbacks = self.projectRootCallbacks.removeValue(forKey: start) ?? []
+                callbacks.forEach { $0(index) }
+            }
+        }
+    }
 
     func setAliases(_ aliases: [String: String]) {
         queue.sync { self.aliases = aliases }
     }
 
     func load() {
-        let stored = Self.readStore()
+        let stored = readStore()
         queue.sync {
-            Self.merge(stored, into: &live)
+            Self.merge(stored.global, into: &live)
+            for (root, index) in stored.scoped {
+                var current = scoped[root] ?? [:]
+                Self.merge(index, into: &current)
+                scoped[root] = current
+            }
             pruneLive()
             loaded = true
             rebuild()
@@ -89,15 +165,54 @@ final class Frecency {
         values = history.values
     }
 
-    func record(cmd: String, param: String) -> [String: Use]? {
+    func record(cmd: String, param: String, cwd: String) -> RecordResult? {
         guard !cmd.isEmpty, !param.isEmpty, !param.contains("↪"), !param.contains(" ") else { return nil }
         let now = Date().timeIntervalSince1970 * 1000
         return queue.sync {
             Self.bump(&live, cmd, param, now)
             Self.bump(&merged, cmd, param, now)
+            let root: String?
+            if case let .hit(cached) = cachedProjectRoot(for: cwd) {
+                root = cached
+            } else {
+                root = nil
+            }
+            if let root {
+                var project = scoped[root] ?? [:]
+                Self.bump(&project, cmd, param, now)
+                scoped[root] = project
+            }
             scheduleWrite()
-            return merged[cmd]
+            guard let global = merged[cmd] else { return nil }
+            return RecordResult(global: global, scoped: root.flatMap { scoped[$0]?[cmd] })
         }
+    }
+
+    private func cachedProjectRoot(for cwd: String) -> ProjectRootCacheLookup {
+        guard cwd.hasPrefix("/") else { return .hit(nil) }
+        let standardized = URL(fileURLWithPath: cwd, isDirectory: true).standardized.path
+        guard let cached = projectRoots[standardized] else { return .miss(standardized) }
+        switch cached {
+        case let .root(root):
+            return .hit(root)
+        case let .missing(expiresAt):
+            guard Date().timeIntervalSince1970 >= expiresAt else { return .hit(nil) }
+            projectRoots[standardized] = nil
+            return .miss(standardized)
+        }
+    }
+
+    private static func findProjectRoot(startingAt cwd: String) -> String? {
+        var directory = cwd
+        while true {
+            if FileManager.default.fileExists(atPath: directory + "/.git") {
+                return directory
+            }
+            let parent = (directory as NSString).deletingLastPathComponent
+            if parent == directory { break }
+            directory = parent
+        }
+        return nil
     }
 
     func flush() {
@@ -137,32 +252,43 @@ final class Frecency {
         // Must retry, not drop: writing before `load` finishes replaces the whole store with just this session's picks.
         guard loaded else { scheduleWrite(); return }
         pruneLive()
-        guard let data = try? JSONEncoder().encode(live) else { return }
-        let dir = (Self.storePath as NSString).deletingLastPathComponent
+        guard let data = try? JSONEncoder().encode(Store(global: live, scoped: scoped)) else { return }
+        let dir = (storePath as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        try? data.write(to: URL(fileURLWithPath: Self.storePath), options: .atomic)
+        try? data.write(to: URL(fileURLWithPath: storePath), options: .atomic)
     }
 
     private func pruneLive() {
-        guard live.values.reduce(0, { $0 + $1.count }) > Self.maxLiveEntries else { return }
-        let keep = live
+        live = Self.pruned(live)
+        scoped = scoped.mapValues(Self.pruned)
+    }
+
+    private static func pruned(_ index: Index) -> Index {
+        guard index.values.reduce(0, { $0 + $1.count }) > maxLiveEntries else { return index }
+        let keep = index
             .flatMap { cmd, params in params.map { (cmd: cmd, param: $0.key, use: $0.value) } }
             .sorted { $0.use.lastUsed > $1.use.lastUsed }
-            .prefix(Self.maxLiveEntries)
-        live = keep.reduce(into: [String: [String: Use]]()) { acc, e in
+            .prefix(maxLiveEntries)
+        return keep.reduce(into: Index()) { acc, e in
             acc[e.cmd, default: [:]][e.param] = e.use
         }
     }
 
     /// Must move a corrupt store aside, not discard it — the next write would otherwise overwrite it for good.
-    private static func readStore() -> [String: [String: Use]] {
-        guard let data = FileManager.default.contents(atPath: storePath) else { return [:] }
-        if let obj = try? JSONDecoder().decode([String: [String: Use]].self, from: data) { return obj }
+    private func readStore() -> Store {
+        guard let data = FileManager.default.contents(atPath: storePath) else {
+            return Store(global: [:], scoped: [:])
+        }
+        let decoder = JSONDecoder()
+        if let store = try? decoder.decode(Store.self, from: data) { return store }
+        if let global = try? decoder.decode(Index.self, from: data) {
+            return Store(global: global, scoped: [:])
+        }
         let backup = storePath + ".bak"
         try? FileManager.default.removeItem(atPath: backup)
         try? FileManager.default.moveItem(atPath: storePath, toPath: backup)
         tlog("frecency: unreadable store moved to \(backup)")
-        return [:]
+        return Store(global: [:], scoped: [:])
     }
 
     private static func isRankable(_ t: String) -> Bool {

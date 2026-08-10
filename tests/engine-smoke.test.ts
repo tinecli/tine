@@ -27,7 +27,17 @@ const specsDir = "/tine-smoke-specs";
 const home = "/home/smoke";
 const files: Record<string, string> = {
   [`${specsDir}/index.json`]: JSON.stringify({
-    completions: ["git", "cd", "cat", "deploy", "wipe", "wrapper", "tine"],
+    completions: [
+      "git",
+      "cd",
+      "cat",
+      "deploy",
+      "wipe",
+      "wrapper",
+      "tine",
+      "tie",
+      "different",
+    ],
     diffVersionedCompletions: [],
   }),
   [`${specsDir}/tine.js`]: readFileSync(`${root}builtin-specs/tine.js`, "utf8"),
@@ -69,6 +79,19 @@ const files: Record<string, string> = {
   [`${specsDir}/wrapper.js`]: `var completionSpec = {
     name: "wrapper",
     args: { name: "command", isCommand: true },
+  };
+  export default completionSpec;`,
+  [`${specsDir}/tie.js`]: `var completionSpec = {
+    name: "tie",
+    subcommands: [{ name: "checkout" }, { name: "bisect" }],
+  };
+  export default completionSpec;`,
+  [`${specsDir}/different.js`]: `var completionSpec = {
+    name: "different",
+    subcommands: [
+      { name: "lower", priority: 75 },
+      { name: "higher", priority: 76 },
+    ],
   };
   export default completionSpec;`,
 };
@@ -120,6 +143,15 @@ beforeAll(async () => {
       "+": { run: use(3) },
       [name64]: { run: use(3) },
       [name65]: { run: use(3) },
+      tie: {
+        checkout: use(20),
+        bisect: { count: 1, lastUsed: Date.now() - 60 * 60 * 1000 },
+      },
+      different: { lower: use(1) },
+    },
+    __tineProjectFrecency: {
+      tie: { bisect: use(15) },
+      different: { lower: use(10_000) },
     },
     __tineRun: (json: string) => {
       const input = JSON.parse(json) as {
@@ -335,6 +367,14 @@ test("a folder with a space is escaped on insert", async () => {
   const { items } = await suggest("cd my");
   expect(items.map((item) => item.name)).toEqual(["my dir/"]);
   expect(items[0].insertValue).toBe("my\\ dir/");
+});
+
+test("project frecency reorders the realistic same-band case", async () => {
+  expect(await names("tie ")).toEqual(["bisect", "checkout"]);
+});
+
+test("project frecency never crosses a priority band", async () => {
+  expect(await names("different ")).toEqual(["higher", "lower"]);
 });
 
 test("an arg the spec says nothing about falls back to history values", async () => {
