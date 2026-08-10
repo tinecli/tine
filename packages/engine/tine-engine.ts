@@ -56,17 +56,29 @@ const escapeInsertion = (str: string, isFolder: boolean): string => {
 
 type TineResult = { searchTerm: string; items: TineSuggestion[] };
 
+const shellContext = (cwd: string) => ({
+  currentWorkingDirectory: cwd || "/",
+  currentProcess: "",
+  sshPrefix: "",
+  // HOME lets the path generators expand `~` (e.g. `cd ~/`); set by the host.
+  environmentVariables: {
+    HOME: (globalThis as { __tineHome?: string }).__tineHome ?? "",
+  },
+});
+
+// Shell aliases (set by the app from the user's `alias` output) so `pc ` →
+// `plug-cli ` expands to the aliased command's spec.
+const shellAliases = (): Record<string, string> =>
+  (globalThis as { __tineAliases?: Record<string, string> }).__tineAliases ??
+  {};
+
 async function suggest(
   line: string,
   cursor: number,
   cwd: string,
 ): Promise<TineResult> {
   const upToCursor = line.slice(0, Math.max(0, cursor));
-  // Shell aliases (set by the app from the user's `alias` output) so `pc ` →
-  // `plug-cli ` expands to the aliased command's spec.
-  const aliases =
-    (globalThis as { __tineAliases?: Record<string, string> }).__tineAliases ??
-    {};
+  const aliases = shellAliases();
 
   // First token (no whitespace before the cursor yet): complete the command
   // name itself from known specs + aliases + history, ranked by frecency.
@@ -84,15 +96,7 @@ async function suggest(
 
   const command = getCommand(upToCursor, aliases);
   if (!command) return { searchTerm: "", items: [] };
-  const context = {
-    currentWorkingDirectory: cwd || "/",
-    currentProcess: "",
-    sshPrefix: "",
-    // HOME lets the path generators expand `~` (e.g. `cd ~/`); set by the host.
-    environmentVariables: {
-      HOME: (globalThis as { __tineHome?: string }).__tineHome ?? "",
-    },
-  };
+  const context = shellContext(cwd);
   const parsed = await parseArguments(command as never, context as never).catch(
     rethrowUnlessMissingSpec,
   );
@@ -339,6 +343,70 @@ function commandNameResult(
   const filtered = filterSuggestions(cmds as never, partial, true, false);
   return { searchTerm: partial, items: toItems(filtered, partial) };
 }
+
+// `tine ask` composes a command line with the on-device model, and a 3B model
+// invents flags. Tine owns a parser and a spec corpus for exactly this: run the
+// line through the parser before anyone sees it.
+type TineValidation = { status: string; token: string; dangerous: boolean };
+
+// The parser is lenient with the *final* token — that one is the search term
+// being typed. A trailing space makes every word of the line a non-final token,
+// so each is checked against the spec.
+async function parseLine(line: string): Promise<TineValidation> {
+  const command = getCommand(`${line} `, shellAliases());
+  if (!command || !line.trim()) {
+    return { status: "unparsed", token: "", dangerous: false };
+  }
+  try {
+    const parsed = await parseArguments(
+      command as never,
+      shellContext("/") as never,
+    );
+    // A dangerous arg the line already filled is no longer the *current* one, so
+    // the question is whether this subcommand declares one at all — which is what
+    // marks `rm`, and what the panel colours red.
+    const args = (parsed.completionObj.args ?? []) as Array<{
+      isDangerous?: boolean;
+    }>;
+    return {
+      status: "ok",
+      token: "",
+      dangerous: args.some((arg) => arg.isDangerous),
+    };
+  } catch (e) {
+    if (e instanceof MissingSpecError) {
+      return { status: "nospec", token: "", dangerous: false };
+    }
+    return { status: "invalid", token: "", dangerous: false };
+  }
+}
+
+async function validate(line: string): Promise<TineValidation> {
+  const result = await parseLine(line);
+  if (result.status !== "invalid") return result;
+  return { ...result, token: await offendingWord(line) };
+}
+
+// Which word the spec has no place for. The parser reports *that* a token could
+// not be consumed, never which — so the line is re-parsed a word at a time, and
+// the word that first fails is the one to tell the model about.
+async function offendingWord(line: string): Promise<string> {
+  const words = line.split(/\s+/).filter(Boolean);
+  for (let i = 2; i <= words.length; i += 1) {
+    const { status } = await parseLine(words.slice(0, i).join(" "));
+    if (status === "invalid") return words[i - 1];
+  }
+  return "";
+}
+
+(globalThis as Record<string, unknown>).tineValidate = (
+  line: string,
+  cb: (r: TineValidation) => void,
+): void => {
+  validate(line)
+    .then((r) => cb(r))
+    .catch(() => cb({ status: "unparsed", token: "", dangerous: false }));
+};
 
 // `tine learn` wrote a spec into a location the loader already reads, so only the
 // cached specs stand between the new file and the next suggestion.
