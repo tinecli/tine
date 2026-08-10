@@ -70,7 +70,7 @@ final class Frecency {
     private var scoped: [String: Index] = [:]
     private var projectRoots: [String: CachedProjectRoot] = [:]
     private var projectRootCacheClock: UInt64 = 0
-    private var projectRootCallbacks: [String: [(Index) -> Void]] = [:]
+    private var projectRootCallbacks: [String: [(String?, Index) -> Void]] = [:]
     private var aliases: [String: String] = [:]
     /// Must never be persisted — a value is more likely than a flag to be a secret.
     private var values: [String: [String: [String: Use]]] = [:]
@@ -112,21 +112,6 @@ final class Frecency {
     var index: Index { queue.sync { merged } }
     var valueIndex: [String: [String: [String: Use]]] { queue.sync { values } }
 
-    static func shouldApplyProjectIndex(resolvedFor cwd: String,
-                                        currentCWD: String) -> Bool {
-        cwd == currentCWD
-    }
-
-    static func applyProjectIndex(_ index: Index,
-                                  resolvedFor cwd: String,
-                                  currentCWD: String,
-                                  apply: (Index) -> Void,
-                                  recompute: () -> Void) {
-        guard shouldApplyProjectIndex(resolvedFor: cwd, currentCWD: currentCWD) else { return }
-        apply(index)
-        recompute()
-    }
-
     func scopedIndex(for cwd: String) -> Index {
         queue.sync {
             guard case let .hit(root?) = cachedProjectRoot(for: cwd) else { return [:] }
@@ -141,12 +126,13 @@ final class Frecency {
         }
     }
 
-    func resolveProjectRoot(for cwd: String, completion: @escaping (Index) -> Void) {
+    func resolveProjectRoot(for cwd: String,
+                            completion: @escaping (String?, Index) -> Void) {
         queue.async { [weak self] in
             guard let self else { return }
             switch self.cachedProjectRoot(for: cwd) {
             case let .hit(root):
-                completion(root.flatMap { self.scoped[$0] } ?? [:])
+                completion(root, root.flatMap { self.scoped[$0] } ?? [:])
             case let .miss(start):
                 self.projectRootCallbacks[start, default: []].append(completion)
                 guard self.projectRootCallbacks[start]?.count == 1 else { return }
@@ -159,7 +145,7 @@ final class Frecency {
                         self.cacheProjectRoot(root, for: start)
                         let index = root.flatMap { self.scoped[$0] } ?? [:]
                         let callbacks = self.projectRootCallbacks.removeValue(forKey: start) ?? []
-                        callbacks.forEach { $0(index) }
+                        callbacks.forEach { $0(root, index) }
                     }
                 }
             }

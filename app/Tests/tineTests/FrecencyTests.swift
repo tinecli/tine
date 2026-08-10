@@ -198,7 +198,7 @@ struct FrecencyPoolTests {
 struct ProjectFrecencyTests {
     static func resolve(_ frecency: Frecency, cwd: String) async {
         await withCheckedContinuation { continuation in
-            frecency.resolveProjectRoot(for: cwd) { _ in continuation.resume() }
+            frecency.resolveProjectRoot(for: cwd) { _, _ in continuation.resume() }
         }
     }
 
@@ -423,7 +423,11 @@ struct ProjectFrecencyTests {
     @Test func projectRootLookupNeverBlocksItsCallerAndRefreshesCurrentCWDOnce() throws {
         let dir = Scratch.dir("project-root-async-lookup")
         let repo = dir + "/repo"
+        let child = repo + "/nested"
+        let outside = dir + "/outside"
         try Self.makeRepo(repo)
+        try FileManager.default.createDirectory(atPath: child, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: outside, withIntermediateDirectories: true)
         let queue = DispatchQueue(label: "tine.frecency.blocked-test")
         let queueStarted = DispatchSemaphore(value: 0)
         queue.async {
@@ -441,19 +445,30 @@ struct ProjectFrecencyTests {
         var deliveries = 0
         var applied = 0
         var recomputes = 0
-        let started = Date()
-        frecency.resolveProjectRoot(for: repo) { index in
+        var currentCWD = dir + "/new-cwd"
+        var appliedProjectRoot: String?
+        var pendingApply = true
+        func deliver(root: String?, index: Frecency.Index, resolvedFor cwd: String) {
             lock.lock()
+            defer { lock.unlock() }
             deliveries += 1
-            Frecency.applyProjectIndex(
-                index,
-                resolvedFor: repo,
-                currentCWD: dir + "/new-cwd",
-                apply: { _ in
-                    applied += 1
-                },
-                recompute: { recomputes += 1 })
-            lock.unlock()
+            guard cwd == currentCWD else { return }
+            guard pendingApply || root != appliedProjectRoot else { return }
+            applied += 1
+            if root == nil {
+                #expect(index.isEmpty)
+            } else {
+                #expect(index["git"]?["rebase"]?.count == 1)
+            }
+            appliedProjectRoot = root
+            pendingApply = false
+            #expect(applied == recomputes + 1,
+                    "the scoped index must be installed before recomputing")
+            recomputes += 1
+        }
+        let started = Date()
+        frecency.resolveProjectRoot(for: repo) { root, index in
+            deliver(root: root, index: index, resolvedFor: repo)
             completed.signal()
         }
         #expect(Date().timeIntervalSince(started) < 0.05,
@@ -464,31 +479,22 @@ struct ProjectFrecencyTests {
         let deliveryCount = deliveries
         let appliedCount = applied
         let staleRecomputeCount = recomputes
+        let pendingAfterStaleDrop = pendingApply
         lock.unlock()
         #expect(deliveryCount == 1)
         #expect(appliedCount == 0, "a result for an old cwd must not replace the current pool")
         #expect(staleRecomputeCount == 0, "a result for an old cwd must not recompute suggestions")
+        #expect(pendingAfterStaleDrop, "a stale result must not consume the current cwd's pending apply")
 
         let record = frecency.record(cmd: "git", param: "rebase", cwd: repo)
         #expect(record?.scoped?["rebase"]?.count == 1)
 
+        lock.lock()
+        currentCWD = repo
+        lock.unlock()
         let cachedCompleted = DispatchSemaphore(value: 0)
-        frecency.resolveProjectRoot(for: repo) { index in
-            lock.lock()
-            deliveries += 1
-            Frecency.applyProjectIndex(
-                index,
-                resolvedFor: repo,
-                currentCWD: repo,
-                apply: { appliedIndex in
-                    applied += 1
-                    #expect(appliedIndex["git"]?["rebase"]?.count == 1)
-                },
-                recompute: {
-                    #expect(applied == 1, "the scoped index must be installed before recomputing")
-                    recomputes += 1
-                })
-            lock.unlock()
+        frecency.resolveProjectRoot(for: repo) { root, index in
+            deliver(root: root, index: index, resolvedFor: repo)
             cachedCompleted.signal()
         }
         #expect(cachedCompleted.wait(timeout: .now() + 1) == .success,
@@ -502,5 +508,86 @@ struct ProjectFrecencyTests {
         #expect(finalDeliveryCount == 2, "each lookup must deliver exactly once")
         #expect(finalAppliedCount == 1, "only the current cwd may apply its delivery")
         #expect(finalRecomputeCount == 1, "the current cwd must recompute exactly once")
+
+        let redeliveryCompleted = DispatchSemaphore(value: 0)
+        frecency.resolveProjectRoot(for: repo) { root, index in
+            deliver(root: root, index: index, resolvedFor: repo)
+            redeliveryCompleted.signal()
+        }
+        #expect(redeliveryCompleted.wait(timeout: .now() + 1) == .success)
+        lock.lock()
+        let redeliveryCount = deliveries
+        let redeliveryAppliedCount = applied
+        let redeliveryRecomputeCount = recomputes
+        lock.unlock()
+        #expect(redeliveryCount == 3, "same-root redelivery must still complete")
+        #expect(redeliveryAppliedCount == 1, "same-root redelivery must not apply again")
+        #expect(redeliveryRecomputeCount == 1, "same-root redelivery must not recompute again")
+
+        lock.lock()
+        currentCWD = child
+        pendingApply = true
+        lock.unlock()
+        let childCompleted = DispatchSemaphore(value: 0)
+        frecency.resolveProjectRoot(for: child) { root, index in
+            deliver(root: root, index: index, resolvedFor: child)
+            childCompleted.signal()
+        }
+        #expect(childCompleted.wait(timeout: .now() + 1) == .success)
+        lock.lock()
+        let childAppliedCount = applied
+        let childRecomputeCount = recomputes
+        lock.unlock()
+        #expect(childAppliedCount == 2,
+                "a cwd clear must force apply even when the project root is unchanged")
+        #expect(childRecomputeCount == 2,
+                "a same-project cwd hop must recompute after restoring the cleared index")
+
+        let childRedeliveryCompleted = DispatchSemaphore(value: 0)
+        frecency.resolveProjectRoot(for: child) { root, index in
+            deliver(root: root, index: index, resolvedFor: child)
+            childRedeliveryCompleted.signal()
+        }
+        #expect(childRedeliveryCompleted.wait(timeout: .now() + 1) == .success)
+        lock.lock()
+        let childRedeliveryAppliedCount = applied
+        let childRedeliveryRecomputeCount = recomputes
+        lock.unlock()
+        #expect(childRedeliveryAppliedCount == 2,
+                "same-root redelivery after consuming pending must not apply")
+        #expect(childRedeliveryRecomputeCount == 2,
+                "same-root redelivery after consuming pending must not recompute")
+
+        lock.lock()
+        currentCWD = outside
+        pendingApply = true
+        lock.unlock()
+        let outsideCompleted = DispatchSemaphore(value: 0)
+        frecency.resolveProjectRoot(for: outside) { root, index in
+            deliver(root: root, index: index, resolvedFor: outside)
+            outsideCompleted.signal()
+        }
+        #expect(outsideCompleted.wait(timeout: .now() + 1) == .success)
+        lock.lock()
+        let outsideAppliedCount = applied
+        let outsideRecomputeCount = recomputes
+        lock.unlock()
+        #expect(outsideAppliedCount == 3, "the cwd clear must be restored once outside a project")
+        #expect(outsideRecomputeCount == 3)
+
+        let outsideRedeliveryCompleted = DispatchSemaphore(value: 0)
+        frecency.resolveProjectRoot(for: outside) { root, index in
+            deliver(root: root, index: index, resolvedFor: outside)
+            outsideRedeliveryCompleted.signal()
+        }
+        #expect(outsideRedeliveryCompleted.wait(timeout: .now() + 1) == .success)
+        lock.lock()
+        let outsideRedeliveryAppliedCount = applied
+        let outsideRedeliveryRecomputeCount = recomputes
+        lock.unlock()
+        #expect(outsideRedeliveryAppliedCount == 3,
+                "nil-root redelivery must not apply when nil is already installed")
+        #expect(outsideRedeliveryRecomputeCount == 3,
+                "nil-root redelivery must not recompute when nil is already installed")
     }
 }
