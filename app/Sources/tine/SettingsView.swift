@@ -13,7 +13,7 @@ struct SettingsView: View {
     @State private var startAtLogin = SMAppService.mainApp.status == .enabled
     @State private var pane: Pane? = .general
     @StateObject private var previewState = AppState.appearancePreview()
-    @State private var previewWidth: CGFloat = 0
+    private let previewTopInset: CGFloat = 18
     private let refresh = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
 
     /// Sidebar sections of the settings window.
@@ -122,20 +122,22 @@ struct SettingsView: View {
     private var preview: some View {
         let size = SuggestionListView.panelSize(rows: previewState.suggestions.count,
                                                 config: previewState.config)
-        let scale = previewWidth > 0 ? min(1, previewWidth / size.width) : 1
-        return ZStack(alignment: .topLeading) {
-            terminalBackdrop
-            SuggestionListView()
-                .environmentObject(previewState)
-                .allowsHitTesting(false)
-                .frame(width: size.width, height: size.height)
-                .scaleEffect(scale, anchor: .topLeading)
-                .frame(width: size.width * scale, height: size.height * scale,
-                       alignment: .topLeading)
-                .padding(.top, 18)
+        return GeometryReader { geometry in
+            let scale = min(1, geometry.size.width / size.width)
+            ZStack(alignment: .topLeading) {
+                terminalBackdrop
+                SuggestionListView()
+                    .environmentObject(previewState)
+                    .allowsHitTesting(false)
+                    .frame(width: size.width, height: size.height)
+                    .padding(.top, previewTopInset)
+            }
+            .frame(width: size.width, height: size.height + previewTopInset,
+                   alignment: .topLeading)
+            .scaleEffect(scale, anchor: .topLeading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { previewWidth = $0 }
+        .aspectRatio(size.width / (size.height + previewTopInset), contentMode: .fit)
+        .clipped()
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 10).fill(.black.opacity(0.88)))
         .onChange(of: state.config, initial: true) { _, cfg in previewState.config = cfg }
