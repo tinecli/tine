@@ -107,7 +107,7 @@ const frecencyIndex = (): Record<string, Record<string, unknown>> => {
 // Mirrors SpecLearner.isCommandName (app-side): `tine learn` refuses anything
 // this doesn't match — notably a path, which always contains a "/".
 const isLearnableCommandName = (name: string): boolean =>
-  /^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(name);
+  name.length <= 64 && /^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(name);
 
 const learnItResult = (
   upToCursor: string,

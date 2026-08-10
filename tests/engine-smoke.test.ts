@@ -80,6 +80,10 @@ const listings: Record<string, string> = {
 
 const use = (count: number) => ({ count, lastUsed: Date.now() });
 
+// isCommandName's own cap (SpecLearner.swift): 64 chars is learnable, 65 is not.
+const name64 = `a${"b".repeat(63)}`;
+const name65 = `a${"b".repeat(64)}`;
+
 let context: vm.Context;
 let tineSuggest: Suggest;
 let tineValidate: Validate;
@@ -111,6 +115,8 @@ beforeAll(async () => {
       wrapper: { nested: use(2) },
       "./nospec": { run: use(3) },
       "+": { run: use(3) },
+      [name64]: { run: use(3) },
+      [name65]: { run: use(3) },
     },
     __tineRun: (json: string) => {
       const input = JSON.parse(json) as {
@@ -424,6 +430,17 @@ test("a path command with a matching frecency key still offers no row", async ()
 test("a command tine learn would refuse offers no row even with a frecency match", async () => {
   // "+" resolves to itself and clears the wrapper gate, but isCommandName refuses it.
   expect(await names("+ ")).toEqual([]);
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+});
+
+test("a command name at isCommandName's 64-char cap still offers the row", async () => {
+  expect(await names(`${name64} `)).toEqual([
+    `no spec for \`${name64}\` — learn it`,
+  ]);
+});
+
+test("a command name past isCommandName's 64-char cap offers no row", async () => {
+  expect(await names(`${name65} `)).toEqual([]);
   expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
 });
 
