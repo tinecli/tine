@@ -302,10 +302,10 @@ tine() {
       ;;
     ""|help|-h|--help)
       print -- "usage: tine <command>"
-      print -- "  ask <question>  name the installed tool that does it"
+      print -- "  ask <q>     name the installed tool that answers a question"
       print -- "  dashboard   open the dashboard window"
       print -- "  doctor      check tine is set up correctly"
-      print -- "  index       rebuild the tool index \`tine ask\` searches"
+      print -- "  index       rebuild the tool index that ask searches"
       print -- "  install     download the latest completion specs"
       print -- "  learn <cmd> write a spec for <cmd> from its own --help"
       print -- "  restart     quit and relaunch the app"
