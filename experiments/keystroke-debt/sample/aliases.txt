@@ -1,0 +1,8 @@
+gco='git checkout'
+gl='git pull'
+gd='git diff'
+k='kubectl'
+ll='ls -l'
+please='sudo '
+run-help=man
+which-command=whence

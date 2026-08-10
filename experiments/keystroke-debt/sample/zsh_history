@@ -1,0 +1,2818 @@
+open -a Tine
+git status
+git log --oneline -10
+git commit -m "wip"
+ll
+ls -la
+git add . && git commit -m "wip"
+git pull --rebase
+docker ps
+git push
+docker ps
+brew upgrade
+git status
+terraform apply
+vagrant up
+rg --hidden tine
+git push
+git push --force-with-lease
+git commit -m "wip"
+vagrant up
+open -a Tine
+git log --oneline -10
+git checkout -
+git commit -m "review feedback"
+: 1763135475:0;terraform plan
+: 1763136378:0;rg --hidden tine
+: 1763136779:0;vagrant up
+: 1763140255:0;git push
+: 1763142904:20;bun test
+: 1763143728:3;vagrant up
+: 1763366703:3;bun run lint
+: 1763367463:0;kubectl get pods -n production
+: 1763367696:1;ls -la
+: 1763367868:2;bun run build
+: 1763368466:9;bun test
+: 1763369258:3;bun run build
+: 1763371055:1;bun run build
+: 1763371739:2;docker compose up -d
+: 1763372203:1;ls -la
+: 1763373494:2;terraform plan
+: 1763374175:2;swift test
+: 1763374957:3;vagrant up
+: 1763376215:3;vagrant up
+: 1763377123:1;git status
+: 1763378400:0;git push
+: 1763379956:0;docker compose up -d
+: 1763381957:1;git checkout .
+: 1763383873:0;docker ps
+: 1763385793:1;vagrant ssh
+: 1763387505:0;terraform plan
+: 1763388139:1;kubectl get pods -n staging
+: 1763388728:1;git status
+: 1763390947:21;swift build
+: 1763392153:1;ls -la
+: 1763392229:7;swift build
+: 1763392816:0;git status
+: 1763392863:1;git status
+: 1763393973:2;cd ~/Repos/tine
+: 1763394993:2;ls -la
+: 1763395516:1;git checkout .
+: 1763395571:3;docker compose logs -f api
+: 1763395746:0;git checkout .
+: 1763397061:1;terraform plan
+: 1763397694:1;docker compose up -d
+: 1763398953:2;brew upgrade
+: 1763399655:3;terraform apply
+: 1763400495:3;for pod in api web worker; do \
+  kubectl logs -f deploy/$pod -n production \
+ done
+: 1763401154:0;cd ~/Repos/tine
+: 1763401895:2;kubectl get pods -n production
+: 1763402365:2;ls -la
+: 1763403202:0;kubectl get pods -n staging
+: 1763404955:3;docker ps
+: 1763467587:1;git push
+: 1763468418:1;git diff --staged
+: 1763479116:3;docker compose down
+: 1763479388:0;ssh deploy@build-01
+: 1763479620:3;ll
+: 1763481479:27;bun test
+: 1763483925:1;git log --oneline | head -20
+: 1763485116:5;swift build
+: 1763488785:1;git status
+: 1763491032:2;vagrant ssh
+: 1763541829:1;git status
+: 1763544523:3;kubectl get pods -n production
+: 1763546857:1;docker compose up -d
+: 1763551130:1;git status
+: 1763551706:3;vagrant up
+: 1763551860:0;git status
+: 1763552054:1;terraform plan
+: 1763553749:1;ls -la
+: 1763556927:1;git push
+: 1763557191:1;ll
+: 1763558452:3;vagrant up
+: 1763567362:1;git status
+: 1763568041:0;swift test
+: 1763570767:32;swift build
+: 1763571791:1;git diff --staged
+: 1763573341:7;bun test
+: 1763575308:4;bun test
+: 1763577360:2;kubectl describe pod api-7f9c -n production
+: 1763577827:0;git status
+: 1763578005:1;ls -la
+: 1763628171:2;kubectl get pods -n production
+: 1763631680:2;kubectl get pods -n staging
+: 1763633836:0;vagrant ssh
+: 1763637437:0;bun run lint
+: 1763643362:0;terraform apply
+: 1763648410:0;vagrant ssh
+: 1763649279:1;git status
+: 1763663539:0;git pull --rebase
+: 1763663970:0;docker compose up -d
+: 1763665188:1;git add .
+: 1763713815:2;terraform plan
+: 1763721749:19;swift build
+: 1763723892:1;git commit -m "fix the thing"
+: 1763731966:2;bun install
+: 1763733592:1;git pull --rebase
+: 1763735576:0;git status
+: 1763741722:3;terraform plan
+: 1763743276:0;git add .
+: 1763745324:0;git commit -m "fix the thing"
+: 1763750227:0;bun install
+: 1763750796:3;docker ps
+: 1763751160:1;git status
+: 1763973442:0;bun run build
+: 1763974338:1;ls -la
+: 1763974356:3;cd ..
+: 1763975575:1;git status
+: 1763975791:3;kubectl logs -f deploy/api -n production
+: 1763976754:0;git add .
+: 1763980073:1;git push --force-with-lease
+: 1763981201:1;docker compose up -d
+: 1763981891:0;git status
+: 1763984427:0;git pull --rebase
+: 1763984502:1;swift test
+: 1763985021:1;git stash pop
+: 1763985836:0;git commit -m "wip"
+: 1763986317:14;swift build
+: 1763987044:0;git add .
+: 1763989763:3;vagrant up
+: 1763989881:1;git add .
+: 1763990336:0;git status
+: 1763993397:1;ls -la
+: 1763995349:2;npx serve dist
+: 1763996291:1;vagrant up
+: 1763998463:0;git push --force-with-lease
+: 1763998791:1;git status
+: 1763999845:1;git add .
+: 1764000016:0;docker ps
+: 1764004886:0;ls -la
+: 1764005608:1;terraform plan
+: 1764005859:3;vagrant ssh
+: 1764005920:1;ssh deploy@build-01
+: 1764005965:0;git status
+: 1764007739:4;bun test
+: 1764007921:32;bun test
+: 1764008623:1;terraform plan
+: 1764009035:16;bun test
+: 1764058629:3;vagrant ssh
+: 1764060671:0;git commit -m "wip"
+: 1764063706:1;cd ~/Repos/tine
+: 1764067111:2;npx serve dist
+: 1764067941:0;sudo lsof -i :3000
+: 1764069093:1;docker compose down
+: 1764070437:2;terraform apply
+: 1764071363:1;git add .
+: 1764076664:1;git add .
+: 1764076955:1;cd ~/Repos/tine
+: 1764077059:1;git pull --rebase
+: 1764077087:1;git add .
+: 1764086846:1;git checkout -
+: 1764090447:0;ls -la
+: 1764094388:2;kubectl get pods -n production
+: 1764094975:1;cd ~/Repos/tine
+: 1764096588:0;docker compose down
+: 1764145846:10;bun test
+: 1764157875:1;git log --oneline -10
+: 1764163738:0;git add .
+: 1764172193:0;vagrant up
+: 1764176339:1;bun install
+: 1764176695:0;git commit -m "review feedback"
+: 1764180138:2;sudo lsof -i :3000
+: 1764181137:0;vagrant ssh
+: 1764238969:0;git status
+: 1764240161:1;git add . && git commit -m "wip"
+: 1764242287:1;git checkout main
+: 1764247626:3;bun install
+: 1764251111:0;ll
+: 1764252020:2;rg --hidden tine
+: 1764260357:0;git push
+: 1764260513:1;ls -la
+: 1764262902:12;bun test
+: 1764267995:1;terraform plan
+: 1764318200:0;git status
+: 1764319095:0;git commit -m "wip"
+: 1764320497:3;vagrant ssh
+: 1764332924:3;docker ps
+: 1764335231:2;vagrant ssh
+: 1764338746:0;git status
+: 1764339962:0;bun install
+: 1764341170:0;git status
+: 1764345333:1;security find-identity -v -p codesigning
+: 1764345637:1;git checkout -
+: 1764350343:0;git checkout .
+: 1764352172:1;git status
+: 1764352837:3;vagrant ssh
+: 1764354892:0;git add .
+: 1764578065:0;git status
+: 1764578627:1;git diff --staged
+: 1764581398:1;terraform plan
+: 1764583631:30;bun test
+: 1764585252:1;git add . && git commit -m "wip"
+: 1764586351:2;vagrant ssh
+: 1764586657:2;vagrant up
+: 1764586821:0;terraform apply
+: 1764588895:0;git push
+: 1764590578:1;git commit -m "review feedback"
+: 1764590774:3;kubectl get pods -n staging
+: 1764591042:3;ssh deploy@build-01
+: 1764591405:0;docker compose up -d
+: 1764592075:0;git add .
+: 1764594081:2;terraform plan
+: 1764594854:0;vagrant up
+: 1764595365:0;git push --force-with-lease
+: 1764595622:0;ps aux | grep node
+: 1764596625:0;docker ps
+: 1764598129:1;git add . && git commit -m "wip"
+: 1764600020:0;git push
+: 1764600746:24;swift build
+: 1764600798:0;tail -f /var/log/system.log
+: 1764603155:0;git commit -m "wip"
+: 1764603516:1;git status
+: 1764604744:2;ls -la
+: 1764607139:1;git status
+: 1764607692:1;docker compose up -d
+: 1764608369:1;git add .
+: 1764608646:0;git status
+: 1764610469:0;vagrant up
+: 1764611052:3;terraform plan
+: 1764611056:1;git add .
+: 1764612943:1;git status
+: 1764613764:1;git push
+: 1764614774:0;terraform plan
+: 1764615074:0;terraform apply
+: 1764668292:1;git diff --staged
+: 1764675173:0;git add . && git commit -m "wip"
+: 1764679754:0;open -a Tine
+: 1764686144:25;swift build
+: 1764688043:3;swift test
+: 1764693918:20;bun test
+: 1764696947:1;ls -la
+: 1764698203:1;git push
+: 1764699456:2;sudo dscacheutil -flushcache
+: 1764699835:0;cd ~/Repos/tine
+: 1764749861:3;docker compose up -d
+: 1764757539:0;git commit -m "review feedback"
+: 1764761404:1;git status
+: 1764762575:0;bun run build
+: 1764767827:3;ps aux | grep node
+: 1764773634:1;git status
+: 1764778484:1;terraform plan
+: 1764786072:1;git status
+: 1764836435:2;terraform plan
+: 1764839174:1;git pull --rebase
+: 1764840799:1;bun run lint
+: 1764848110:1;docker ps
+: 1764857719:3;cd ~/Repos/tine
+: 1764860901:1;docker compose up -d
+: 1764864392:3;cd ~/Repos/tine
+: 1764864605:0;git add .
+: 1764866210:0;cd ~/Repos/tine
+: 1764867869:1;terraform apply
+: 1764867933:2;brew upgrade
+: 1764868641:0;git add .
+: 1764869108:1;vagrant up
+: 1764922127:1;git status
+: 1764928083:1;git push
+: 1764935711:1;terraform plan
+: 1764935753:1;vagrant up
+: 1764936099:1;git add .
+: 1764936686:0;git status
+: 1764942677:1;git status
+: 1764944046:1;git status
+: 1764949753:2;vagrant ssh
+: 1764956541:1;swift test
+: 1765180984:0;git status
+: 1765181392:0;ll
+: 1765183870:1;ls -la
+: 1765184424:0;open -a Tine
+: 1765185301:2;vagrant up
+: 1765186833:1;git checkout .
+: 1765188408:0;git add . && git commit -m "wip"
+: 1765190310:29;bun test
+: 1765191022:1;git status
+: 1765192262:2;vagrant up
+: 1765192644:3;bun install
+: 1765192832:0;git log --oneline -10
+: 1765194046:2;ls -la
+: 1765195759:3;vagrant ssh
+: 1765195921:1;cd ..
+: 1765196257:3;bun run lint
+: 1765196475:22;bun test
+: 1765196929:1;git checkout main
+: 1765198199:3;terraform plan
+: 1765199431:0;ls -la
+: 1765201433:26;swift build
+: 1765201730:0;git status
+: 1765201894:0;ls -la
+: 1765203046:3;npx serve dist
+: 1765204200:2;bun run build
+: 1765204634:0;bun run lint
+: 1765205842:1;git pull --rebase
+: 1765206921:1;git checkout main
+: 1765207939:0;bun run lint
+: 1765208272:1;git checkout main
+: 1765210699:0;bun run lint
+: 1765211518:2;swift test
+: 1765211818:0;git push
+: 1765213963:1;bun run build
+: 1765217119:0;git push
+: 1765218368:1;npx serve dist
+: 1765276162:2;ls -la
+: 1765281811:0;git pull --rebase
+: 1765285131:2;terraform apply
+: 1765287514:1;git status
+: 1765292830:0;git rebase -i main
+: 1765297638:0;git status
+: 1765300923:1;cd ~/Repos/tine
+: 1765301602:1;kubectl get pods -n production
+: 1765303824:1;git checkout -
+: 1765355661:1;vagrant ssh
+: 1765360988:1;ls -la
+: 1765361465:2;vagrant ssh
+: 1765363661:3;vagrant ssh
+: 1765375824:2;vagrant up
+: 1765378957:0;npx serve dist
+: 1765389166:1;vagrant up
+: 1765391721:1;git checkout main
+: 1765445671:0;git status
+: 1765446180:1;git add .
+: 1765447669:3;ls -la
+: 1765455457:0;git status
+: 1765458418:0;git commit -m "wip"
+: 1765461740:0;git push
+: 1765463174:0;vagrant up
+: 1765465400:0;git rebase -i main
+: 1765472035:2;vagrant up
+: 1765477577:0;vagrant up
+: 1765528866:0;vagrant up
+: 1765530443:2;ls -la
+: 1765531135:2;cd ~/Repos/tine
+: 1765532823:1;ls -la
+: 1765534272:2;terraform apply
+: 1765536025:0;swift test
+: 1765536307:1;kubectl get pods -n production
+: 1765540640:1;ls -la
+: 1765543159:3;vagrant ssh
+: 1765550946:1;ls -la
+: 1765565546:0;git status
+: 1765785988:1;git status
+: 1765786110:0;docker ps
+: 1765786816:0;vagrant ssh
+: 1765786965:2;cd ~/Repos/tine
+: 1765788891:0;git checkout .
+: 1765789105:2;terraform apply
+: 1765789806:0;git status
+: 1765789832:3;kubectl describe pod api-7f9c -n production
+: 1765792639:1;terraform plan
+: 1765793175:2;ls -la
+: 1765795974:1;git add .
+: 1765797472:0;ls -la
+: 1765798203:2;cd ~/Repos/tine
+: 1765798743:3;vagrant up
+: 1765799736:1;git add .
+: 1765800769:2;cd ~/Repos/tine
+: 1765800771:0;git push --force-with-lease
+: 1765801145:0;bun run lint
+: 1765801153:0;docker compose down
+: 1765801405:1;vagrant up
+: 1765802597:0;git status
+: 1765802767:1;git status
+: 1765804896:1;git pull --rebase
+: 1765806092:0;git status
+: 1765806880:3;npx serve dist
+: 1765807412:1;git pull --rebase
+: 1765809714:2;kubectl describe pod api-7f9c -n production
+: 1765812440:3;vagrant ssh
+: 1765813642:1;git status
+: 1765813769:0;git status
+: 1765814148:30;swift build
+: 1765814313:1;git checkout -
+: 1765816110:3;ls -la
+: 1765816881:13;bun test
+: 1765817033:1;git push
+: 1765818934:0;vagrant up
+: 1765819328:3;ls -la
+: 1765822154:2;cd ..
+: 1765822491:0;git log --oneline -10
+: 1765822493:0;git status
+: 1765823012:0;git diff --staged
+: 1765824673:2;cd ..
+: 1765887529:0;bun install
+: 1765887642:0;bun run build
+: 1765887653:1;git checkout main
+: 1765888212:1;git diff --staged
+: 1765900073:0;git status
+: 1765901998:3;ls -la
+: 1765904697:7;bun test
+: 1765906746:2;stat -f '%Sm' README.md
+: 1765910156:2;bun run lint
+: 1765967040:3;cd ..
+: 1765967167:3;ll
+: 1765973763:1;ls -la
+: 1765975714:1;git commit -m "wip"
+: 1765978419:0;ll
+: 1765984583:0;git checkout .
+: 1765986081:0;git checkout main
+: 1765990939:1;git commit -m "fix the thing"
+: 1765991349:1;git log --oneline -10
+: 1765992347:2;cd ..
+: 1766049753:1;git status
+: 1766056770:1;git add .
+: 1766057676:1;git add .
+: 1766060231:1;git add .
+: 1766060451:3;bun run build
+: 1766066456:1;git commit -m "wip"
+: 1766067124:0;git commit -m "wip"
+: 1766067470:2;terraform apply
+: 1766067893:1;git status
+: 1766070505:0;git checkout -
+: 1766070656:0;git push
+: 1766073700:1;vagrant ssh
+: 1766078033:3;bun run lint
+: 1766079901:0;kubectl get pods -n production
+: 1766132802:0;git status
+: 1766137985:1;git checkout main
+: 1766138098:2;kubectl logs -f deploy/api -n production
+: 1766140008:3;sudo lsof -i :3000
+: 1766142508:0;cd ..
+: 1766144532:0;kubectl get pods -n production
+: 1766151026:3;bun install
+: 1766153610:1;git diff --staged
+: 1766154631:0;vagrant ssh
+: 1766162188:2;ls -la
+: 1766166641:2;bun run lint
+: 1766170740:0;git checkout main
+: 1766393910:1;git diff --staged
+: 1766394496:3;ls -la
+: 1766395449:2;terraform plan
+: 1766397309:0;git diff --staged
+: 1766397818:3;vagrant ssh
+: 1766398535:22;bun test
+: 1766398934:5;bun test
+: 1766400273:1;bun run build
+: 1766402646:2;ps aux | grep node
+: 1766403453:1;rg --hidden tine
+: 1766404460:0;git status
+: 1766405390:0;git status
+: 1766406264:7;swift build
+: 1766406573:2;open -a Tine
+: 1766408230:28;bun test
+: 1766410809:1;vagrant up
+: 1766411139:3;vagrant up
+: 1766411660:2;bun run lint
+: 1766412389:0;git checkout main
+: 1766414166:0;cd ~/Repos/tine
+: 1766416035:0;kubectl logs -f deploy/api -n production
+: 1766416707:3;kubectl get pods -n production
+: 1766416803:1;git add .
+: 1766417408:3;brew upgrade
+: 1766418596:1;docker compose logs -f api
+: 1766419425:1;docker compose up -d
+: 1766422670:1;git status
+: 1766422970:0;git status
+: 1766423448:1;git commit -m "review feedback"
+: 1766423685:3;vagrant up
+: 1766424126:3;docker compose up -d
+: 1766425626:1;terraform plan
+: 1766425645:0;kubectl logs -f deploy/api -n production
+: 1766425869:0;git add .
+: 1766429019:0;git rebase -i main
+: 1766429280:1;git log --oneline -10
+: 1766429885:0;docker ps
+: 1766478243:2;kubectl logs -f deploy/api -n production
+: 1766479427:0;ls -la
+: 1766480046:2;cd ~/Repos/tine
+: 1766482185:1;docker compose up -d
+: 1766486990:0;vagrant ssh
+: 1766490798:3;vagrant up
+: 1766492065:2;bun run build
+: 1766498320:1;ssh deploy@build-01
+: 1766502786:1;terraform plan
+: 1766504168:1;bun run lint
+: 1766506227:2;vagrant up
+: 1766507929:0;docker compose down
+: 1766510142:0;brew upgrade
+: 1766511688:2;kubectl get pods -n production
+: 1766512180:1;git push
+: 1766513205:1;git status
+: 1766564534:2;vagrant up
+: 1766570120:0;git add .
+: 1766571586:1;git add .
+: 1766574455:1;git commit -m "wip"
+: 1766581436:0;git status
+: 1766581732:2;npx serve dist
+: 1766584199:3;ll
+: 1766588638:0;git checkout .
+: 1766591246:1;bun install
+: 1766594658:3;vagrant up
+: 1766596233:0;git checkout main
+: 1766596965:1;vagrant up
+: 1766598184:0;bun run lint
+: 1766599014:0;git add . && git commit -m "wip"
+: 1766599593:1;git checkout -
+: 1766600320:0;git commit -m "wip"
+: 1766650386:5;bun test
+: 1766652007:3;cd ~/Repos/tine
+: 1766655721:3;vagrant up
+: 1766666674:1;git checkout -
+: 1766667614:0;bun run lint
+: 1766736037:0;git diff --staged
+: 1766743141:3;docker ps
+: 1766745234:0;git status
+: 1766748738:1;git commit -m "fix the thing"
+: 1766752921:1;git status
+: 1766756088:2;terraform plan
+: 1766758400:4;bun test
+: 1766759842:0;git add .
+: 1766761702:0;vagrant ssh
+: 1766763506:0;git commit -m "review feedback"
+: 1766771911:0;git checkout main
+: 1766772329:25;bun test
+: 1766997563:0;cd ..
+: 1766997667:2;ll
+: 1767001800:3;vagrant ssh
+: 1767003064:2;cd ..
+: 1767003220:2;vagrant up
+: 1767005990:1;git checkout -
+: 1767006812:1;docker compose up -d
+: 1767007430:1;git commit -m "wip"
+: 1767007775:1;git add .
+: 1767008240:1;terraform plan
+: 1767008357:2;vagrant up
+: 1767010286:27;swift build
+: 1767010383:0;git add .
+: 1767010619:1;kubectl logs -f deploy/api -n production
+: 1767014841:2;swift test
+: 1767014936:1;ll
+: 1767016518:18;swift build
+: 1767017292:3;terraform plan
+: 1767017398:0;git commit -m "wip"
+: 1767018874:2;vagrant up
+: 1767019075:2;vagrant up
+: 1767020192:1;git status
+: 1767020336:0;git add .
+: 1767020341:0;git diff --staged
+: 1767021682:0;git rebase -i main
+: 1767024408:1;docker compose logs -f api
+: 1767029868:1;bun run lint
+: 1767030382:2;ll
+: 1767030527:1;docker compose logs -f api
+: 1767031151:1;git checkout .
+: 1767032633:3;open -a Tine
+: 1767033103:1;git status
+: 1767033230:1;git commit -m "fix the thing"
+: 1767033655:1;git log --oneline | head -20
+: 1767033838:0;bun run lint
+: 1767034566:24;swift build
+: 1767085701:3;man zshexpn
+: 1767099223:1;git status
+: 1767107409:0;docker compose up -d
+: 1767117614:10;bun test
+: 1767118047:0;git status
+: 1767118303:0;git status
+: 1767170221:1;git rebase -i main
+: 1767170464:1;bun run build
+: 1767178583:1;ls -la
+: 1767183624:1;git checkout -
+: 1767199248:1;git commit -m "wip"
+: 1767205011:0;git push
+: 1767254503:3;ll
+: 1767260908:1;git push --force-with-lease
+: 1767261500:3;terraform plan
+: 1767264545:1;git commit -m "wip"
+: 1767267935:1;git checkout .
+: 1767267988:0;git log --oneline | head -20
+: 1767270206:0;git push
+: 1767271765:1;docker ps
+: 1767272152:3;kubectl get pods -n production
+: 1767273800:0;bun run lint
+: 1767275582:2;tail -f /var/log/system.log
+: 1767277773:1;git status
+: 1767279402:1;rg --hidden tine
+: 1767340982:0;git status
+: 1767345305:2;docker compose down
+: 1767345844:0;git commit -m "wip"
+: 1767347654:2;vagrant ssh
+: 1767350811:0;git checkout main
+: 1767351601:3;ps aux | grep node
+: 1767354211:2;vagrant up
+: 1767357482:1;git status
+: 1767361621:33;swift build
+: 1767361790:2;vagrant ssh
+: 1767366109:5;swift build
+: 1767373600:2;docker compose up -d
+: 1767377215:1;git checkout -
+: 1767600879:3;vagrant up
+: 1767603357:1;bun run lint
+: 1767603907:22;bun test
+: 1767605823:0;docker ps
+: 1767609364:0;terraform apply
+: 1767609879:1;docker compose up -d
+: 1767610833:0;ll
+: 1767613251:0;vagrant up
+: 1767614942:0;git log --oneline -10
+: 1767615059:3;vagrant up
+: 1767616472:1;terraform plan
+: 1767617142:1;git pull --rebase
+: 1767617521:1;ll
+: 1767617755:0;tail -f /var/log/system.log
+: 1767619547:0;bun run build
+: 1767623549:1;git commit -m "wip"
+: 1767623654:2;docker compose up -d
+: 1767624269:1;terraform plan
+: 1767624770:0;git status
+: 1767625137:0;git add .
+: 1767626713:18;swift build
+: 1767628721:2;cd ~/Repos/tine
+: 1767629965:0;terraform plan
+: 1767630570:1;git commit -m "fix the thing"
+: 1767630914:1;vagrant up
+: 1767630987:2;vagrant up
+: 1767633388:3;terraform apply
+: 1767634048:3;bun run lint
+: 1767635338:1;docker compose down
+: 1767635811:3;terraform plan
+: 1767636020:3;vagrant ssh
+: 1767636387:0;git commit -m "fix the thing"
+: 1767636647:0;git status
+: 1767636965:25;bun test
+: 1767637509:1;git add .
+: 1767637708:3;terraform apply
+: 1767637756:1;bun run build
+: 1767638084:1;git status
+: 1767687174:3;bun run lint
+: 1767689142:3;docker ps
+: 1767696278:0;git diff --staged
+: 1767707921:1;docker compose down
+: 1767714907:0;git push
+: 1767718818:1;terraform plan
+: 1767724794:1;ssh deploy@build-01
+: 1767777516:1;git commit -m "wip"
+: 1767780688:1;git checkout .
+: 1767781951:1;git add .
+: 1767782550:3;open -a Tine
+: 1767782571:2;docker compose down
+: 1767784502:0;git pull --rebase
+: 1767787862:0;otool -L .build/release/tine
+: 1767790595:0;ls -la
+: 1767796505:0;git push
+: 1767800614:0;git add .
+: 1767800914:0;swift test
+: 1767803823:1;git log --oneline -10
+: 1767804047:1;kubectl logs -f deploy/api -n production
+: 1767861842:0;git rebase -i main
+: 1767873156:18;bun test
+: 1767877640:1;git pull --rebase
+: 1767887449:3;tail -f /var/log/system.log
+: 1767888000:1;git status
+: 1767892189:3;kubectl get pods -n staging
+: 1767952492:10;bun test
+: 1767956168:1;git commit -m "wip"
+: 1767958746:1;git commit -m "wip"
+: 1767963789:17;bun test
+: 1767966517:1;git add .
+: 1768206661:2;kubectl get pods -n staging
+: 1768207236:1;git stash pop
+: 1768210488:0;git status
+: 1768210845:0;open -a Tine
+: 1768212801:1;git status
+: 1768213065:0;ls -la
+: 1768213792:1;git commit -m "wip"
+: 1768214035:0;docker compose down
+: 1768214523:1;git commit -m "fix the thing"
+: 1768214988:1;git add .
+: 1768215913:0;bun run lint
+: 1768216505:1;git checkout main
+: 1768217656:1;cd ~/Repos/tine
+: 1768217708:0;docker compose logs -f api
+: 1768217855:0;git status
+: 1768218525:2;ssh deploy@build-01
+: 1768218616:2;ssh deploy@build-01
+: 1768219312:0;git stash pop
+: 1768220836:0;git commit -m "fix the thing"
+: 1768220971:0;say 'the build is green'
+: 1768222912:0;git status
+: 1768223730:0;git status
+: 1768224981:0;cd ~/Repos/tine
+: 1768225246:1;git commit -m "wip"
+: 1768227026:1;ls -la
+: 1768230958:0;git status
+: 1768231693:1;git status
+: 1768231750:1;bun run build
+: 1768233363:19;bun test
+: 1768235003:3;open -a Tine
+: 1768236765:1;bun install
+: 1768239962:0;git status
+: 1768240415:0;git diff --staged
+: 1768241190:1;git pull --rebase
+: 1768241351:1;brew upgrade
+: 1768241887:0;docker compose up -d
+: 1768243407:2;cd ..
+: 1768291898:10;bun test
+: 1768297636:1;git status
+: 1768298754:1;ls -la
+: 1768299457:0;git push
+: 1768301748:1;cd ..
+: 1768305782:1;cd ~/Repos/tine
+: 1768310351:0;git push
+: 1768312927:0;git commit -m "wip"
+: 1768315588:33;swift build
+: 1768319552:12;swift build
+: 1768326978:1;kubectl get pods -n staging
+: 1768379468:1;git status
+: 1768380869:6;bun test
+: 1768387141:0;git add .
+: 1768391775:23;bun test
+: 1768392918:3;bun install
+: 1768394743:1;git log --oneline | head -20
+: 1768397594:1;git push
+: 1768399745:0;git log --oneline -10
+: 1768415265:1;git diff --staged
+: 1768470220:1;git add .
+: 1768475911:2;cd ~/Repos/tine
+: 1768477779:3;docker compose up -d
+: 1768482319:0;ll
+: 1768485653:0;git checkout main
+: 1768485939:0;git status
+: 1768486007:0;git push
+: 1768488675:0;bun run lint
+: 1768493784:0;git add .
+: 1768494823:3;bun run lint
+: 1768503378:1;tail -f /var/log/system.log
+: 1768550914:1;git commit -m "wip"
+: 1768552801:2;docker compose up -d
+: 1768555698:1;git commit -m "wip"
+: 1768557753:1;git rebase -i main
+: 1768564300:0;git status
+: 1768564937:0;kubectl describe pod api-7f9c -n production
+: 1768569947:1;git commit -m "fix the thing"
+: 1768575470:1;git status
+: 1768582837:1;git status
+: 1768582977:0;git checkout main
+: 1768583390:1;ls -la
+: 1768585650:2;sudo dscacheutil -flushcache
+: 1768810800:22;bun test
+: 1768811421:1;git rebase -i main
+: 1768812250:0;git status
+: 1768814409:2;ls -la
+: 1768815864:0;git checkout -
+: 1768817001:2;docker compose logs -f api
+: 1768821599:1;git stash pop
+: 1768823319:1;open -a Tine
+: 1768823870:1;git push --force-with-lease
+: 1768824794:0;docker compose up -d
+: 1768826223:0;git checkout -
+: 1768826494:0;git diff --staged
+: 1768826915:1;git push
+: 1768827316:1;ls -la
+: 1768829880:2;docker ps
+: 1768833417:1;git status
+: 1768834512:1;git push
+: 1768834987:1;kubectl get pods -n production
+: 1768835271:1;git log --oneline -10
+: 1768836074:0;git add .
+: 1768836749:4;bun test
+: 1768836904:1;git status
+: 1768838347:17;swift build
+: 1768839662:1;ls -la
+: 1768841076:0;ssh deploy@build-01
+: 1768841208:0;git stash pop
+: 1768842346:2;ls -la
+: 1768848418:0;git status
+: 1768898900:0;bun install
+: 1768904019:1;git checkout main
+: 1768909550:1;bun run build
+: 1768910467:1;bun run lint
+: 1768916989:1;git diff --staged
+: 1768921581:0;git log --oneline -10
+: 1768931940:33;swift build
+: 1768991795:0;git stash pop
+: 1768991810:1;git add .
+: 1769003956:9;swift build
+: 1769007490:1;git checkout -
+: 1769010896:0;git diff --staged
+: 1769012466:3;kubectl get pods -n staging
+: 1769014804:1;kubectl get pods -n staging
+: 1769018043:0;git checkout main
+: 1769020999:0;git status
+: 1769021508:2;cd ~/Repos/tine
+: 1769069885:1;git status
+: 1769071238:0;ls -la
+: 1769074501:2;bun run lint
+: 1769074763:3;ls -la
+: 1769075715:2;kubectl logs -f deploy/api -n production
+: 1769077474:2;ls -la
+: 1769082055:0;git checkout .
+: 1769088461:1;git status
+: 1769089761:2;bun run build
+: 1769091834:2;ls -la
+: 1769092527:0;cat package.json | jq .scripts
+: 1769095972:1;kubectl get pods -n production
+: 1769097691:0;git diff --staged
+: 1769101297:0;git commit -m "wip"
+: 1769105767:1;git pull --rebase
+: 1769107861:0;ls -la
+: 1769160211:1;git add .
+: 1769161231:0;git status
+: 1769165245:0;git push
+: 1769171428:1;git checkout main
+: 1769176715:1;git log --oneline -10
+: 1769179234:1;git status
+: 1769414477:1;git status
+: 1769418852:0;git add .
+: 1769421350:1;git checkout -
+: 1769421352:0;git checkout -
+: 1769422108:24;bun test
+: 1769425344:32;bun test
+: 1769426817:1;git checkout main
+: 1769427353:0;git status
+: 1769427740:1;git commit -m "fix the thing"
+: 1769428412:1;git checkout -
+: 1769428725:1;git add . && git commit -m "wip"
+: 1769429798:0;git status
+: 1769431552:0;git add .
+: 1769431696:1;docker ps
+: 1769432534:3;bun run build
+: 1769434972:1;git pull --rebase
+: 1769436274:0;git status
+: 1769439144:12;swift build
+: 1769440882:3;docker compose up -d
+: 1769440974:2;bun install
+: 1769442384:1;cd ~/Repos/tine
+: 1769445273:3;docker ps
+: 1769445356:0;git status
+: 1769448246:1;kubectl get pods -n staging
+: 1769451401:1;git add .
+: 1769452078:3;cd ~/Repos/tine
+: 1769506561:1;kubectl logs -f deploy/api -n production
+: 1769513150:0;git push
+: 1769515031:0;git add . && git commit -m "wip"
+: 1769519004:1;bun run lint
+: 1769527067:0;git status
+: 1769528111:1;git status
+: 1769530740:1;cat package.json | jq .scripts
+: 1769537314:1;git status
+: 1769538737:1;ls -la
+: 1769592368:2;open -a Tine
+: 1769597458:1;git log --oneline -10
+: 1769598542:0;git status
+: 1769600479:3;ls -la
+: 1769615960:0;git log --oneline -10
+: 1769621268:0;docker compose up -d
+: 1769678574:1;git status
+: 1769679717:14;bun test
+: 1769681399:0;git diff --staged
+: 1769683328:12;bun test
+: 1769683546:30;swift build
+: 1769684552:0;git status
+: 1769687088:20;swift build
+: 1769691510:1;git log --oneline -10
+: 1769692820:1;git commit -m "review feedback"
+: 1769693796:3;ll
+: 1769699403:0;git push
+: 1769706935:1;git status
+: 1769711603:0;git checkout main
+: 1769711758:1;git add .
+: 1769712520:0;git status
+: 1769768271:1;docker compose up -d
+: 1769782220:2;cd ~/Repos/tine
+: 1769785601:1;git status
+: 1769787940:1;git checkout main
+: 1769793012:0;git push --force-with-lease
+: 1770021072:2;bun run build
+: 1770021315:2;cd ..
+: 1770022205:3;tmutil listlocalsnapshots /
+: 1770023351:0;git status
+: 1770023792:1;git status
+: 1770024276:2;docker compose up -d
+: 1770024341:25;bun test
+: 1770025240:0;brew upgrade
+: 1770025674:0;git status
+: 1770025793:10;bun test
+: 1770027676:2;bun run build
+: 1770030372:0;kubectl logs -f deploy/api -n production
+: 1770032622:1;git push
+: 1770032815:2;ls -la
+: 1770033199:3;swift test
+: 1770038263:3;docker compose down
+: 1770038637:0;git status
+: 1770041351:0;git status
+: 1770044395:1;git commit -m "wip"
+: 1770045759:0;git status
+: 1770049393:3;brew upgrade
+: 1770050689:0;git status
+: 1770051421:0;git push --force-with-lease
+: 1770052803:0;cd ~/Repos/tine
+: 1770053691:0;git commit -m "review feedback"
+: 1770055226:1;git checkout -
+: 1770058105:32;swift build
+: 1770058197:0;ls -la
+: 1770058227:2;cd ..
+: 1770058762:1;bun install
+: 1770120904:0;ssh deploy@build-01
+: 1770122531:1;git commit -m "review feedback"
+: 1770125895:0;git add . && git commit -m "wip"
+: 1770130946:3;ls -la
+: 1770132018:1;git status
+: 1770137463:1;git rebase -i main
+: 1770144539:0;git add .
+: 1770144738:0;ls -la
+: 1770212004:0;docker compose up -d
+: 1770213006:2;bun install
+: 1770215131:0;git add .
+: 1770216404:9;bun test
+: 1770220147:10;bun test
+: 1770230468:0;git status
+: 1770231593:7;swift build
+: 1770285858:2;bun run lint
+: 1770290255:0;bun run build
+: 1770292052:1;docker compose down
+: 1770296723:26;swift build
+: 1770299631:0;git checkout main
+: 1770302884:1;git add .
+: 1770306346:0;docker compose down
+: 1770367502:2;docker ps
+: 1770372134:0;git commit -m "fix the thing"
+: 1770384304:1;codesign -dv --verbose=4 dist/Tine.app
+: 1770385579:25;bun test
+: 1770386430:0;git status
+: 1770390183:0;git add .
+: 1770396963:1;git add .
+: 1770399109:1;git status
+: 1770402841:3;docker ps
+: 1770624248:1;git push
+: 1770625930:0;git commit -m "fix the thing"
+: 1770627655:0;ls -la
+: 1770627985:1;git checkout main
+: 1770628617:1;git status
+: 1770630759:3;ls -la
+: 1770630894:2;docker compose up -d
+: 1770632507:0;git status
+: 1770633076:3;ls -la
+: 1770634628:3;ls -la
+: 1770636351:1;docker compose logs -f api
+: 1770636762:0;git add . && git commit -m "wip"
+: 1770637083:0;git commit -m "wip"
+: 1770637179:1;docker compose down
+: 1770638167:0;git status
+: 1770638759:1;cd ~/Repos/tine
+: 1770638804:0;git pull --rebase
+: 1770639058:3;kubectl get pods -n production
+: 1770641169:9;bun test
+: 1770641847:0;ls -la
+: 1770643357:0;git status
+: 1770644079:1;docker compose up -d
+: 1770644348:2;bun run build
+: 1770644791:0;docker compose up -d
+: 1770645600:4;bun test
+: 1770646242:2;docker compose down
+: 1770647045:1;git status
+: 1770648795:1;git checkout main
+: 1770648928:0;ssh deploy@build-01
+: 1770649801:2;bun run build
+: 1770651431:3;cd ..
+: 1770652160:0;git add . && git commit -m "wip"
+: 1770654545:2;kubectl get pods -n production
+: 1770656130:0;git checkout .
+: 1770656751:1;git status
+: 1770658958:3;ls -la
+: 1770661570:2;docker compose logs -f api
+: 1770713240:0;git diff --staged
+: 1770713438:0;git status
+: 1770725681:33;bun test
+: 1770725893:3;docker compose logs -f api
+: 1770726190:2;cd ~/Repos/tine
+: 1770730158:1;git status
+: 1770730846:0;git add .
+: 1770735047:0;swift test
+: 1770806042:0;open -a Tine
+: 1770806827:1;git add .
+: 1770807472:21;bun test
+: 1770811148:0;git log --oneline | head -20
+: 1770816805:0;ll
+: 1770883270:2;ls -la
+: 1770891271:1;git status
+: 1770898390:0;cd ..
+: 1770901539:0;kubectl get pods -n production
+: 1770903858:0;git add .
+: 1770906481:1;git checkout main
+: 1770912751:0;git log --oneline | head -20
+: 1770919599:3;brew upgrade
+: 1770920331:0;cd ..
+: 1770920423:3;ls -la
+: 1770970169:3;ls -la
+: 1770971905:1;git status
+: 1770973254:1;ls -la
+: 1770973634:3;docker image prune -f
+: 1770989606:1;git status
+: 1770992776:0;git add .
+: 1770993151:0;git status
+: 1770998257:0;git status
+: 1771000850:1;git diff --staged
+: 1771002634:0;git status
+: 1771005235:1;git diff --staged
+: 1771005886:0;git checkout main
+: 1771228863:2;docker compose logs -f api
+: 1771229254:0;git add .
+: 1771230675:0;git status
+: 1771231921:0;ls -la
+: 1771232315:1;git push --force-with-lease
+: 1771232582:0;docker image prune -f
+: 1771232660:1;cd ~/Repos/tine
+: 1771233143:0;git status
+: 1771236473:1;git commit -m "review feedback"
+: 1771237011:8;bun test
+: 1771238101:1;git status
+: 1771239490:1;docker compose up -d
+: 1771243618:1;git push --force-with-lease
+: 1771245467:0;git status
+: 1771245758:0;bun run build
+: 1771246580:2;docker compose up -d
+: 1771246691:3;kubectl get pods -n production
+: 1771250575:0;git checkout main
+: 1771253373:0;git push
+: 1771253653:0;git checkout main
+: 1771254277:2;ls -la
+: 1771254576:1;cd ..
+: 1771255053:1;git add .
+: 1771256323:1;docker compose up -d
+: 1771256773:0;git pull --rebase
+: 1771257288:0;git log --oneline -10
+: 1771257906:1;ls -la
+: 1771258193:17;bun test
+: 1771259061:2;docker compose up -d
+: 1771262502:1;git status
+: 1771264213:2;bun install
+: 1771264280:1;docker compose down
+: 1771264499:1;git status
+: 1771264857:3;cd ~/Repos/tine
+: 1771266704:1;git commit -m "wip"
+: 1771316351:1;git status
+: 1771317936:1;git checkout -
+: 1771318886:3;kubectl logs -f deploy/api -n production
+: 1771322714:2;kubectl get pods -n staging
+: 1771330825:3;kubectl get pods -n staging
+: 1771409709:0;git push
+: 1771417041:0;ll
+: 1771425127:3;ssh deploy@build-01
+: 1771430201:2;docker compose up -d
+: 1771436520:0;git commit -m "fix the thing"
+: 1771438260:3;cd ~/Repos/tine
+: 1771490229:1;git commit -m "wip"
+: 1771492776:3;swift test
+: 1771493323:0;git status
+: 1771495531:0;git diff --staged
+: 1771502172:0;docker compose up -d
+: 1771505899:20;swift build
+: 1771509546:1;git checkout main
+: 1771510168:1;git add .
+: 1771513257:0;git checkout main
+: 1771526158:2;kubectl describe pod api-7f9c -n production
+: 1771526898:0;git add .
+: 1771578557:0;git add .
+: 1771581885:2;open -a Tine
+: 1771581953:1;git log --oneline | head -20
+: 1771586062:1;git commit -m "wip"
+: 1771587848:3;ls -la
+: 1771593770:1;git checkout main
+: 1771594948:0;git checkout -
+: 1771598589:0;git stash pop
+: 1771612996:0;cd ..
+: 1771834115:0;git status
+: 1771837071:1;ls -la
+: 1771838434:3;bun run build
+: 1771838583:1;git add .
+: 1771839717:2;kubectl get pods -n production
+: 1771840328:1;cd ~/Repos/tine
+: 1771840419:1;git commit -m "review feedback"
+: 1771841836:0;kubectl get pods -n production
+: 1771842036:1;ll
+: 1771842204:0;bun run lint
+: 1771842994:1;tail -f /var/log/system.log
+: 1771843897:0;plutil -p Info.plist
+: 1771844398:1;git status
+: 1771845666:0;git checkout main
+: 1771847658:1;git push
+: 1771852038:0;git push --force-with-lease
+: 1771852421:1;ls -la
+: 1771852487:19;bun test
+: 1771853297:1;git checkout .
+: 1771853406:1;git status
+: 1771854051:3;cd ~/Repos/tine
+: 1771854136:2;ls -la
+: 1771858359:1;git add .
+: 1771860292:2;kubectl get pods -n staging
+: 1771860496:0;open -a Tine
+: 1771861389:1;bun run build
+: 1771863622:1;docker image prune -f
+: 1771868587:1;bun run lint
+: 1771869645:2;ls -la
+: 1771870738:1;git status
+: 1771872383:1;docker compose down
+: 1771872773:3;rg --hidden tine
+: 1771924867:1;git checkout main
+: 1771927158:1;git status
+: 1771927703:0;bun run build
+: 1771933804:0;git add .
+: 1771953238:0;git status
+: 1772007881:0;git checkout -
+: 1772008855:0;docker compose down
+: 1772011103:1;cd ..
+: 1772011659:3;sudo dscacheutil -flushcache
+: 1772014390:0;ls -la
+: 1772014633:0;git push
+: 1772015988:3;open -a Tine
+: 1772018750:1;git status
+: 1772020943:1;git commit -m "review feedback"
+: 1772098818:17;bun test
+: 1772106252:0;git status
+: 1772110433:1;git status
+: 1772112559:3;kubectl get pods -n staging
+: 1772115653:3;docker compose up -d
+: 1772118274:1;git diff --staged
+: 1772119286:0;git push
+: 1772122025:0;git checkout main
+: 1772124578:2;ls -la
+: 1772126897:1;git checkout .
+: 1772127587:0;docker compose up -d
+: 1772180460:0;cat package.json | jq .scripts
+: 1772182332:0;git commit -m "wip"
+: 1772182442:0;kubectl logs -f deploy/api -n production
+: 1772191554:0;git status
+: 1772193822:0;brew upgrade
+: 1772199853:3;cd ~/Repos/tine
+: 1772200771:0;ls -la
+: 1772206844:0;git diff --staged
+: 1772438492:0;ps aux | grep node
+: 1772439136:1;git log --oneline | head -20
+: 1772440265:1;git status
+: 1772443302:2;bun run lint
+: 1772445728:3;kubectl get pods -n staging
+: 1772449119:2;ll
+: 1772451297:1;git pull --rebase
+: 1772452282:0;git status
+: 1772457048:1;git status
+: 1772458099:2;kubectl get pods -n staging
+: 1772458141:3;tail -f /var/log/system.log
+: 1772458489:1;git status
+: 1772459743:0;git push --force-with-lease
+: 1772459801:2;kubectl get pods -n production
+: 1772460968:1;git status
+: 1772461962:0;git log --oneline | head -20
+: 1772463250:0;git push
+: 1772464986:1;git add . && git commit -m "wip"
+: 1772468417:3;ls -la
+: 1772470007:1;ls -la
+: 1772473876:3;ls -la
+: 1772474234:2;docker compose logs -f api
+: 1772475648:0;git checkout .
+: 1772476335:0;cd ~/Repos/tine
+: 1772476361:2;kubectl get pods -n production
+: 1772532355:0;git status
+: 1772535838:0;bun install
+: 1772540658:3;docker compose down
+: 1772547997:1;git status
+: 1772557945:2;docker compose up -d
+: 1772559673:1;git commit -m "fix the thing"
+: 1772613987:0;git commit -m "wip"
+: 1772617887:1;git status
+: 1772622843:0;brew install ripgrep
+: 1772629429:3;docker compose up -d
+: 1772629702:3;bun run lint
+: 1772630390:1;ls -la
+: 1772633151:2;bun install
+: 1772637747:1;git checkout .
+: 1772645753:0;open -a Tine
+: 1772648290:0;git commit -m "fix the thing"
+: 1772649705:1;git status
+: 1772650252:1;git status
+: 1772698648:1;ls -la
+: 1772706419:3;kubectl get pods -n production
+: 1772712749:0;docker ps
+: 1772713456:0;git status
+: 1772718138:1;git status
+: 1772719230:0;git checkout -
+: 1772721013:0;git status
+: 1772723557:1;git status
+: 1772726031:1;git diff --staged
+: 1772729854:0;git rebase -i main
+: 1772787020:2;kubectl get pods -n production
+: 1772792605:1;bun install
+: 1772794083:0;git status
+: 1772794869:0;git push
+: 1772797651:0;git status
+: 1772799047:3;docker compose up -d
+: 1772801174:1;git push
+: 1772814808:1;git stash pop
+: 1772815988:1;git status
+: 1772816349:1;git status
+: 1772816720:1;git commit -m "wip"
+: 1772817000:2;ls -la
+: 1772817721:1;bun run lint
+: 1773044161:0;git diff --staged
+: 1773044474:0;git commit -m "wip"
+: 1773044593:0;ssh deploy@build-01
+: 1773045445:1;docker compose up -d
+: 1773046164:0;cd ..
+: 1773050881:1;cd ~/Repos/tine
+: 1773050996:0;git status
+: 1773051660:1;git add . && git commit -m "wip"
+: 1773051777:0;git checkout -
+: 1773052675:2;cd ..
+: 1773055508:0;docker compose up -d
+: 1773058434:0;cd ~/Repos/tine
+: 1773061360:1;git status
+: 1773065515:2;docker compose logs -f api
+: 1773066757:1;git commit -m "fix the thing"
+: 1773067401:0;bun run lint
+: 1773067548:3;docker compose logs -f api
+: 1773069365:1;git status
+: 1773071731:0;git push
+: 1773075273:0;ll
+: 1773078029:1;bun install
+: 1773079144:0;git status
+: 1773080585:1;git push --force-with-lease
+: 1773133648:0;git add .
+: 1773134595:0;git commit -m "review feedback"
+: 1773137634:0;git status
+: 1773140587:3;docker compose up -d
+: 1773165667:0;git checkout -
+: 1773165807:1;git log --oneline -10
+: 1773223177:2;ls -la
+: 1773224443:1;bun run lint
+: 1773225961:0;kubectl get pods -n production
+: 1773226267:1;git add .
+: 1773227051:1;git add . && git commit -m "wip"
+: 1773231302:1;git add .
+: 1773233007:31;swift build
+: 1773240375:1;git status
+: 1773242812:1;git add .
+: 1773244674:3;bun install
+: 1773245801:3;bun install
+: 1773247648:0;git add . && git commit -m "wip"
+: 1773251260:1;cd ~/Repos/tine
+: 1773251875:0;git commit -m "wip"
+: 1773253426:1;git log --oneline -10
+: 1773303856:0;chmod +x scripts/setup.sh
+: 1773309115:1;git status
+: 1773310543:0;git status
+: 1773312872:1;open -a Tine
+: 1773314834:12;bun test
+: 1773329907:2;bun run lint
+: 1773336841:1;cd ~/Repos/tine
+: 1773390461:0;git push
+: 1773391490:2;kubectl logs -f deploy/api -n production
+: 1773394487:1;git checkout -
+: 1773394844:1;docker compose logs -f api
+: 1773396463:1;docker compose logs -f api
+: 1773397163:1;cd ~/Repos/tine
+: 1773399716:2;ls -la
+: 1773401590:1;bun run lint
+: 1773407655:1;git checkout main
+: 1773409136:0;git commit -m "review feedback"
+: 1773414348:0;git checkout main
+: 1773418960:13;bun test
+: 1773649081:9;bun test
+: 1773649229:1;docker image prune -f
+: 1773649781:0;git commit -m "review feedback"
+: 1773652211:0;git diff --staged
+: 1773654645:1;git add .
+: 1773654949:0;git add . && git commit -m "wip"
+: 1773655052:3;cd ..
+: 1773655230:1;git add .
+: 1773655234:2;kubectl get pods -n staging
+: 1773655849:1;ps aux | grep node
+: 1773656754:1;docker compose up -d
+: 1773657472:0;git push
+: 1773657749:1;cd ..
+: 1773658987:1;git status
+: 1773660969:0;ls -la
+: 1773661092:0;cd ..
+: 1773662047:0;git add .
+: 1773663433:0;git push
+: 1773663723:3;kubectl get pods -n production
+: 1773664609:24;bun test
+: 1773664752:0;git status
+: 1773666872:0;git push
+: 1773666994:2;ls -la
+: 1773668355:0;git checkout -
+: 1773669668:1;git push
+: 1773671221:28;bun test
+: 1773672330:2;kubectl get pods -n production
+: 1773673793:0;git pull --rebase
+: 1773676940:1;git diff --staged
+: 1773677632:21;swift build
+: 1773678969:0;git pull --rebase
+: 1773679919:0;docker compose logs -f api
+: 1773680757:0;git checkout main
+: 1773681463:1;bun run lint
+: 1773681896:0;git commit -m "fix the thing"
+: 1773682867:1;ls -la
+: 1773684281:1;git log --oneline -10
+: 1773684782:9;swift build
+: 1773684997:1;sudo dscacheutil -flushcache
+: 1773685216:1;git log --oneline -10
+: 1773685531:3;docker compose up -d
+: 1773735707:0;git status
+: 1773756027:1;ls -la
+: 1773757026:30;bun test
+: 1773757078:1;git log --oneline | head -20
+: 1773758718:1;git stash pop
+: 1773763329:3;ls -la
+: 1773763531:1;git push --force-with-lease
+: 1773766353:0;git status
+: 1773771731:0;git checkout .
+: 1773825214:3;bun run lint
+: 1773825420:0;bun run lint
+: 1773828420:32;swift build
+: 1773832075:1;bun install
+: 1773833269:3;ls -la
+: 1773833913:16;bun test
+: 1773839851:3;docker compose up -d
+: 1773841811:0;ls -la
+: 1773842815:0;bun run lint
+: 1773846694:3;kubectl get pods -n staging
+: 1773847071:3;cd ~/Repos/tine
+: 1773852215:2;cd ..
+: 1773855656:1;git push
+: 1773856900:1;git status
+: 1773859575:2;docker compose down
+: 1773908591:0;cd ~/Repos/tine
+: 1773909360:0;git status
+: 1773909372:0;git push
+: 1773911352:0;bun run build
+: 1773924959:2;kubectl get pods -n production
+: 1773927270:0;ls -la
+: 1773936524:0;git commit -m "fix the thing"
+: 1773943037:1;git add .
+: 1773943467:2;cd ..
+: 1773995512:3;docker compose down
+: 1773996164:1;docker ps
+: 1773997089:0;git commit -m "fix the thing"
+: 1773997856:0;cd ..
+: 1774004604:1;ssh deploy@build-01
+: 1774011752:0;git status
+: 1774017309:0;git add .
+: 1774021195:30;bun test
+: 1774030046:0;git add .
+: 1774032772:0;git push
+: 1774253075:1;docker compose logs -f api
+: 1774257715:1;git stash pop
+: 1774259948:3;cd ..
+: 1774260923:1;git status
+: 1774261777:1;git status
+: 1774261858:3;docker ps
+: 1774262041:0;git checkout -
+: 1774263059:0;bun run lint
+: 1774263167:1;ll
+: 1774263912:3;open -a Tine
+: 1774265936:1;git log --oneline | head -20
+: 1774267092:2;docker image prune -f
+: 1774268351:0;docker ps
+: 1774268818:3;cat package.json | jq .scripts
+: 1774269726:0;git add . && git commit -m "wip"
+: 1774270613:1;git add . && git commit -m "wip"
+: 1774270903:0;ls -la
+: 1774274535:3;kubectl logs -f deploy/api -n production
+: 1774274948:2;docker compose up -d
+: 1774278067:1;git status
+: 1774279433:1;ls -la
+: 1774279543:0;git push
+: 1774280343:1;git status
+: 1774282413:2;kubectl get pods -n production
+: 1774285282:1;git pull --rebase
+: 1774288146:0;open -a Tine
+: 1774288921:1;git commit -m "wip"
+: 1774290067:1;git status
+: 1774290430:29;swift build
+: 1774291215:0;git pull --rebase
+: 1774291988:1;kubectl get pods -n production
+: 1774339633:0;git commit -m "fix the thing"
+: 1774340338:1;git rebase -i main
+: 1774344851:2;open -a Tine
+: 1774345467:1;open -a Tine
+: 1774349306:2;docker compose up -d
+: 1774350375:0;ls -la
+: 1774352126:1;git log --oneline -10
+: 1774358915:0;git stash pop
+: 1774363234:1;git checkout -
+: 1774369303:0;ls -la
+: 1774370597:1;cd ..
+: 1774372494:0;kubectl get pods -n production
+: 1774375926:3;docker compose up -d
+: 1774427735:3;ls -la
+: 1774432730:3;docker compose logs -f api
+: 1774436502:3;kubectl get pods -n staging
+: 1774436641:1;git checkout -
+: 1774456712:1;docker compose logs -f api
+: 1774458256:3;bun run build
+: 1774459979:1;ssh deploy@build-01
+: 1774462544:0;git pull --rebase
+: 1774463751:3;cd ~/Repos/tine
+: 1774529720:3;kubectl logs -f deploy/api -n production
+: 1774531071:2;cd ..
+: 1774532749:0;git diff --staged
+: 1774533495:0;git checkout main
+: 1774536033:0;rg --hidden tine
+: 1774540485:1;git pull --rebase
+: 1774543454:3;bun run build
+: 1774547196:0;cd ~/Repos/tine
+: 1774547270:1;git push
+: 1774600754:2;brew install ripgrep
+: 1774601490:2;docker compose up -d
+: 1774603716:0;git status
+: 1774608538:1;ll
+: 1774614069:1;ls -la
+: 1774632087:0;cd ..
+: 1774632212:0;git add .
+: 1774635477:0;git checkout main
+: 1774857683:1;kubectl logs -f deploy/api -n production
+: 1774860936:2;cd ~/Repos/tine
+: 1774861198:1;git log --oneline -10
+: 1774861634:2;ls -la
+: 1774862489:8;bun test
+: 1774863853:3;cd ..
+: 1774864855:1;git status
+: 1774865282:0;git push
+: 1774865463:0;bun run build
+: 1774866153:1;git add . && git commit -m "wip"
+: 1774866690:0;git commit -m "review feedback"
+: 1774868209:1;git add .
+: 1774869718:0;git log --oneline -10
+: 1774870085:1;git checkout -
+: 1774871131:1;git add .
+: 1774871524:2;ls -la
+: 1774872953:15;bun test
+: 1774873248:0;git diff --staged
+: 1774876704:1;git push --force-with-lease
+: 1774877700:0;git log --oneline -10
+: 1774881664:1;git checkout main
+: 1774887150:1;git status
+: 1774887670:0;git status
+: 1774890902:28;bun test
+: 1774894062:1;cd ~/Repos/tine
+: 1774894767:1;git status
+: 1774895643:0;git push
+: 1774896174:1;git commit -m "wip"
+: 1774948082:1;git pull --rebase
+: 1774950234:1;git status
+: 1774952404:1;ls -la
+: 1774954882:1;ls -la
+: 1774956937:1;git status
+: 1774961354:1;git add .
+: 1774973739:5;bun test
+: 1774977157:0;cd ~/Repos/tine
+: 1774979456:0;docker compose up -d
+: 1774981247:1;git checkout main
+: 1774982721:0;tail -f /var/log/system.log
+: 1775035298:28;swift build
+: 1775036354:2;cd ..
+: 1775040287:1;git pull --rebase
+: 1775045218:0;git checkout -
+: 1775046674:0;git checkout main
+: 1775058629:0;docker compose down
+: 1775059706:0;cd ~/Repos/tine
+: 1775065007:1;git status
+: 1775066633:2;docker compose down
+: 1775067261:22;bun test
+: 1775125676:0;git commit -m "review feedback"
+: 1775125689:0;docker ps
+: 1775128786:1;git pull --rebase
+: 1775129159:1;git add .
+: 1775130788:1;git commit -m "wip"
+: 1775132123:0;git pull --rebase
+: 1775135859:5;swift build
+: 1775206463:1;git log --oneline -10
+: 1775208730:0;git rebase -i main
+: 1775211065:1;git commit -m "review feedback"
+: 1775211853:1;git commit -m "wip"
+: 1775212623:1;git status
+: 1775218872:1;git status
+: 1775220259:0;git checkout .
+: 1775222100:1;git checkout -
+: 1775231928:0;git add .
+: 1775236375:2;bun install
+: 1775241575:2;ssh deploy@build-01
+: 1775463783:2;docker compose logs -f api
+: 1775463904:2;docker compose up -d
+: 1775464053:0;bun install
+: 1775465617:3;ssh deploy@build-01
+: 1775465697:1;git commit -m "review feedback"
+: 1775466129:2;bun install
+: 1775466571:1;docker compose up -d
+: 1775472549:0;git add .
+: 1775474889:1;git add . && git commit -m "wip"
+: 1775474913:26;bun test
+: 1775477514:1;git add .
+: 1775478045:0;git status
+: 1775478385:0;git status
+: 1775478594:1;docker ps
+: 1775478606:1;ls -la
+: 1775481870:2;docker compose up -d
+: 1775481878:0;git status
+: 1775482540:1;cd ~/Repos/tine
+: 1775483461:0;git checkout -
+: 1775487475:0;git push --force-with-lease
+: 1775488493:3;kubectl get pods -n production
+: 1775488907:0;kubectl get pods -n production
+: 1775491710:32;bun test
+: 1775492777:1;git push --force-with-lease
+: 1775493022:2;ssh deploy@build-01
+: 1775494466:3;bun run build
+: 1775496417:1;ls -la
+: 1775497524:0;git commit -m "wip"
+: 1775498621:0;git status
+: 1775550102:3;spctl -a -vvv dist/Tine.app
+: 1775552722:0;git commit -m "review feedback"
+: 1775557533:1;git checkout main
+: 1775574935:0;git commit -m "fix the thing"
+: 1775576916:0;swift test
+: 1775579313:1;git stash pop
+: 1775579813:0;git add .
+: 1775583553:1;git add . && git commit -m "wip"
+: 1775585490:0;git add .
+: 1775585529:3;bun run lint
+: 1775585549:1;ls -la
+: 1775635838:0;kubectl get pods -n production
+: 1775640446:0;git status
+: 1775640622:1;git commit -m "wip"
+: 1775645877:3;bun install
+: 1775657696:2;kubectl get pods -n production
+: 1775666901:2;bun run lint
+: 1775669742:1;git status
+: 1775722064:3;bun run lint
+: 1775728208:2;cd ..
+: 1775736761:1;git add .
+: 1775756170:2;cd ..
+: 1775756297:0;git push
+: 1775758193:1;git add .
+: 1775760354:1;git add . && git commit -m "wip"
+: 1775810187:2;cd ..
+: 1775815004:0;ll
+: 1775819465:2;ls -la
+: 1775828734:3;bun run lint
+: 1775836379:0;git commit -m "review feedback"
+: 1775845862:8;bun test
+: 1776067531:0;git push
+: 1776067687:1;kubectl get pods -n staging
+: 1776068245:1;kubectl logs -f deploy/api -n production
+: 1776068882:0;git push
+: 1776071561:1;bun install
+: 1776071648:3;ls -la
+: 1776071773:1;git add .
+: 1776071923:1;docker compose logs -f api
+: 1776075379:0;git push --force-with-lease
+: 1776076585:1;git add .
+: 1776079941:2;pbpaste | wc -l
+: 1776081086:0;git add .
+: 1776082195:0;git checkout main
+: 1776083893:0;git add . && git commit -m "wip"
+: 1776086089:1;git checkout main
+: 1776089416:2;bun run lint
+: 1776089845:1;docker compose logs -f api
+: 1776091988:0;git commit -m "fix the thing"
+: 1776093311:0;git commit -m "review feedback"
+: 1776096971:2;cd ~/Repos/tine
+: 1776097279:1;bun install
+: 1776098654:1;git status
+: 1776104503:1;git commit -m "fix the thing"
+: 1776104605:3;bun run build
+: 1776105115:1;ls -la
+: 1776105258:1;git status
+: 1776106229:1;git status
+: 1776159062:0;git status
+: 1776171405:0;git push
+: 1776184898:0;lipo -info .build/release/tine
+: 1776185435:1;git pull --rebase
+: 1776189778:3;bun run build
+: 1776240628:0;git status
+: 1776245950:3;kubectl get pods -n production
+: 1776254211:1;cd ..
+: 1776259332:2;swift test
+: 1776261496:1;git status
+: 1776262008:1;git commit -m "wip"
+: 1776263257:1;git push --force-with-lease
+: 1776263688:0;git pull --rebase
+: 1776266807:1;git checkout main
+: 1776273820:1;git push
+: 1776274134:3;docker ps
+: 1776336982:20;bun test
+: 1776341077:3;cd ~/Repos/tine
+: 1776344956:2;rg --hidden tine
+: 1776346338:2;system_profiler SPHardwareDataType
+: 1776361858:1;docker compose up -d
+: 1776421057:0;git status
+: 1776422095:1;docker compose up -d
+: 1776425048:1;git status
+: 1776434617:0;docker compose down
+: 1776438829:3;ls -la
+: 1776444565:0;git push
+: 1776672107:0;cd ~/Repos/tine
+: 1776673890:1;git push
+: 1776677562:5;bun test
+: 1776679540:0;docker compose logs -f api
+: 1776680771:1;git status
+: 1776680807:1;docker compose up -d
+: 1776680963:2;bun install
+: 1776680994:2;ls -la
+: 1776681847:2;docker compose logs -f api
+: 1776681934:2;docker compose up -d
+: 1776682513:1;git add .
+: 1776684161:1;git push
+: 1776684449:2;docker compose down
+: 1776688751:0;git status
+: 1776690157:1;cd ..
+: 1776692621:0;git add .
+: 1776692676:3;cd ~/Repos/tine
+: 1776693789:1;git add .
+: 1776694256:0;git add .
+: 1776695105:0;git status
+: 1776695464:0;git checkout main
+: 1776698838:0;kubectl get pods -n production
+: 1776699660:1;bun run lint
+: 1776702653:1;git add . && git commit -m "wip"
+: 1776702721:30;bun test
+: 1776703071:3;bun install
+: 1776703937:2;cd ..
+: 1776705748:0;cd ~/Repos/tine
+: 1776705752:0;git status
+: 1776707601:2;swift test
+: 1776708656:2;ssh deploy@build-01
+: 1776709045:0;brew upgrade
+: 1776709374:0;git stash pop
+: 1776710016:2;kubectl get pods -n production
+: 1776710904:0;git status
+: 1776760530:0;git status
+: 1776761905:3;kubectl logs -f deploy/api -n production
+: 1776764719:1;git checkout -
+: 1776767984:1;git add .
+: 1776769371:1;git push
+: 1776773351:2;docker ps
+: 1776781758:0;git status
+: 1776788478:0;git status
+: 1776791733:3;docker compose up -d
+: 1776797731:0;git add .
+: 1776845209:1;git stash pop
+: 1776847066:2;ls -la
+: 1776849109:1;swift test
+: 1776851788:0;git add .
+: 1776853131:0;git pull --rebase
+: 1776853766:0;git push
+: 1776856115:0;cd ~/Repos/tine
+: 1776866434:1;kubectl get pods -n production
+: 1776873884:0;git push
+: 1776935197:0;docker ps
+: 1776938705:3;cd ..
+: 1776945310:0;git status
+: 1776946030:0;git commit -m "review feedback"
+: 1776950343:0;brew upgrade
+: 1776950839:2;cd ~/Repos/tine
+: 1776962984:2;cd ..
+: 1777022538:2;bun run lint
+: 1777023169:3;ls -la
+: 1777024266:21;bun test
+: 1777027151:1;git diff --staged
+: 1777030108:1;cd ..
+: 1777032474:0;git checkout main
+: 1777036612:2;ssh deploy@build-01
+: 1777047925:3;cd ~/Repos/tine
+: 1777053650:0;git push
+: 1777056929:3;ls -la
+: 1777279133:27;bun test
+: 1777280345:0;git pull --rebase
+: 1777280932:0;git commit -m "review feedback"
+: 1777281626:1;git status
+: 1777287077:1;git status
+: 1777287864:0;git checkout .
+: 1777288544:0;git add .
+: 1777292951:1;git checkout -
+: 1777293020:0;kubectl describe pod api-7f9c -n production
+: 1777294300:0;cat package.json | jq .scripts
+: 1777294443:1;git push --force-with-lease
+: 1777295731:0;git add .
+: 1777301288:1;git add .
+: 1777303128:1;bun install
+: 1777303345:0;git status
+: 1777307639:1;docker compose logs -f api
+: 1777312040:1;git diff --staged
+: 1777313030:1;swift test
+: 1777313339:1;kubectl logs -f deploy/api -n production
+: 1777313852:1;git diff --staged
+: 1777313935:0;git add .
+: 1777368226:1;git push
+: 1777369422:0;ls -la
+: 1777378008:1;git checkout main
+: 1777379301:0;ls -la
+: 1777382387:3;ls -la
+: 1777388903:1;kubectl get pods -n production
+: 1777394331:0;git commit -m "fix the thing"
+: 1777397115:1;git push
+: 1777400278:0;git status
+: 1777401563:0;git commit -m "wip"
+: 1777451965:2;bun install
+: 1777454123:1;git push
+: 1777455503:0;ls -la
+: 1777457149:3;bun install
+: 1777458010:1;git log --oneline -10
+: 1777459980:0;git commit -m "review feedback"
+: 1777466907:3;docker compose up -d
+: 1777472361:1;ps aux | grep node
+: 1777474261:1;ssh deploy@build-01
+: 1777478213:1;git status
+: 1777480999:0;cd ~/Repos/tine
+: 1777487117:3;docker compose up -d
+: 1777536603:1;git add .
+: 1777536664:3;ls -la
+: 1777538936:1;git status
+: 1777549026:2;ls -la
+: 1777549891:1;git status
+: 1777562058:1;git commit -m "wip"
+: 1777569355:0;kubectl get pods -n production
+: 1777569486:1;git add .
+: 1777631584:1;git checkout main
+: 1777637396:1;git pull --rebase
+: 1777642837:1;git status
+: 1777648446:0;git status
+: 1777651321:1;git commit -m "review feedback"
+: 1777661336:0;git checkout -
+: 1777882677:3;ssh deploy@build-01
+: 1777883185:0;softwareupdate --list
+: 1777883251:1;git push
+: 1777884884:0;git push
+: 1777885434:1;git checkout .
+: 1777885923:0;git commit -m "wip"
+: 1777891117:0;git checkout -
+: 1777893060:1;git add . && git commit -m "wip"
+: 1777893392:3;ll
+: 1777897113:15;bun test
+: 1777897647:0;git diff --staged
+: 1777898063:1;git status
+: 1777898167:2;ls -la
+: 1777898852:2;docker compose up -d
+: 1777900219:1;kubectl get pods -n production
+: 1777901348:1;git status
+: 1777902460:2;docker compose up -d
+: 1777907790:2;sudo dscacheutil -flushcache
+: 1777909392:0;git status
+: 1777910849:26;bun test
+: 1777911457:1;git commit -m "wip"
+: 1777912238:0;git checkout -
+: 1777913734:0;ls -la
+: 1777915486:3;bun install
+: 1777915497:1;git status
+: 1777917431:0;ssh deploy@build-01
+: 1777917760:1;git log --oneline -10
+: 1777918337:0;git add . && git commit -m "wip"
+: 1777920280:0;bun run lint
+: 1777920414:3;rg --hidden tine
+: 1777920598:2;kubectl get pods -n staging
+: 1777970909:0;git checkout main
+: 1777972598:0;bun run build
+: 1777977567:0;git status
+: 1777978928:1;git log --oneline -10
+: 1777991774:1;docker compose up -d
+: 1777997857:3;ls -la
+: 1777998899:1;swift test
+: 1778055305:0;git push
+: 1778060881:2;kubectl logs -f deploy/api -n production
+: 1778062381:3;cd ~/Repos/tine
+: 1778063167:0;docker compose up -d
+: 1778063531:2;ls -la
+: 1778075869:0;git add .
+: 1778075932:1;git checkout main
+: 1778081184:0;git status
+: 1778144088:0;git status
+: 1778153761:1;git push --force-with-lease
+: 1778161185:0;git add .
+: 1778162389:3;open -a Tine
+: 1778165512:2;cd ~/Repos/tine
+: 1778167215:0;git commit -m "fix the thing"
+: 1778167846:0;git checkout .
+: 1778173652:0;git commit -m "review feedback"
+: 1778178443:0;kubectl logs -f deploy/api -n production
+: 1778178451:2;cd ~/Repos/tine
+: 1778178862:0;git status
+: 1778228963:3;bun run lint
+: 1778229231:3;bun run lint
+: 1778229864:1;git commit -m "fix the thing"
+: 1778232216:1;git status
+: 1778239077:1;git status
+: 1778241554:1;git status
+: 1778254840:0;ls -la
+: 1778259377:1;git push --force-with-lease
+: 1778262255:1;git add .
+: 1778262970:0;git status
+: 1778487938:2;docker ps
+: 1778489993:0;git pull --rebase
+: 1778496586:1;cd ..
+: 1778497468:1;git diff --staged
+: 1778498252:0;git log --oneline -10
+: 1778498567:0;git pull --rebase
+: 1778499366:0;git push
+: 1778499892:1;git commit -m "review feedback"
+: 1778501172:6;swift build
+: 1778502465:1;git status
+: 1778503292:2;ls -la
+: 1778503522:1;git add .
+: 1778503975:3;kubectl logs -f deploy/api -n production
+: 1778504784:1;git add .
+: 1778504849:3;rg --hidden tine
+: 1778506040:1;git status
+: 1778506929:1;git add .
+: 1778507495:3;rg --hidden tine
+: 1778509184:0;bun run lint
+: 1778509260:1;cd ~/Repos/tine
+: 1778511121:1;git checkout -
+: 1778511248:0;git commit -m "wip"
+: 1778514676:2;ls -la
+: 1778515001:0;ls -la
+: 1778518041:1;bun run build
+: 1778519234:2;brew upgrade
+: 1778519530:0;git status
+: 1778520719:1;git status
+: 1778521932:30;swift build
+: 1778522728:0;git status
+: 1778525275:1;git commit -m "wip"
+: 1778525391:2;bun run lint
+: 1778574226:0;git status
+: 1778574573:3;swift test
+: 1778578632:1;hdiutil attach dist/tine.dmg
+: 1778579538:1;ls -la
+: 1778582966:0;ls -la
+: 1778584612:0;git checkout main
+: 1778585952:3;ps aux | grep node
+: 1778587376:1;ls -la
+: 1778592539:0;git status
+: 1778592841:0;bun run lint
+: 1778598059:0;rg --hidden tine
+: 1778602370:1;git status
+: 1778611329:1;bun install
+: 1778611699:1;docker compose up -d
+: 1778661078:1;git add .
+: 1778661415:1;git status
+: 1778664542:1;rg --hidden tine
+: 1778674441:0;git pull --rebase
+: 1778679994:0;docker compose logs -f api
+: 1778684412:1;git status
+: 1778687463:0;git add .
+: 1778687735:1;git checkout -
+: 1778693462:1;git push
+: 1778695897:0;git checkout main
+: 1778698455:1;git status
+: 1778745974:0;bun run lint
+: 1778754261:1;cd ..
+: 1778763328:0;git stash pop
+: 1778769233:0;ls -la
+: 1778770889:2;bun run build
+: 1778771624:0;git commit -m "wip"
+: 1778777436:0;cd ..
+: 1778833644:0;ls -la
+: 1778856603:1;git push
+: 1778861282:0;kubectl get pods -n production
+: 1778866846:20;bun test
+: 1779092730:0;git commit -m "wip"
+: 1779092860:1;git commit -m "fix the thing"
+: 1779092876:2;docker compose logs -f api
+: 1779095050:1;git commit -m "fix the thing"
+: 1779095550:31;bun test
+: 1779097502:1;git push
+: 1779099069:0;cd ..
+: 1779099153:0;cd ..
+: 1779099193:3;docker compose up -d
+: 1779099316:0;docker compose logs -f api
+: 1779099660:0;git commit -m "fix the thing"
+: 1779101878:1;swift test
+: 1779102058:0;git status
+: 1779103182:0;bun run build
+: 1779104710:1;git pull --rebase
+: 1779105804:24;bun test
+: 1779107310:2;cd ..
+: 1779107761:3;kubectl get pods -n production
+: 1779109314:2;ll
+: 1779109815:1;git status
+: 1779113201:1;git add .
+: 1779115779:20;bun test
+: 1779119625:0;ls -la
+: 1779119736:1;git diff --staged
+: 1779119780:3;docker image prune -f
+: 1779121404:0;cd ..
+: 1779122494:1;git status
+: 1779122608:0;docker compose down
+: 1779123988:1;git status
+: 1779124732:0;git pull --rebase
+: 1779124889:1;git status
+: 1779126371:3;cd ..
+: 1779129138:0;rg --hidden tine
+: 1779180638:1;docker image prune -f
+: 1779181051:0;git rebase -i main
+: 1779192515:3;docker compose up -d
+: 1779197965:1;docker image prune -f
+: 1779205017:0;git checkout main
+: 1779208660:1;git status
+: 1779215446:0;git checkout main
+: 1779274962:1;git push
+: 1779276189:0;kubectl get pods -n staging
+: 1779277908:0;git push
+: 1779286339:0;ls -la
+: 1779301018:1;git checkout main
+: 1779301171:2;cd ..
+: 1779354219:1;git add .
+: 1779365621:1;git pull --rebase
+: 1779368231:0;git checkout main
+: 1779368515:31;bun test
+: 1779368808:3;swift test
+: 1779372495:3;ll
+: 1779376788:1;git push
+: 1779380335:1;cd ..
+: 1779389372:1;ls -la
+: 1779389931:0;git checkout main
+: 1779438594:1;git checkout main
+: 1779441515:1;git pull --rebase
+: 1779443007:0;git push
+: 1779443269:2;ls -la
+: 1779449586:3;cd ..
+: 1779452968:0;git log --oneline -10
+: 1779453196:0;ls -la
+: 1779457101:28;bun test
+: 1779458684:0;git diff --staged
+: 1779461633:0;ls -la
+: 1779470874:9;swift build
+: 1779471662:2;cd ..
+: 1779696934:2;open -a Tine
+: 1779697109:0;git status
+: 1779698273:1;git diff --staged
+: 1779698408:14;swift build
+: 1779700756:0;kubectl describe pod api-7f9c -n production
+: 1779703768:3;kubectl get pods -n production
+: 1779703769:0;ssh deploy@build-01
+: 1779704354:0;kubectl logs -f deploy/api -n production
+: 1779706394:1;docker compose down
+: 1779708647:3;kubectl get pods -n production
+: 1779708699:1;git pull --rebase
+: 1779709716:0;git commit -m "wip"
+: 1779710912:32;bun test
+: 1779712365:1;cd ..
+: 1779712449:1;git checkout -
+: 1779713707:1;git pull --rebase
+: 1779714206:0;git push
+: 1779715639:1;ps aux | grep node
+: 1779716014:1;git status
+: 1779718171:3;ls -la
+: 1779718300:0;git commit -m "fix the thing"
+: 1779720829:1;git checkout main
+: 1779722031:1;git add .
+: 1779722170:0;git commit -m "wip"
+: 1779723340:0;git push
+: 1779725386:0;git push
+: 1779726801:1;git log --oneline -10
+: 1779727175:1;git status
+: 1779728196:0;git commit -m "fix the thing"
+: 1779728657:16;bun test
+: 1779730779:0;git pull --rebase
+: 1779731963:32;bun test
+: 1779732498:2;kubectl get pods -n staging
+: 1779732516:0;docker compose logs -f api
+: 1779733007:1;docker compose down
+: 1779734008:0;git status
+: 1779734331:1;git checkout main
+: 1779787828:3;cd ..
+: 1779793059:1;git add .
+: 1779798606:1;git status
+: 1779798824:1;cd ..
+: 1779802819:0;git add .
+: 1779807641:0;git commit -m "fix the thing"
+: 1779809984:0;git status
+: 1779812289:3;cd ..
+: 1779818366:0;git push
+: 1779821197:0;ls -la
+: 1779821915:2;kubectl get pods -n production
+: 1779871282:1;git commit -m "review feedback"
+: 1779885514:3;kubectl logs -f deploy/api -n production
+: 1779885581:0;git checkout .
+: 1779885864:2;kubectl logs -f deploy/api -n production
+: 1779887083:1;docker compose up -d
+: 1779893946:0;git stash pop
+: 1779896681:2;ll
+: 1779900511:1;git status
+: 1779901356:0;git status
+: 1779902853:2;ls -la
+: 1779905038:0;kubectl get pods -n production
+: 1779956272:1;git add .
+: 1779957007:9;swift build
+: 1779961296:0;bun run lint
+: 1779968728:1;git status
+: 1779975570:1;git push
+: 1779976420:0;git status
+: 1779979320:1;git stash pop
+: 1779980824:1;ll
+: 1779980865:0;git pull --rebase
+: 1779981867:2;bun install
+: 1779985036:22;bun test
+: 1779989281:0;git push
+: 1779990861:1;git checkout -
+: 1780043248:0;git push
+: 1780043905:2;ls -la
+: 1780050563:1;bun run lint
+: 1780054880:3;cd ~/Repos/tine
+: 1780057334:13;bun test
+: 1780059524:1;git commit -m "review feedback"
+: 1780059618:1;kubectl get pods -n production
+: 1780060395:0;git status
+: 1780066724:0;git checkout .
+: 1780074133:3;ll
+: 1780074186:0;ls -la
+: 1780075155:1;git checkout main
+: 1780076925:0;git checkout main
+: 1780080907:1;git checkout main
+: 1780303617:1;git pull --rebase
+: 1780304852:1;git commit -m "fix the thing"
+: 1780307461:3;cd ~/Repos/tine
+: 1780307903:2;cd ..
+: 1780310034:1;docker compose down
+: 1780314216:1;cd ..
+: 1780314416:2;defaults read com.apple.dock
+: 1780317172:1;git status
+: 1780317227:1;docker compose logs -f api
+: 1780317909:2;bun run lint
+: 1780318722:0;git checkout main
+: 1780318992:0;git checkout .
+: 1780319012:0;bun install
+: 1780319398:1;git status
+: 1780320329:2;kubectl get pods -n production
+: 1780321167:3;cd ~/Repos/tine
+: 1780321592:1;git status
+: 1780322139:1;git log --oneline | head -20
+: 1780323253:0;git rebase -i main
+: 1780328879:21;bun test
+: 1780329017:0;git commit -m "wip"
+: 1780329983:0;git checkout main
+: 1780330387:1;diff <(sort a.txt) <(sort b.txt)
+: 1780331783:0;git pull --rebase
+: 1780332812:0;git status
+: 1780333587:0;git status
+: 1780333766:0;git status
+: 1780334980:0;git status
+: 1780335610:1;git diff --staged
+: 1780336270:0;git status
+: 1780339482:0;git status
+: 1780389030:0;git pull --rebase
+: 1780389714:1;swift test
+: 1780389795:1;git checkout -
+: 1780396314:0;docker compose logs -f api
+: 1780396822:20;bun test
+: 1780412495:1;git status
+: 1780414576:3;kubectl logs -f deploy/api -n production
+: 1780419079:1;brew upgrade
+: 1780419754:1;ls -la
+: 1780420716:1;git push --force-with-lease
+: 1780424325:1;git log --oneline -10
+: 1780480933:0;bun run lint
+: 1780483757:0;docker compose logs -f api
+: 1780486863:1;ls -la
+: 1780487754:2;bun run build
+: 1780489308:0;git add . && git commit -m "wip"
+: 1780500664:0;git checkout -
+: 1780502194:0;docker ps
+: 1780504351:0;ls -la
+: 1780505677:21;bun test
+: 1780507993:0;cat package.json | jq .scripts
+: 1780510411:0;docker compose logs -f api
+: 1780566010:0;git checkout .
+: 1780568049:1;ls -la
+: 1780572247:0;git log --oneline -10
+: 1780577378:1;git push
+: 1780583501:0;cd ~/Repos/tine
+: 1780583607:0;git status
+: 1780587317:2;docker compose up -d
+: 1780588979:0;ls -la
+: 1780589987:0;git pull --rebase
+: 1780592243:2;sudo dscacheutil -flushcache
+: 1780597433:17;bun test
+: 1780648215:2;ls -la
+: 1780649405:0;git checkout .
+: 1780652805:0;kubectl get pods -n production
+: 1780654577:1;cd ~/Repos/tine
+: 1780654919:27;swift build
+: 1780659132:2;ls -la
+: 1780659226:0;git push
+: 1780669565:1;docker ps
+: 1780676690:1;git status
+: 1780677782:2;kubectl get pods -n staging
+: 1780677966:1;open -a Tine
+: 1780678170:3;ls -la
+: 1780683194:1;git checkout .
+: 1780684127:0;git checkout .
+: 1780685033:1;git push
+: 1780907097:1;git push
+: 1780907208:2;kubectl logs -f deploy/api -n production
+: 1780907291:0;cd ..
+: 1780912322:3;kubectl logs -f deploy/api -n production
+: 1780912408:3;docker compose up -d
+: 1780912490:0;kubectl get pods -n production
+: 1780915227:1;bun run lint
+: 1780916337:1;git status
+: 1780916562:0;git commit -m "fix the thing"
+: 1780916701:2;bun run build
+: 1780918437:3;ls -la
+: 1780920809:0;git log --oneline | head -20
+: 1780922075:2;cd ..
+: 1780924719:19;swift build
+: 1780925319:1;cd ..
+: 1780926097:1;git log --oneline -10
+: 1780928579:0;cd ..
+: 1780928809:2;ll
+: 1780929929:0;git status
+: 1780930097:1;git checkout -
+: 1780930280:2;cat package.json | jq .scripts
+: 1780932060:16;bun test
+: 1780932224:2;kubectl get pods -n production
+: 1780933665:0;git checkout main
+: 1780934259:2;ls -la
+: 1780935173:17;swift build
+: 1780935560:0;git status
+: 1780938000:1;git status
+: 1780939426:1;git status
+: 1780940940:0;ll
+: 1780941687:3;bun install
+: 1780944302:1;git checkout main
+: 1780944363:2;ls -la
+: 1780944628:1;ls -la
+: 1781000327:3;docker compose up -d
+: 1781005132:11;swift build
+: 1781009243:3;docker compose up -d
+: 1781011174:1;kubectl get pods -n production
+: 1781013764:0;git push
+: 1781014768:0;git status
+: 1781021535:0;git push
+: 1781079881:1;git commit -m "wip"
+: 1781080370:1;du -sh * | sort -h
+: 1781082105:1;git status
+: 1781084739:1;git status
+: 1781097796:0;git status
+: 1781099832:0;git status
+: 1781102314:2;ll
+: 1781102402:2;docker compose logs -f api
+: 1781105594:3;brew upgrade
+: 1781105770:3;sudo dscacheutil -flushcache
+: 1781167270:1;ls -la
+: 1781170386:0;git rebase -i main
+: 1781172984:0;git add .
+: 1781174679:2;docker compose logs -f api
+: 1781175851:1;git push --force-with-lease
+: 1781177458:1;ls -la
+: 1781180778:1;git status
+: 1781186649:1;git checkout .
+: 1781193581:3;bun run build
+: 1781193796:1;git status
+: 1781202848:2;swift test
+: 1781255122:2;ls -la
+: 1781256730:1;git status
+: 1781258876:1;git checkout .
+: 1781259994:1;docker compose up -d
+: 1781266648:1;git pull --rebase
+: 1781268621:2;docker compose up -d
+: 1781272877:1;git add .
+: 1781274859:1;git status
+: 1781275080:1;git checkout -
+: 1781280210:0;git status
+: 1781287218:1;git checkout main
+: 1781288484:0;cat package.json | jq .scripts
+: 1781510706:1;ssh deploy@build-01
+: 1781510815:0;cd ~/Repos/tine
+: 1781512514:12;swift build
+: 1781514038:1;git status
+: 1781515144:0;git log --oneline -10
+: 1781519240:2;docker compose logs -f api
+: 1781523901:0;git commit -m "wip"
+: 1781525176:1;ls -la
+: 1781525546:0;git commit -m "wip"
+: 1781526370:0;git status
+: 1781526872:2;cd ..
+: 1781528997:1;git status
+: 1781530268:1;git add . && git commit -m "wip"
+: 1781530278:0;git checkout .
+: 1781530667:3;ssh deploy@build-01
+: 1781531673:0;git checkout .
+: 1781531948:0;git push
+: 1781532245:1;git checkout main
+: 1781532486:1;ls -la
+: 1781534255:1;git commit -m "wip"
+: 1781534528:0;git pull --rebase
+: 1781535868:1;git status
+: 1781538145:2;docker compose logs -f api
+: 1781541290:1;git checkout main
+: 1781543199:0;ls -la
+: 1781544724:0;bun run build
+: 1781546041:1;git status
+: 1781546598:0;git checkout main
+: 1781547402:3;kubectl describe pod api-7f9c -n production
+: 1781547516:0;git status
+: 1781547551:1;git status
+: 1781548146:3;kubectl get pods -n staging
+: 1781607462:1;git checkout main
+: 1781614036:1;git checkout main
+: 1781618218:0;git checkout main
+: 1781622789:0;git diff --staged
+: 1781628688:0;cd ..
+: 1781633501:0;git commit -m "wip"
+: 1781686119:0;bun run lint
+: 1781695529:0;git status
+: 1781698699:1;kubectl logs -f deploy/api -n production
+: 1781698783:1;brew upgrade
+: 1781700114:0;git commit -m "wip"
+: 1781703801:0;ssh deploy@build-01
+: 1781704814:1;git status
+: 1781706355:1;git status
+: 1781714483:0;git commit -m "wip"
+: 1781771651:1;git add .
+: 1781772973:3;cd ..
+: 1781775866:2;ls -la
+: 1781776298:11;bun test
+: 1781784336:0;ssh deploy@build-01
+: 1781788053:1;kubectl get pods -n production
+: 1781791393:1;git push
+: 1781799794:24;swift build
+: 1781800130:0;cat package.json | jq .scripts
+: 1781802877:1;git add .
+: 1781806429:0;git add .
+: 1781860196:1;git add .
+: 1781861683:3;docker ps
+: 1781861736:0;git add .
+: 1781861987:0;git status
+: 1781866561:1;git commit -m "fix the thing"
+: 1781866603:0;docker image prune -f
+: 1781871094:2;cd ..
+: 1781879168:20;bun test
+: 1781883064:19;bun test
+: 1781883752:1;git status
+: 1781890107:2;ls -la
+: 1781890677:1;git add .
+: 1781893030:3;docker compose logs -f api
+: 1782116615:1;git checkout main
+: 1782117131:2;sudo lsof -i :3000
+: 1782117210:2;bun install
+: 1782119127:1;kubectl get pods -n production
+: 1782120665:1;git push
+: 1782120888:1;git checkout -
+: 1782125292:0;docker compose down
+: 1782128333:0;bun run lint
+: 1782129053:3;kubectl get pods -n staging
+: 1782130410:0;bun run build
+: 1782130507:0;git commit -m "wip"
+: 1782135594:0;git push
+: 1782136344:0;git push
+: 1782136403:3;docker ps
+: 1782137132:2;cd ~/Repos/tine
+: 1782139338:3;docker compose logs -f api
+: 1782140020:1;ps aux | grep node
+: 1782140712:1;ll
+: 1782146766:1;git status
+: 1782150227:0;git commit -m "review feedback"
+: 1782150818:0;git commit -m "fix the thing"
+: 1782150999:0;git commit -m "wip"
+: 1782151968:1;docker compose up -d
+: 1782152218:0;ls -la
+: 1782152733:3;cd ..
+: 1782152766:1;git status
+: 1782202406:2;docker compose up -d
+: 1782206397:0;git push
+: 1782214579:0;git status
+: 1782220620:0;git add .
+: 1782225032:2;kubectl get pods -n staging
+: 1782228650:0;git pull --rebase
+: 1782238985:1;git add .
+: 1782240482:0;git diff --staged
+: 1782289719:1;ls -la
+: 1782294863:1;git add .
+: 1782295385:17;bun test
+: 1782299053:0;git status
+: 1782300231:0;git checkout -
+: 1782300531:0;git log --oneline | head -20
+: 1782310938:0;cd ~/Repos/tine
+: 1782312185:1;git add .
+: 1782320254:1;docker compose up -d
+: 1782377084:1;cd ~/Repos/tine
+: 1782388639:1;git log --oneline -10
+: 1782388831:16;bun test
+: 1782399008:0;git status
+: 1782399915:0;git status
+: 1782411493:0;git commit -m "fix the thing"
+: 1782461516:1;git status
+: 1782468755:2;bun run build
+: 1782470495:3;kubectl get pods -n production
+: 1782470594:1;git status
+: 1782473831:3;ssh deploy@build-01
+: 1782483473:2;kubectl logs -f deploy/api -n production
+: 1782493051:3;brew upgrade
+: 1782498661:0;docker compose logs -f api
+: 1782499236:0;cd ..
+: 1782499843:1;git checkout main
+: 1782720752:5;swift build
+: 1782721312:3;bun run lint
+: 1782721976:1;git pull --rebase
+: 1782722604:1;git push --force-with-lease
+: 1782722955:2;kubectl get pods -n production
+: 1782725483:0;git status
+: 1782725936:1;git status
+: 1782726016:1;git diff --staged
+: 1782726164:2;ls -la
+: 1782727251:1;git pull --rebase
+: 1782727557:0;git rebase -i main
+: 1782727776:1;git diff --staged
+: 1782728719:1;git add .
+: 1782729780:3;kubectl get pods -n production
+: 1782732528:0;git add . && git commit -m "wip"
+: 1782738025:2;ls -la
+: 1782741382:0;git push
+: 1782742997:2;docker compose down
+: 1782744532:2;docker image prune -f
+: 1782746124:1;git add .
+: 1782746227:0;git commit -m "wip"
+: 1782746955:0;git checkout .
+: 1782747621:0;bun run lint
+: 1782749282:0;git status
+: 1782750100:3;ll
+: 1782750321:2;ls -la
+: 1782753657:14;bun test
+: 1782756565:1;git status
+: 1782757214:1;git checkout main
+: 1782806852:1;git checkout .
+: 1782809549:0;git commit -m "wip"
+: 1782810976:1;ssh deploy@build-01
+: 1782811349:2;kubectl get pods -n staging
+: 1782813230:2;gh pr create --draft
+: 1782818337:2;ls -la
+: 1782820304:1;git add .
+: 1782825581:1;git diff --staged
+: 1782828729:0;kubectl logs -f deploy/api -n production
+: 1782830484:1;git push
+: 1782831959:1;git status
+: 1782834572:2;bunx biome check .
+: 1782835202:0;bunx biome check .
+: 1782837279:1;git commit -m "wip"
+: 1782895426:0;swift test
+: 1782901595:2;cd ~/Repos/tine
+: 1782904629:0;git checkout main
+: 1782907043:2;cd ~/Repos/tine
+: 1782907864:29;swift build
+: 1782917978:0;ls -la
+: 1782918840:3;docker compose up -d
+: 1782920250:0;git checkout main
+: 1782923687:3;ssh deploy@build-01
+: 1782924849:0;bun run build
+: 1782927307:30;bun test
+: 1782931185:1;open -a Tine
+: 1782931228:3;kubectl get pods -n staging
+: 1782982784:3;ls -la
+: 1782984765:1;ls -la
+: 1782991341:12;swift build
+: 1782995291:0;git checkout .
+: 1782996235:0;docker compose up -d
+: 1783007270:3;bunx biome check .
+: 1783012346:0;gh pr checks
+: 1783066532:1;git checkout -
+: 1783066676:1;git status
+: 1783068926:1;git status
+: 1783073325:1;git add .
+: 1783082792:1;bunx biome check .
+: 1783085354:0;git checkout main
+: 1783092160:1;ls -la
+: 1783093678:1;git checkout -
+: 1783095545:0;docker compose logs -f api
+: 1783098721:1;git push
+: 1783099475:0;git checkout main
+: 1783102747:0;git add .
+: 1783102875:22;bun test
+: 1783104504:0;gh pr create --draft
+: 1783104839:3;docker ps
+: 1783325465:3;ll
+: 1783328445:25;bun test
+: 1783329260:1;bun run lint
+: 1783333399:0;git log --oneline | head -20
+: 1783333612:3;ls -la
+: 1783333953:1;ls -la
+: 1783334754:0;git status
+: 1783335001:0;git checkout main
+: 1783335885:1;git push
+: 1783336680:1;cd ..
+: 1783337030:3;kubectl get pods -n production
+: 1783340958:0;ll
+: 1783341266:1;git add . && git commit -m "wip"
+: 1783341505:1;git add .
+: 1783342016:0;cd ~/Repos/tine
+: 1783342145:2;ls -la
+: 1783342884:1;git status
+: 1783345115:2;docker compose logs -f api
+: 1783347257:18;swift build
+: 1783347498:19;bun test
+: 1783347769:0;bun run build
+: 1783350548:2;bun run build
+: 1783350804:0;gh pr checks
+: 1783352627:1;git status
+: 1783353167:1;git add .
+: 1783353877:1;bun run lint
+: 1783355664:0;git status
+: 1783357721:0;gh pr create --draft
+: 1783358649:3;bun run lint
+: 1783361050:1;ls -la
+: 1783361573:3;docker compose down
+: 1783362074:1;git push
+: 1783362360:0;git stash pop
+: 1783362373:12;bun test
+: 1783362643:0;git checkout main
+: 1783362851:2;gh pr checks
+: 1783416866:0;docker compose logs -f api
+: 1783416935:0;ll
+: 1783422810:0;git stash pop
+: 1783426919:0;git status
+: 1783431333:0;ll
+: 1783438178:0;git checkout -
+: 1783438941:1;kubectl get pods -n production
+: 1783447731:1;git checkout -
+: 1783449362:0;git diff --staged
+: 1783498780:0;git status
+: 1783506653:0;git add .
+: 1783507860:1;git status
+: 1783508412:2;cd ~/Repos/tine
+: 1783510168:1;git add .
+: 1783511662:7;bun test
+: 1783513494:0;ls -la
+: 1783517549:2;gh pr create --draft
+: 1783528338:3;bunx biome check .
+: 1783533283:3;docker compose down
+: 1783533923:0;gh pr create --draft
+: 1783535647:3;docker ps
+: 1783536481:3;ls -la
+: 1783586590:2;kubectl logs -f deploy/api -n production
+: 1783588767:0;git checkout .
+: 1783593436:15;swift build
+: 1783594812:1;sudo dscacheutil -flushcache
+: 1783595720:27;bun test
+: 1783600801:1;open -a Tine
+: 1783601512:3;cd ~/Repos/tine
+: 1783601524:1;git status
+: 1783602092:0;git status
+: 1783602938:26;swift build
+: 1783614235:1;git add . && git commit -m "wip"
+: 1783614656:1;kubectl get pods -n staging
+: 1783617609:1;git checkout .
+: 1783618127:2;bun run lint
+: 1783622632:0;gh pr checks
+: 1783670839:8;bun test
+: 1783673519:2;ls -la
+: 1783673793:1;git diff --staged
+: 1783673955:0;git pull --rebase
+: 1783677097:2;ls -la
+: 1783678306:10;swift build
+: 1783679897:2;ls -la
+: 1783680730:1;git push
+: 1783686125:0;cd ~/Repos/tine
+: 1783690212:0;docker compose up -d
+: 1783693545:2;docker image prune -f
+: 1783696488:0;git status
+: 1783698262:1;git status
+: 1783698429:0;kubectl logs -f deploy/api -n production
+: 1783700527:0;gh pr checks
+: 1783705722:1;git add .
+: 1783705903:0;git status
+: 1783707064:1;git add .
+: 1783931130:3;docker ps
+: 1783936158:0;git push
+: 1783936308:1;git checkout main
+: 1783937550:0;git checkout -
+: 1783937878:0;tail -f /var/log/system.log
+: 1783938838:0;git status
+: 1783941131:1;cd ~/Repos/tine
+: 1783941274:1;git diff --staged
+: 1783941647:26;swift build
+: 1783942356:1;git checkout -
+: 1783943792:0;git add .
+: 1783943906:0;git push
+: 1783947830:1;bunx biome check .
+: 1783948285:0;git status
+: 1783948547:12;bun test
+: 1783949625:2;docker ps
+: 1783951944:0;networksetup -listallhardwareports
+: 1783954031:1;git add .
+: 1783954103:19;swift build
+: 1783954893:0;git status
+: 1783955524:0;git add .
+: 1783955535:2;bun run build
+: 1783956457:2;docker compose up -d
+: 1783957106:0;ps aux | grep node
+: 1783960475:0;docker compose up -d
+: 1783961262:0;git status
+: 1783962691:1;git push --force-with-lease
+: 1783966162:30;swift build
+: 1783968652:3;cd ~/Repos/tine
+: 1784018903:0;git push
+: 1784027728:3;gh pr checks
+: 1784027834:1;cd ~/Repos/tine
+: 1784028616:0;git status
+: 1784030467:0;kubectl get pods -n production
+: 1784031085:1;git status
+: 1784044304:0;git status
+: 1784049138:1;git status
+: 1784050075:12;bun test
+: 1784051798:1;git diff --staged
+: 1784052456:2;bun install
+: 1784055103:1;docker compose logs -f api
+: 1784103082:0;git commit -m "fix the thing"
+: 1784111307:25;swift build
+: 1784125798:2;cd ~/Repos/tine
+: 1784129193:0;git checkout main
+: 1784133852:1;git status
+: 1784134006:0;git status
+: 1784136442:3;cd ~/Repos/tine
+: 1784136562:1;git checkout main
+: 1784189771:0;git checkout .
+: 1784200797:1;git push
+: 1784201967:0;git checkout main
+: 1784205711:0;gh pr checks
+: 1784206069:28;bun test
+: 1784207850:2;cd ..
+: 1784210404:0;ls -la
+: 1784212468:0;git checkout .
+: 1784215838:1;git commit -m "wip"
+: 1784215983:3;cd ~/Repos/tine
+: 1784216195:0;cd ~/Repos/tine
+: 1784224813:0;git checkout -
+: 1784275907:3;ssh deploy@build-01
+: 1784276424:3;tail -f /var/log/system.log
+: 1784282918:0;ll
+: 1784286434:1;ls -la
+: 1784294598:1;bunx biome check .
+: 1784296567:0;bunx biome check .
+: 1784298176:2;gh pr checks
+: 1784298399:1;git status
+: 1784302208:0;cd ~/Repos/tine
+: 1784308520:1;git stash pop
+: 1784310905:1;ps aux | grep node
+: 1784311561:0;cd ~/Repos/tine
+: 1784311861:3;cd ~/Repos/tine
+: 1784534719:1;git add .
+: 1784534917:1;git push
+: 1784535363:0;git status
+: 1784536352:2;gh pr checks
+: 1784536980:1;git diff --staged
+: 1784538125:1;git add .
+: 1784539550:1;cd ~/Repos/tine
+: 1784539975:1;git add . && git commit -m "wip"
+: 1784540855:3;ps aux | grep node
+: 1784541097:8;swift build
+: 1784546678:0;docker compose down
+: 1784550199:0;gh pr checks
+: 1784552172:0;git add .
+: 1784554263:0;bunx biome check .
+: 1784556155:0;git diff --staged
+: 1784557381:1;git status
+: 1784558031:1;ps aux | grep node
+: 1784560549:0;git status
+: 1784560729:0;git add . && git commit -m "wip"
+: 1784562321:2;bun run lint
+: 1784562358:0;cd ~/Repos/tine
+: 1784563864:3;kubectl get pods -n staging
+: 1784566633:2;docker ps
+: 1784567316:3;gh pr create --draft
+: 1784569609:0;git status
+: 1784570749:0;git commit -m "fix the thing"
+: 1784571080:0;tail -f /var/log/system.log
+: 1784572130:0;git commit -m "fix the thing"
+: 1784572415:1;kubectl get pods -n staging
+: 1784622870:10;swift build
+: 1784622917:1;git pull --rebase
+: 1784632117:0;git push
+: 1784633067:5;bun test
+: 1784642030:1;git status
+: 1784642327:31;bun test
+: 1784647101:7;bun test
+: 1784647220:1;xattr -cr dist/Tine.app
+: 1784651432:1;git status
+: 1784655316:1;gh pr create --draft
+: 1784656012:1;git push --force-with-lease
+: 1784710065:1;ls -la
+: 1784710068:0;sudo lsof -i :3000
+: 1784711626:2;cd ..
+: 1784715226:1;git add .
+: 1784715672:33;bun test
+: 1784716783:0;ls -la
+: 1784717987:3;kubectl get pods -n staging
+: 1784726791:0;ls -la
+: 1784733975:15;bun test
+: 1784741404:1;git checkout main
+: 1784797312:3;kubectl get pods -n production
+: 1784800010:0;git push
+: 1784801046:23;bun test
+: 1784801814:3;cd ..
+: 1784803390:5;bun test
+: 1784804444:2;rg --hidden tine
+: 1784806290:0;kubectl get pods -n production
+: 1784806901:0;git commit -m "wip"
+: 1784815212:1;git add .
+: 1784816410:0;tail -f /var/log/system.log
+: 1784818176:0;cd ~/Repos/tine
+: 1784819269:4;bun test
+: 1784820626:1;docker compose up -d
+: 1784821992:1;bunx biome check .
+: 1784822917:0;git commit -m "review feedback"
+: 1784827351:3;kubectl get pods -n production
+: 1784882341:0;git checkout .
+: 1784882733:1;git push --force-with-lease
+: 1784889977:0;swift test
+: 1784893272:1;bunx biome check .
+: 1784895336:2;bun run lint
+: 1784902001:1;gh pr checks
+: 1784906511:0;git checkout -
+: 1784912315:15;bun test
+: 1784914722:0;bun run build
+: 1784916888:0;git log --oneline -10
+: 1784918952:2;ls -la
+: 1785139828:0;gh pr checks
+: 1785139837:12;bun test
+: 1785140014:1;git pull --rebase
+: 1785140353:0;swift test
+: 1785140891:0;git status
+: 1785141474:2;ls -la
+: 1785141563:2;swift test
+: 1785141986:0;git checkout .
+: 1785143038:1;gh pr create --draft
+: 1785143886:1;bunx biome check .
+: 1785147524:1;ls -la
+: 1785148300:0;git push
+: 1785150160:1;ls -la
+: 1785151879:0;git push
+: 1785156691:0;git log --oneline -10
+: 1785157289:1;git checkout .
+: 1785158272:1;git status
+: 1785158420:1;git add .
+: 1785159277:1;kubectl logs -f deploy/api -n production
+: 1785159799:2;kubectl describe pod api-7f9c -n production
+: 1785161542:1;git status
+: 1785164614:15;bun test
+: 1785166303:2;docker compose logs -f api
+: 1785166794:10;bun test
+: 1785169805:1;git add .
+: 1785171147:3;gh pr checks
+: 1785171796:2;docker compose down
+: 1785173117:1;git status
+: 1785173621:2;kubectl get pods -n production
+: 1785173965:3;gh pr checks
+: 1785174380:3;kubectl describe pod api-7f9c -n production
+: 1785174540:1;git commit -m "wip"
+: 1785174989:3;ls -la
+: 1785175177:1;rg --hidden tine
+: 1785176565:0;git push
+: 1785177562:0;docker compose logs -f api
+: 1785178015:22;bun test
+: 1785226367:0;ll
+: 1785228409:0;ll
+: 1785228440:1;git stash pop
+: 1785236571:0;docker compose down
+: 1785240893:1;cd ..
+: 1785247860:2;docker compose up -d
+: 1785253106:0;git checkout main
+: 1785253718:1;bunx biome check .
+: 1785257097:0;git checkout -
+: 1785262651:2;bunx biome check .
+: 1785262888:0;docker compose up -d
+: 1785312445:0;ls -la
+: 1785315872:28;bun test
+: 1785319171:33;bun test
+: 1785320293:3;kubectl get pods -n staging
+: 1785325440:3;tail -f /var/log/system.log
+: 1785325775:21;bun test
+: 1785326541:3;brew upgrade
+: 1785327331:0;bun run build
+: 1785328493:0;git add .
+: 1785329598:0;git add .
+: 1785336884:1;git status
+: 1785337420:0;git checkout -
+: 1785346836:0;git push
+: 1785347840:2;docker compose down
+: 1785350672:1;git status
+: 1785402795:1;bunx biome check .
+: 1785403145:10;swift build
+: 1785406180:1;git status
+: 1785406282:0;git rebase -i main
+: 1785413852:0;git rebase -i main
+: 1785414124:3;sudo lsof -i :3000
+: 1785414249:31;bun test
+: 1785414544:1;git status
+: 1785415192:1;bun install
+: 1785415823:2;bunx biome check .
+: 1785418515:0;git checkout -
+: 1785422343:0;docker compose logs -f api
+: 1785425003:0;git checkout main
+: 1785425730:0;git status
+: 1785428260:1;git status
+: 1785433079:1;git status
+: 1785485859:1;docker compose down
+: 1785489242:1;git diff --staged
+: 1785498630:1;git diff --staged
+: 1785503059:1;docker compose logs -f api
+: 1785504590:1;git commit -m "fix the thing"
+: 1785509833:0;git checkout -
+: 1785510130:1;ls -la
+: 1785514123:1;ls -la
+: 1785517040:0;ls -la
+: 1785518534:0;git status
+: 1785520857:0;git status
+: 1785520918:2;bun install
+: 1785523219:1;git status
+: 1785746466:3;bun run build
+: 1785747177:3;ll
+: 1785747556:0;kubectl get pods -n production
+: 1785751114:1;git add .
+: 1785752736:0;git status
+: 1785753631:3;docker image prune -f
+: 1785753759:0;gh pr checks
+: 1785755073:2;gh pr create --draft
+: 1785755973:0;gh pr create --draft
+: 1785756093:1;git commit -m "wip"
+: 1785756817:1;kubectl describe pod api-7f9c -n production
+: 1785758824:2;kubectl get pods -n production
+: 1785760844:3;cd ..
+: 1785762427:1;git log --oneline -10
+: 1785762451:1;git checkout main
+: 1785762631:1;git status
+: 1785763125:0;bun run lint
+: 1785764675:29;bun test
+: 1785766837:2;brew upgrade
+: 1785767888:0;ls -la
+: 1785769992:0;bunx biome check .
+: 1785770083:4;bun test
+: 1785771473:0;git add . && git commit -m "wip"
+: 1785774913:0;gh pr create --draft
+: 1785775851:14;bun test
+: 1785776689:3;bun run build
+: 1785778666:26;bun test
+: 1785779841:0;git add .
+: 1785780263:0;git add . && git commit -m "wip"
+: 1785830616:0;git checkout main
+: 1785834490:21;bun test
+: 1785835389:0;rg --hidden tine
+: 1785840557:0;git status
+: 1785843202:1;kubectl get pods -n production
+: 1785851308:2;cd ..
+: 1785856233:3;kubectl get pods -n production
+: 1785863147:0;git status
+: 1785919195:1;git add .
+: 1785927025:3;bunx biome check .
+: 1785931108:2;docker compose logs -f api
+: 1785931365:1;git status
+: 1785936187:0;git checkout main
+: 1785936331:29;swift build
+: 1785937864:3;docker compose down
+: 1785938944:33;bun test
+: 1785940953:0;git stash pop
+: 1785944576:1;git status
+: 1785949519:1;git push
+: 1785953520:2;bunx biome check .
+: 1785954623:3;docker compose logs -f api
+: 1785955737:1;git log --oneline | head -20
+: 1786004193:0;git diff --staged
+: 1786005859:3;bun run lint
+: 1786006184:3;docker compose logs -f api
+: 1786014555:3;gh pr checks
+: 1786015196:1;git commit -m "review feedback"
+: 1786018872:1;cd ~/Repos/tine
+: 1786025440:0;git add .
+: 1786025584:1;git add . && git commit -m "wip"
+: 1786028150:15;bun test
+: 1786029980:1;bunx biome check .
+: 1786031677:3;kubectl logs -f deploy/api -n production
+: 1786033642:0;kubectl get pods -n production
+: 1786041422:0;bun run lint
+: 1786098236:0;git checkout -
+: 1786099496:1;gh pr create --draft
+: 1786109440:1;swift test
+: 1786114048:3;docker compose down
+: 1786116537:0;git add .
+: 1786117967:1;git status
+: 1786119866:3;bun install
+: 1786119926:30;bun test
+: 1786124619:0;git add .
+: 1786124950:1;git status
+: 1786349547:1;ls -la
+: 1786349646:1;git commit -m "fix the thing"
+: 1786350066:0;git push
+: 1786361259:0;gh pr checks
+: 1786361812:2;kubectl get pods -n production
+: 1786362775:0;bunx biome check .
+: 1786363070:1;git commit -m "fix the thing"
+: 1786369014:3;kubectl get pods -n production
+: 1786369291:0;git checkout .
+: 1786371094:1;git pull --rebase
+: 1786376129:1;brew install ripgrep
+: 1786378156:1;git status
+: 1786380343:0;ls -la
+: 1786380746:0;git log --oneline -10
+: 1786383332:3;docker compose up -d
+: 1786383497:3;ls -la
+: 1786384069:3;gh pr create --draft
+: 1786384597:1;git add .
+: 1786385138:0;git status
