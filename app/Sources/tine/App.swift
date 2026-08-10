@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        TineLog.removeLegacyTemporaryLog()
         TineLog.reset()
         Self.installShellIntegration()
         if state.config.openWindowAtStart {
