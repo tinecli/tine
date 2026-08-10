@@ -1,6 +1,6 @@
 import Foundation
 
-struct AskEntry: Codable, Equatable {
+struct AskEntry: Codable, Equatable, Sendable {
     let name: String
     let description: String
     let manPagePath: String
