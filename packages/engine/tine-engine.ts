@@ -9,6 +9,7 @@ import "../../app/engine/shims.js";
 import { getCustomSuggestions } from "./src/generators/customSuggestionsGenerator.js";
 import { getScriptSuggestions } from "./src/generators/scriptSuggestionsGenerator.js";
 import { getTemplateSuggestions } from "./src/generators/templateSuggestionsGenerator.js";
+import { resetCaches } from "./src/parser/caches.js";
 import { MissingSpecError, parseArguments } from "./src/parser/index.js";
 import type { Suggestion } from "./src/shared/internal.js";
 import { SuggestionFlag } from "./src/shared/utils.js";
@@ -338,6 +339,10 @@ function commandNameResult(
   const filtered = filterSuggestions(cmds as never, partial, true, false);
   return { searchTerm: partial, items: toItems(filtered, partial) };
 }
+
+// `tine learn` wrote a spec into a location the loader already reads, so only the
+// cached specs stand between the new file and the next suggestion.
+(globalThis as Record<string, unknown>).tineResetSpecs = resetCaches;
 
 // Async result delivered via callback (JSC-friendly; no Swift/JS promise bridge).
 (globalThis as Record<string, unknown>).tineSuggest = (

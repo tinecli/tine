@@ -7,7 +7,19 @@ export default {
     { name: "dashboard", description: "Open the dashboard window" },
     { name: "doctor", description: "Check tine is set up correctly" },
     { name: "install", description: "Download the latest completion specs" },
+    {
+      name: "learn",
+      description: "Write a spec for a command from its own --help",
+      args: { name: "command", isCommand: true },
+      options: [
+        {
+          name: ["--force", "-f"],
+          description: "Learn it again, replacing what tine learned before",
+        },
+      ],
+    },
     { name: "restart", description: "Quit and relaunch the app" },
+    { name: "update", description: "Update the app to the latest release" },
     { name: "version", description: "Print the running app version" },
     { name: "help", description: "Show usage" },
   ],

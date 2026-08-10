@@ -387,12 +387,3 @@ enum UpdateNotice {
         }
     }
 }
-
-extension String {
-    /// Safe to put in a socket reply: the shell reads one line of `;`-joined
-    /// fields, so an error message must not carry either separator.
-    var socketSafe: String {
-        components(separatedBy: CharacterSet(charactersIn: "\n\r;\(TINE_US)\(TINE_RS)"))
-            .joined(separator: " ")
-    }
-}

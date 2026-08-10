@@ -1,8 +1,9 @@
 # Tine
 
 Native macOS terminal autocomplete — a fast SwiftUI suggestion panel driven by the
-Fig completion-spec engine. No cloud, no AI, no telemetry, no login, and **no
-pseudo-terminal**.
+Fig completion-spec engine. No cloud, no telemetry, no login, and **no
+pseudo-terminal**. The one model tine uses runs on device, only when you ask for
+it (`tine learn`).
 
 ## What it is
 
@@ -50,6 +51,11 @@ Settings). Each spec location has two folders:
   subcommands/options while keeping everything upstream. Great for adding your own
   or a company CLI's commands (e.g. a missing `aws sso login`) without inheriting
   the whole 400-file `aws` spec.
+
+For a CLI the pack never covered, `tine learn <cmd>` writes that `extend/<cmd>.js`
+for you: it runs `<cmd> --help` and turns the output into a spec with Apple's
+on-device model (macOS 26 with Apple Intelligence on; nothing leaves the Mac).
+The result is a plain file — read it, edit it, delete it. `--force` learns again.
 
 ## Development
 

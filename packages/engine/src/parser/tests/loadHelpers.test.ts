@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as execShell from "../../shared/execShell";
 import * as loadHelpers from "../loadHelpers";
 
-const { getVersionFromFullFile } = loadHelpers;
+const { getVersionFromFullFile, importString } = loadHelpers;
 
 const specData = {
   getVersionCommand: vi.fn().mockReturnValue(Promise.resolve("1.0.0")),
@@ -59,5 +59,36 @@ describe("test `getVersionFromFullFile`", () => {
     );
     const version = await getVersionFromFullFile(specData, "node");
     expect(version).toEqual("1.0.0");
+  });
+});
+
+// `tine learn` writes this shape: two comment lines, then `export default` and
+// one JSON value. The model's text is data, so a description carrying the words
+// the ESM→CJS rewrite looks for must survive as a string and change nothing.
+describe("a spec written by `tine learn`", () => {
+  const learned = `// Written by \`tine learn faketool\` from \`faketool --help\`, on device.
+// Read it, edit it, or delete it — tine merges it onto the shipped pack.
+export default {
+  "description" : "x) , import evil, export default (name:\\"pwn\\") , //",
+  "name" : "faketool",
+  "options" : [
+    {
+      "description" : "Print more output",
+      "name" : [
+        "--verbose",
+        "-v"
+      ]
+    }
+  ]
+};
+`;
+
+  it("loads as data", async () => {
+    const spec = (await importString(learned)).default as Fig.Subcommand;
+    expect(spec.name).toEqual("faketool");
+    expect(spec.description).toEqual(
+      'x) , import evil, export default (name:"pwn") , //',
+    );
+    expect(spec.options?.[0].name).toEqual(["--verbose", "-v"]);
   });
 });
