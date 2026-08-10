@@ -46,9 +46,11 @@ final class Frecency {
     private var loaded = false
     private var ignore = HistoryIgnore.none
     private let historyPath: String
+    private let logPath: String
 
-    init(historyPath: String = Frecency.defaultHistoryPath) {
+    init(historyPath: String = Frecency.defaultHistoryPath, logPath: String = TineLog.path) {
         self.historyPath = historyPath
+        self.logPath = logPath
     }
 
     var index: [String: [String: Use]] { queue.sync { merged } }
@@ -72,7 +74,8 @@ final class Frecency {
         queue.sync {
             guard pattern != ignore.source else { return false }
             ignore = HistoryIgnore(pattern)
-            tlog("history ignore: \(pattern.count) chars, compiled: \(ignore.isCompiled)") // length only — the log is world-readable
+            TineLog.write("history ignore: \(pattern.count) chars, compiled: \(ignore.isCompiled)", // length only — the log is world-readable
+                          to: logPath)
             rebuild()
             return true
         }

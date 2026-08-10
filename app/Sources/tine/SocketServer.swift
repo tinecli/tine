@@ -1,17 +1,5 @@
 import Foundation
 
-let TINE_US = "\u{1f}"
-/// One level above US, which the `env` payload's alias dump already uses as its own separator.
-let TINE_RS = "\u{1e}"
-
-extension String {
-    /// Strips characters the wire protocol reserves, so a value can't be mistaken for a separator.
-    var socketSafe: String {
-        components(separatedBy: CharacterSet(charactersIn: "\n\r;\(TINE_US)\(TINE_RS)"))
-            .joined(separator: " ")
-    }
-}
-
 /// Wire format (one line): `type US cursor US cwd US pos US buffer`; a shell predating
 /// `session` sends six `pos` fields and reads as session 0 — field order/count is load-bearing.
 struct Request {
@@ -25,12 +13,6 @@ struct Request {
     let cellW: Int     // device pixels
     let cellH: Int     // device pixels
     let session: pid_t
-    let buffer: String
-}
-
-struct FeedMessage {
-    let cursor: Int
-    let cwd: String
     let buffer: String
 }
 

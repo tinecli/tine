@@ -51,8 +51,6 @@ struct HistoryIgnoreTests {
     }
 
     @Test func widenedNumericRangeDropsMore() {
-        // The bounds of a numeric range are dropped, so this ignores a line zsh
-        // would keep. Over-dropping is the safe direction.
         #expect(HistoryIgnore("secret<1-9>").matches("secret12"))
     }
 
@@ -116,7 +114,9 @@ struct FrecencyUseTests {
 /// rebuild must never write anything next to the fixture.
 struct FrecencyPoolTests {
     static func makeFixture() -> (frecency: Frecency, dir: String) {
-        let dir = Scratch.dir("frecency-pool")
+        let root = Scratch.dir("frecency-pool")
+        let dir = root + "/history"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         let fixture = dir + "/zsh_history"
         let lines = [
             ": 1700000000:0;docker run -p 8080:8080 nginx",
@@ -126,7 +126,7 @@ struct FrecencyPoolTests {
             ": 1700000040:0;huge " + String(repeating: "x", count: 5000) + " --host over.example.com",
         ]
         try? lines.joined(separator: "\n").write(toFile: fixture, atomically: true, encoding: .utf8)
-        return (Frecency(historyPath: fixture), dir)
+        return (Frecency(historyPath: fixture, logPath: root + "/tine.log"), dir)
     }
 
     static func value(_ f: Frecency, _ cmd: String, _ flag: String, _ v: String) -> Bool {
@@ -191,6 +191,6 @@ struct FrecencyPoolTests {
         _ = f.setHistoryIgnore("(secret-tool*)")
         _ = f.setHistoryIgnore("")
         let leftovers = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
-        #expect(leftovers == ["zsh_history"])
+        #expect(Set(leftovers) == Set(["zsh_history"]))
     }
 }

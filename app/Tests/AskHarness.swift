@@ -1,12 +1,12 @@
-// `tine ask` harness. There is no Swift test target yet, so build it against the
-// sources and run it with a scratch data dir:
+// `tine ask` harness. Build it against the sources and run it with a scratch
+// data dir:
 //
 //   swiftc -swift-version 5 -o /private/tmp/tine-harness/ask app/Tests/AskHarness.swift \
 //       app/Sources/tine/AskIndex.swift app/Sources/tine/Asker.swift \
 //       app/Sources/tine/CommandRunner.swift app/Sources/tine/SocketServer.swift \
-//       app/Sources/tine/Log.swift app/Sources/tine/SpecLearner.swift \
-//       app/Sources/tine/TineConfig.swift app/Sources/tine/JSEngine.swift \
-//       app/Sources/tine/Frecency.swift
+//       app/Sources/tine/SocketSafe.swift app/Sources/tine/Log.swift \
+//       app/Sources/tine/SpecLearner.swift app/Sources/tine/TineConfig.swift \
+//       app/Sources/tine/JSEngine.swift app/Sources/tine/Frecency.swift
 //   TINE_DATA_DIR=/private/tmp/tine-harness /private/tmp/tine-harness/ask
 //
 // Man-page parsing, description cleaning, ranking and answer validation run
