@@ -4,8 +4,17 @@ export default {
   name: "tine",
   description: "Native macOS terminal autocomplete",
   subcommands: [
+    {
+      name: "ask",
+      description: "Name the installed tool that answers a question",
+      args: { name: "question", isVariadic: true },
+    },
     { name: "dashboard", description: "Open the dashboard window" },
     { name: "doctor", description: "Check tine is set up correctly" },
+    {
+      name: "index",
+      description: "Rebuild the tool index that ask searches",
+    },
     { name: "install", description: "Download the latest completion specs" },
     {
       name: "learn",
