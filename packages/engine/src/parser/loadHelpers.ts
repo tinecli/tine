@@ -89,7 +89,7 @@ export async function importSpecFromFile(
     localLogger.info(`Loading spec from ${fullPath}`);
     const contents = await readFile(fullPath);
     if (!contents) {
-      throw new LoadLocalSpecError(`Failed to read file: ${fullPath}`);
+      throw new LoadLocalSpecError(`Failed to read file: ${fullPath}`, name);
     }
     return contents;
   };
