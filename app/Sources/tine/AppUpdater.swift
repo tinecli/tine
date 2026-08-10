@@ -157,7 +157,9 @@ final class AppUpdater: ObservableObject {
     @discardableResult
     func applyAndRelaunch() -> String? {
         if let reason = spawnSwap(relaunch: true) {
-            jobState.reset(to: .blocked(reason))
+            if jobState.busy() == nil {
+                jobState.reset(to: .blocked(reason))
+            }
             return reason
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }

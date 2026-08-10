@@ -119,6 +119,15 @@ const transcripts: Transcript[] = [
     stderr: "",
   },
   {
+    name: "update rejected by older app",
+    invocation: ["_tine_update"],
+    requests: [request("appUpdate", "", "0")],
+    exitCode: 1,
+    stdout: "",
+    stderr:
+      "tine: the running app is older than this shell integration — run: tine restart\n",
+  },
+  {
     name: "learn success",
     invocation: ["_tine_learn", "--force", "jq"],
     requests: [
@@ -163,6 +172,14 @@ const transcripts: Transcript[] = [
     stderr: "tine: model unavailable\n",
   },
   {
+    name: "learn rejected while already learning",
+    invocation: ["_tine_learn", "jq"],
+    requests: [request("learn", "jq", "busy:jq")],
+    exitCode: 1,
+    stdout: "",
+    stderr: "tine: already learning jq — try again shortly\n",
+  },
+  {
     name: "ask success",
     invocation: ["_tine_ask", "find", "files"],
     requests: [
@@ -195,6 +212,14 @@ const transcripts: Transcript[] = [
     exitCode: 1,
     stdout: `tine: thinking… \r${clearLine}`,
     stderr: "tine: model unavailable\n",
+  },
+  {
+    name: "ask rejected while busy",
+    invocation: ["_tine_ask", "find", "files"],
+    requests: [request("ask", "find files", "busy:index")],
+    exitCode: 1,
+    stdout: "",
+    stderr: 'tine: already busy with "index" — try again shortly\n',
   },
 ];
 
@@ -269,5 +294,5 @@ for (const transcript of transcripts) {
 }
 
 test("shell transcript count stays intentional", () => {
-  expect(transcripts).toHaveLength(15);
+  expect(transcripts).toHaveLength(18);
 });
