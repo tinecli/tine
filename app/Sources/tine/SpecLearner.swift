@@ -14,6 +14,10 @@ struct LearnedSpec {
     var options: [LearnedOption]
     @Guide(description: "Name of the positional argument the command takes, empty if it takes none")
     var argument: String
+    @Guide(description: "Whether the positional argument is a file or directory path")
+    var takesFilePath: Bool
+    @Guide(description: "Whether the positional argument may be omitted")
+    var isOptional: Bool
 }
 
 @Generable
@@ -34,6 +38,10 @@ struct LearnedOption {
     var description: String
     @Guide(description: "Name of the value the flag takes, empty if it is an on/off flag")
     var argument: String
+    @Guide(description: "Whether the flag value is a file or directory path")
+    var takesFilePath: Bool
+    @Guide(description: "Whether the flag value may be omitted")
+    var isOptional: Bool
 }
 
 /// `tine learn <cmd>`: reads the command's own `--help`, asks the on-device model
@@ -47,10 +55,22 @@ struct LearnedOption {
 /// ever reaches code position.
 @MainActor
 final class SpecLearner: ObservableObject {
+    struct OptionCoverage: Equatable {
+        let surviving: Int
+        let documented: Int
+
+        var ratio: Double {
+            guard documented > 0 else { return 1 }
+            return min(Double(surviving) / Double(documented), 1)
+        }
+
+        var isIncomplete: Bool { ratio < 1 }
+    }
+
     enum Status: Equatable {
         case idle
         case running(String)                    // stage, shown by the shell's spinner
-        case done(path: String, partial: Bool)  // partial = the help was truncated
+        case done(path: String, partial: Bool, coverage: OptionCoverage)
         case failed(String)
     }
 
@@ -61,7 +81,12 @@ final class SpecLearner: ObservableObject {
         switch status {
         case .idle: return "idle"
         case .running(let stage): return "running:\(stage.socketSafe)"
-        case .done(let path, let partial): return "\(partial ? "partial" : "done"):\(path.socketSafe)"
+        case .done(let path, let partial, let coverage):
+            if partial { return "partial:\(path.socketSafe)" }
+            if coverage.isIncomplete {
+                return "incomplete:\(coverage.surviving)/\(coverage.documented):\(path.socketSafe)"
+            }
+            return "done:\(path.socketSafe)"
         case .failed(let message): return "failed:\(message.socketSafe)"
         }
     }
@@ -148,7 +173,9 @@ final class SpecLearner: ObservableObject {
                 try Self.write(module, to: path)
                 await MainActor.run {
                     self.finish(startedAt, .done(path: path,
-                                                 partial: help.count > Self.maxHelpCharacters))
+                                                 partial: help.count > Self.maxHelpCharacters,
+                                                 coverage: Self.optionCoverage(from: spec,
+                                                                               help: help)))
                 }
             } catch {
                 await MainActor.run { self.finish(startedAt, .failed(error.localizedDescription)) }
@@ -324,14 +351,28 @@ final class SpecLearner: ObservableObject {
         var options: [[String: Any]] = []
         for option in spec.options.prefix(maxEntries) {
             var names: [String] = []
-            for name in [option.name, shortFlag(option.short)] {
-                guard isFlag(name), documented(name, in: help),
-                      flags.insert(name).inserted else { continue }
+            var hasShort = false
+            var hasLong = false
+            let nameCandidates = option.name.split { $0 == "," || $0.isWhitespace }.map(String.init)
+            for name in nameCandidates + [shortFlag(option.short)] {
+                guard isFlag(name), documented(name, in: help), !flags.contains(name) else { continue }
+                if name.hasPrefix("--") {
+                    guard !hasLong else { continue }
+                    hasLong = true
+                } else {
+                    guard !hasShort else { continue }
+                    hasShort = true
+                }
+                flags.insert(name)
                 names.append(name)
             }
             guard !names.isEmpty else { continue }
+            let evidence = argumentEvidence(option.argument,
+                                            in: optionHelp(names: names, help: help))
             options.append(entry(names: names, description: option.description,
-                                 argument: option.argument))
+                                 argument: option.argument,
+                                 takesFilePath: option.takesFilePath && evidence.isPath,
+                                 isOptional: option.isOptional && evidence.isOptional))
         }
         guard !subcommands.isEmpty || !options.isEmpty else { return nil }
 
@@ -340,17 +381,101 @@ final class SpecLearner: ObservableObject {
         if !description.isEmpty { figSpec["description"] = description }
         if !subcommands.isEmpty { figSpec["subcommands"] = subcommands }
         if !options.isEmpty { figSpec["options"] = options }
-        if let argument = argumentName(spec.argument) { figSpec["args"] = ["name": argument] }
+        if let argument = argumentName(spec.argument) {
+            let evidence = argumentEvidence(argument, in: usageText(in: help))
+            figSpec["args"] = argumentSpec(name: argument,
+                                            takesFilePath: spec.takesFilePath && evidence.isPath,
+                                            isOptional: spec.isOptional && evidence.isOptional)
+        }
         return figSpec
     }
 
     private nonisolated static func entry(names: [String], description: String,
-                                          argument: String) -> [String: Any] {
+                                          argument: String, takesFilePath: Bool = false,
+                                          isOptional: Bool = false) -> [String: Any] {
         var entry: [String: Any] = ["name": names.count == 1 ? names[0] : names]
         let summary = text(description)
         if !summary.isEmpty { entry["description"] = summary }
-        if let argument = argumentName(argument) { entry["args"] = ["name": argument] }
+        if let argument = argumentName(argument) {
+            entry["args"] = argumentSpec(name: argument,
+                                         takesFilePath: takesFilePath,
+                                         isOptional: isOptional)
+        }
         return entry
+    }
+
+    private nonisolated static func argumentSpec(name: String, takesFilePath: Bool,
+                                                 isOptional: Bool) -> [String: Any] {
+        var argument: [String: Any] = ["name": name]
+        if takesFilePath { argument["template"] = "filepaths" }
+        if isOptional { argument["isOptional"] = true }
+        return argument
+    }
+
+    nonisolated static func optionCoverage(from spec: LearnedSpec,
+                                           help: String) -> OptionCoverage {
+        let documentedCount = documentedFlags(in: help).count
+        let options = figSpec(command: "coverage", from: spec, help: help)?["options"]
+            as? [[String: Any]] ?? []
+        let surviving = Set(options.flatMap { option -> [String] in
+            if let name = option["name"] as? String { return [name] }
+            return option["name"] as? [String] ?? []
+        })
+        return OptionCoverage(surviving: surviving.count, documented: documentedCount)
+    }
+
+    private nonisolated static func documentedFlags(in help: String) -> Set<String> {
+        guard let pattern = try? NSRegularExpression(
+            pattern: "(?<![A-Za-z0-9_-])-{1,2}[A-Za-z][A-Za-z0-9-]*(?![A-Za-z0-9_-])"
+        ) else { return [] }
+        return Set(pattern.matches(in: help, range: NSRange(help.startIndex..., in: help))
+            .compactMap { match in
+                Range(match.range, in: help).map { String(help[$0]) }
+            })
+    }
+
+    private nonisolated static func optionHelp(names: [String], help: String) -> String {
+        help.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { line in names.contains { documented($0, in: String(line)) } }
+            .joined(separator: "\n")
+    }
+
+    private nonisolated static func usageText(in help: String) -> String {
+        var lines: [String] = []
+        var collecting = false
+        for line in help.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+            if line.range(of: "^\\s*(usage|synopsis)\\s*:",
+                          options: [.regularExpression, .caseInsensitive]) != nil {
+                collecting = true
+                lines.append(line)
+                continue
+            }
+            guard collecting else { continue }
+            if line.range(of: "^\\s*[A-Za-z][A-Za-z ]+\\s*:\\s*$",
+                          options: .regularExpression) != nil {
+                break
+            }
+            lines.append(line)
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private nonisolated static func argumentEvidence(_ raw: String,
+                                                      in help: String) -> (isPath: Bool,
+                                                                          isOptional: Bool) {
+        guard let name = argumentName(raw) else { return (false, false) }
+        let escaped = NSRegularExpression.escapedPattern(for: name)
+        let placeholder = "(?<![A-Za-z0-9_-])\(escaped)(?![A-Za-z0-9_-])"
+        let appears = help.range(of: placeholder,
+                                 options: [.regularExpression, .caseInsensitive]) != nil
+        let bracketed = "\\[\\s*<?\(escaped)>?\\s*\\]"
+        let isOptional = help.range(of: bracketed,
+                                    options: [.regularExpression, .caseInsensitive]) != nil
+        let pathWord = "(^|[^A-Za-z0-9])(FILES?|PATHS?|DIRS?|DIRECTOR(Y|IES)|FOLDERS?|"
+            + "SRCS?|SOURCES?|DESTS?|DESTINATIONS?|INPUTS?|OUTPUTS?)([^A-Za-z0-9]|$)"
+        let isPath = appears && name.range(of: pathWord,
+                                           options: [.regularExpression, .caseInsensitive]) != nil
+        return (isPath, isOptional)
     }
 
     /// A description is model text derived from untrusted `--help`, so it is
