@@ -108,6 +108,17 @@ struct AskRetrievalTests {
         #expect(Set(expanded.map(\.name)) == ["shrinker", "encoder"])
     }
 
+    @Test func expansionDropsStopwordsBeforeTruncatingTerms() {
+        let entries = [AskEntry(name: "metadata-tool", description: "read heic jpeg exif metadata")]
+        let expansion = "Here are some command-line tools that can help you with what you need: "
+            + "heic jpeg exif"
+        let expanded = Asker.candidatePool(
+            question: "something unrelated", expansion: expansion, in: entries, limit: 3
+        )
+
+        #expect(expanded.map(\.name) == ["metadata-tool"])
+    }
+
     @Test func expansionErrorFailsOpenToRawRanking() async {
         struct Unavailable: Error {}
         let raw = Asker.candidatePool(question: "shrink a video", expansion: nil,

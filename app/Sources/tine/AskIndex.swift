@@ -483,7 +483,7 @@ enum AskIndex {
 
     static func rank(_ query: String, in entries: [AskEntry], limit: Int,
                      frecency: (String) -> Double = { _ in 0 }) -> [Hit] {
-        let queryTerms = weighted(terms(query).filter { !stopwords.contains($0) })
+        let queryTerms = weighted(searchTerms(query))
         guard !queryTerms.isEmpty else { return [] }
 
         let documents = entries.map { terms($0.name) + terms($0.description) }
@@ -588,6 +588,10 @@ enum AskIndex {
             .split { !$0.isLetter && !$0.isNumber }
             .map { singular(String($0)) }
             .filter { $0.count >= 2 }
+    }
+
+    static func searchTerms(_ text: String) -> [String] {
+        terms(text).filter { !stopwords.contains($0) }
     }
 
     private static func singular(_ word: String) -> String {

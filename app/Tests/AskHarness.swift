@@ -275,10 +275,20 @@ enum AskHarness {
                      meanOverlap(expandedVideos)))
         print("phrasing: image top " + expandedImages.compactMap(\.first).joined(separator: " "))
         print("phrasing: video top " + expandedVideos.compactMap(\.first).joined(separator: " "))
+        printRetention(questions: imageQuestions, raw: rawImages, expanded: expandedImages)
+        printRetention(questions: videoQuestions, raw: rawVideos, expanded: expandedVideos)
         check("image phrasings share a top tool",
               Set(expandedImages.compactMap(\.first)) == ["magick"])
         check("video phrasings share a top tool",
               Set(expandedVideos.compactMap(\.first)) == ["ffmpeg"])
+    }
+
+    static func printRetention(questions: [String], raw: [[String]], expanded: [[String]]) {
+        for index in questions.indices {
+            let rawTop = Set(raw[index].prefix(3))
+            let retained = rawTop.intersection(expanded[index]).count
+            print("phrasing: \(questions[index]) raw-top-3 retention \(retained)/\(rawTop.count)")
+        }
     }
 
     static func pool(_ question: String, expansion: String?) -> [String] {
@@ -445,9 +455,8 @@ enum AskHarness {
         }
         let sorted = milliseconds.sorted()
         let p50 = sorted[sorted.count / 2]
-        let p95 = sorted[(sorted.count * 95 + 99) / 100 - 1]
-        print(String(format: "\nexpansion: 15 runs, %d succeeded, p50 %.1f ms, p95 %.1f ms, max %.1f ms",
-                     successes, p50, p95, sorted.last ?? 0))
+        print(String(format: "\nexpansion: 15 runs, %d succeeded, p50 %.1f ms, max %.1f ms",
+                     successes, p50, sorted.last ?? 0))
         for question in questions {
             print("  \(question): " + (firstPools[question] ?? []).joined(separator: " "))
         }

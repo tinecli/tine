@@ -316,14 +316,18 @@ final class Asker: ObservableObject {
         question: String, expansion: String?, in entries: [AskEntry], limit: Int,
         frecency: (String) -> Double = { _ in 0 }
     ) -> [AskEntry] {
-        // Model output becomes bounded retrieval terms and is discarded after ranking.
-        let expanded = expansion.map(AskIndex.terms)?.prefix(maxExpansionTerms) ?? []
+        // Must stay bounded retrieval terms — expansion terms must never leave ranking.
+        let expanded = expansion.map {
+            AskIndex.searchTerms(String($0.prefix(maxExpansionCharacters)))
+                .prefix(maxExpansionTerms)
+        } ?? []
         let query = ([question] + (expanded.isEmpty ? [] : [expanded.joined(separator: " ")]))
             .joined(separator: " ")
         return AskIndex.rank(query, in: entries, limit: limit, frecency: frecency)
             .map(\.entry)
     }
 
+    private nonisolated static let maxExpansionCharacters = 2048
     private nonisolated static let maxExpansionTerms = 12
 
     nonisolated static func expandedSearchTerms(_ question: String) async throws -> String {
