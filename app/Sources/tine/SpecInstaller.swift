@@ -5,7 +5,8 @@ final class SpecInstaller: ObservableObject {
     enum Status: Equatable {
         case idle, running, done(String), failed(String)
     }
-    @Published var status: Status = .idle
+    @Published private var jobState = JobState<Status>(.idle)
+    var status: Status { jobState.status }
     /// Fails closed on a network error — never flip this to fail-open, or doctor nags on flaky Wi-Fi.
     @Published var updateAvailable = false
 
@@ -70,25 +71,26 @@ final class SpecInstaller: ObservableObject {
     }
 
     func install(announce: Bool = false) {
-        guard status != .running else { return }
-        status = .running
+        guard case .started(let job) = jobState.start("spec install", status: .running)
+        else { return }
         Task {
             do {
                 let remote = try? await Self.remoteETag()
                 if let remote, remote == Self.storedETag(), Self.isInstalled() {
                     self.updateAvailable = false
-                    self.status = .done("specs up to date (\(Self.installedCount()) commands)")
+                    self.jobState.finish(
+                        .done("specs up to date (\(Self.installedCount()) commands)"), for: job)
                     return
                 }
                 let count = try await Self.downloadAndInstall()
                 self.updateAvailable = false
-                self.status = .done("specs updated (\(count) commands)")
+                self.jobState.finish(.done("specs updated (\(count) commands)"), for: job)
                 self.onInstalled?()
                 if announce {
                     UpdateNotice.post("Completion specs updated", "\(count) commands are ready.")
                 }
             } catch {
-                self.status = .failed(error.localizedDescription)
+                self.jobState.finish(.failed(error.localizedDescription), for: job)
             }
         }
     }

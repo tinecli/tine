@@ -13,8 +13,10 @@ final class AppUpdater: ObservableObject {
         case failed(String)
     }
 
-    @Published private(set) var status: Status = .idle
+    @Published private var jobState = JobState<Status>(.idle)
     @Published private(set) var newerVersion: String?
+
+    var status: Status { jobState.status }
 
     nonisolated static let releasesURL =
         URL(string: "https://github.com/tinecli/tine/releases/latest")!
@@ -69,7 +71,7 @@ final class AppUpdater: ObservableObject {
 
     func start() {
         guard Self.isSelfUpdatable else {
-            status = .blocked("this build does not self-update")
+            jobState.reset(to: .blocked("this build does not self-update"))
             return
         }
         Self.clearStaging() // only a bundle this process verified itself is ever installed
@@ -87,63 +89,66 @@ final class AppUpdater: ObservableObject {
     /// Must fail closed — a network error must never touch the installed app or status.
     func check(manual: Bool = false) {
         guard Self.isSelfUpdatable else {
-            status = .blocked("this build does not self-update")
+            jobState.reset(to: .blocked("this build does not self-update"))
             return
         }
-        if status == .checking || status == .downloading { return }
         if let staged {
-            status = .ready(staged.version)
+            jobState.reset(to: .ready(staged.version))
             return
         }
         let previousStatus = status
-        status = .checking
-        Task { await runCheck(manual: manual, previousStatus: previousStatus) }
+        guard case .started(let job) = jobState.start("app update", status: .checking)
+        else { return }
+        Task { await runCheck(manual: manual, previousStatus: previousStatus, job: job) }
     }
 
-    private func runCheck(manual: Bool, previousStatus: Status) async {
+    private func runCheck(manual: Bool, previousStatus: Status,
+                          job: JobState<Status>.Job) async {
         guard let latest = await Self.latestVersion() else {
             if manual {
-                status = .failed("could not reach github.com")
+                jobState.finish(.failed("could not reach github.com"), for: job)
             } else if newerVersion != nil {
-                status = previousStatus
+                jobState.finish(previousStatus, for: job)
             } else {
-                status = .idle
+                jobState.finish(.idle, for: job)
             }
             return
         }
         guard Self.isNewer(latest, than: Self.currentVersion) else {
             newerVersion = nil
-            status = .upToDate(Self.currentVersion)
+            jobState.finish(.upToDate(Self.currentVersion), for: job)
             return
         }
         newerVersion = latest
         // Keep `|| manual` — autoUpdateApp must gate only the automatic channel, not `tine update`.
         guard TineConfig.load().autoUpdateApp || manual else {
-            settle(.available(latest), "Run `tine update` to install it.", once: "app-\(latest)")
+            settle(.available(latest), "Run `tine update` to install it.", once: "app-\(latest)",
+                   job: job)
             return
         }
         guard FileManager.default.isWritableFile(atPath: Self.installDir.path) else {
             settle(.blocked("\(Self.installDir.path) is not writable"),
                    "tine can't update itself where it is installed — download it instead.",
-                   once: "app-\(latest)")
+                   once: "app-\(latest)", job: job)
             if manual { NSWorkspace.shared.open(Self.releasesURL) }
             return
         }
-        status = .downloading
+        jobState.report(.downloading, for: job)
         do {
             let app = try await Self.downloadVerified(version: latest)
             staged = (latest, app)
             settle(.ready(latest), "Downloaded — relaunch tine to finish the update.",
-                   once: "app-ready-\(latest)")
+                   once: "app-ready-\(latest)", job: job)
         } catch {
             Self.clearStaging()
-            status = .failed(error.localizedDescription)
+            jobState.finish(.failed(error.localizedDescription), for: job)
             if manual { NSWorkspace.shared.open(Self.releasesURL) }
         }
     }
 
-    private func settle(_ next: Status, _ notice: String, once key: String) {
-        status = next
+    private func settle(_ next: Status, _ notice: String, once key: String,
+                        job: JobState<Status>.Job) {
+        guard jobState.finish(next, for: job) else { return }
         guard let version = newerVersion else { return }
         UpdateNotice.post("tine \(version) is available", notice, once: key)
     }
@@ -152,7 +157,9 @@ final class AppUpdater: ObservableObject {
     @discardableResult
     func applyAndRelaunch() -> String? {
         if let reason = spawnSwap(relaunch: true) {
-            status = .blocked(reason)
+            if jobState.busy() == nil {
+                jobState.reset(to: .blocked(reason))
+            }
             return reason
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }

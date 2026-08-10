@@ -328,26 +328,47 @@ _tine_resource_if_changed() {
   source "$_TINE_SRC" && print -- "tine: reloaded shell integration"
 }
 
+# Start one app job and poll its status. Handlers receive
+# (reply, spinner, waited, label, payload), return 0/1 when done, 2 to keep
+# polling, or 3 to keep polling and advance the deadline counter.
+_tine_poll() {
+  emulate -L zsh
+  local verb=$1 payload=$2 status_verb=$3 label=$4 busy_kind=$5 handler=$6
+  if ! _tine_req "$verb" "$payload" 2>/dev/null; then
+    print -u2 -- "tine: could not reach the app (is it running? try: tine restart)"; return 1
+  fi
+  _tine_started "$_TINE_REPLY" "$busy_kind" || return 1
+  local spin='|/-\' i=0 waited=0 result
+  printf 'tine: %s… ' "$label"
+  while true; do
+    sleep 0.3
+    _tine_req "$status_verb" "" 2>/dev/null \
+      || { printf '\r\e[K'; print -u2 -- "tine: lost contact with the app"; return 1 }
+    "$handler" "$_TINE_REPLY" "${spin:$((i%4)):1}" "$waited" "$label" "$payload"
+    result=$?
+    case $result in
+      0|1) return $result ;;
+      3)   (( waited++ )) ;;
+    esac
+    (( i++ ))
+  done
+}
+
 # Ask the app to fetch the latest spec pack (it downloads only if there's a newer
 # one), showing a spinner while it works. The download runs in the app off the
 # main thread; we poll its status over the socket.
 _tine_install() {
-  emulate -L zsh
-  if ! _tine_req install 2>/dev/null; then
-    print -u2 -- "tine: could not reach the app (is it running? try: tine restart)"; return 1
-  fi
-  local spin='|/-\' i=0
-  printf 'tine: checking for spec updates… '
-  while true; do
-    sleep 0.2
-    _tine_req installStatus 2>/dev/null || { printf '\r\e[K'; print -u2 -- "tine: lost contact with the app"; return 1 }
-    case "$_TINE_REPLY" in
-      running)   printf '\rtine: downloading specs… %s ' "${spin:$((i%4)):1}"; (( i++ )) ;;
-      done:*)    printf '\rtine: %s\e[K\n' "${_TINE_REPLY#done:}"; return 0 ;;
-      failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${_TINE_REPLY#failed:}"; return 1 ;;
-      *)         printf '\r\e[K'; return 0 ;;
-    esac
-  done
+  _tine_poll install "" installStatus "checking for spec updates" "" _tine_install_status
+}
+
+_tine_install_status() {
+  local reply=$1 spinner=$2
+  case "$reply" in
+    running)   printf '\rtine: downloading specs… %s ' "$spinner"; return 2 ;;
+    done:*)    printf '\rtine: %s\e[K\n' "${reply#done:}"; return 0 ;;
+    failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${reply#failed:}"; return 1 ;;
+    *)         printf '\r\e[K'; return 0 ;;
+  esac
 }
 
 # Ask the app to update itself: it checks the latest release, downloads and
@@ -355,39 +376,13 @@ _tine_install() {
 # this only drives the poll and reports why it can't proceed.
 _tine_update() {
   emulate -L zsh
-  local releases="https://github.com/tinecli/tine/releases/latest"
-  if ! _tine_req appUpdate 2>/dev/null; then
-    print -u2 -- "tine: could not reach the app (is it running? try: tine restart)"; return 1
-  fi
-  # An app that predates self-update answers its default "0" to an unknown verb.
-  if [[ "$_TINE_REPLY" != started ]]; then
-    print -u2 -- "tine: the running app is older than this shell integration — run: tine restart"; return 1
-  fi
   # The check is one HEAD, so it either lands quickly or isn't going to. The
   # download is not capped the same way: a big dmg on a slow link is legitimate.
-  local spin='|/-\' i=0 waited=0 version
-  printf 'tine: checking for updates… '
-  while true; do
-    sleep 0.3
-    _tine_req appUpdateStatus 2>/dev/null || { printf '\r\e[K'; print -u2 -- "tine: lost contact with the app"; return 1 }
-    case "$_TINE_REPLY" in
-      idle|checking) (( waited++ ))
-                     if (( waited > 200 )); then
-                       printf '\r\e[K'; print -u2 -- "tine: could not check for updates"; return 1
-                     fi
-                     printf '\rtine: checking for updates… %s ' "${spin:$((i%4)):1}"; (( i++ )) ;;
-      downloading)   printf '\rtine: downloading update… %s ' "${spin:$((i%4)):1}"; (( i++ )) ;;
-      uptodate:*)    printf '\rtine: %s is the latest version\e[K\n' "${_TINE_REPLY#uptodate:}"; return 0 ;;
-      staged:*)      version=${_TINE_REPLY#staged:}; break ;;
-      available:*)   printf '\r\e[K'
-                     print -- "tine: ${_TINE_REPLY#available:} is available — automatic updates are off"
-                     print -- "tine: download it from $releases"; return 0 ;;
-      blocked:*|failed:*)
-                     printf '\r\e[K'; print -u2 -- "tine: ${_TINE_REPLY#*:}"
-                     print -u2 -- "tine: download it from $releases"; return 1 ;;
-      *)             printf '\r\e[K'; return 0 ;;
-    esac
-  done
+  local i=0 version
+  _tine_poll appUpdate "" appUpdateStatus "checking for updates" "" _tine_update_status \
+    || return 1
+  [[ "$_TINE_REPLY" == staged:* ]] || return 0
+  version=${_TINE_REPLY#staged:}
   _tine_req appUpdateApply 2>/dev/null
   if [[ "$_TINE_REPLY" != ok ]]; then
     printf '\r\e[K'; print -u2 -- "tine: ${_TINE_REPLY:-could not apply the update}"; return 1
@@ -407,6 +402,27 @@ _tine_update() {
   else
     printf '\rtine: %s installed — start it with: tine dashboard\e[K\n' "$version"
   fi
+}
+
+_tine_update_status() {
+  local reply=$1 spinner=$2 waited=$3
+  local releases="https://github.com/tinecli/tine/releases/latest"
+  case "$reply" in
+    idle|checking) if (( waited >= 200 )); then
+                     printf '\r\e[K'; print -u2 -- "tine: could not check for updates"; return 1
+                   fi
+                   printf '\rtine: checking for updates… %s ' "$spinner"; return 3 ;;
+    downloading)   printf '\rtine: downloading update… %s ' "$spinner"; return 2 ;;
+    uptodate:*)    printf '\rtine: %s is the latest version\e[K\n' "${reply#uptodate:}"; return 0 ;;
+    staged:*)      return 0 ;;
+    available:*)   printf '\r\e[K'
+                   print -- "tine: ${reply#available:} is available — automatic updates are off"
+                   print -- "tine: download it from $releases"; return 0 ;;
+    blocked:*|failed:*)
+                   printf '\r\e[K'; print -u2 -- "tine: ${reply#*:}"
+                   print -u2 -- "tine: download it from $releases"; return 1 ;;
+    *)             printf '\r\e[K'; return 0 ;;
+  esac
 }
 
 # Ask the app to write a spec for <cmd> from the command's own `--help`, using
@@ -435,43 +451,30 @@ _tine_learn() {
   fi
   local payload=$cmd
   (( force )) && payload+="${_TINE_RS}force"
-  if ! _tine_req learn "$payload" 2>/dev/null; then
-    print -u2 -- "tine: could not reach the app (is it running? try: tine restart)"; return 1
+  _tine_poll learn "$payload" learnStatus "learning $cmd" learning _tine_learn_status
+}
+
+_tine_learn_status() {
+  local reply=$1 spinner=$2 waited=$3 payload=$5
+  local cmd=${payload%%$_TINE_RS*}
+  if (( waited >= 600 )); then
+    printf '\r\e[K'; print -u2 -- "tine: gave up waiting for the model"; return 1
   fi
-  # One learn at a time: the app is already busy with another command, and its
-  # status belongs to that one.
-  if [[ "$_TINE_REPLY" == busy:* ]]; then
-    print -u2 -- "tine: already learning ${_TINE_REPLY#busy:} — try again shortly"; return 1
-  fi
-  # An app that predates learning answers its default "0" to an unknown verb.
-  if [[ "$_TINE_REPLY" != started ]]; then
-    print -u2 -- "tine: the running app is older than this shell integration — run: tine restart"; return 1
-  fi
-  local spin='|/-\' i=0 waited=0
-  printf 'tine: learning %s… ' "$cmd"
-  while true; do
-    sleep 0.3
-    _tine_req learnStatus "" 2>/dev/null || { printf '\r\e[K'; print -u2 -- "tine: lost contact with the app"; return 1 }
-    (( waited++ ))
-    if (( waited > 600 )); then
-      printf '\r\e[K'; print -u2 -- "tine: gave up waiting for the model"; return 1
-    fi
-    case "$_TINE_REPLY" in
-      idle)      printf '\rtine: learning %s… %s \e[K' "$cmd" "${spin:$((i%4)):1}"; (( i++ )) ;;
-      running:*) printf '\rtine: %s… %s \e[K' "${_TINE_REPLY#running:}" "${spin:$((i%4)):1}"; (( i++ )) ;;
-      done:*)    printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${_TINE_REPLY#done:}"; return 0 ;;
-      partial:*) printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${_TINE_REPLY#partial:}"
-                 print -- "tine: only the start of its --help fits the model — the spec may be partial"
-                 return 0 ;;
-      incomplete:*) local result=${_TINE_REPLY#incomplete:}
-                    local coverage=${result%%:*}
-                    printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${result#*:}"
-                    print -- "tine: $coverage option lines survived validation — the spec is incomplete"
-                    return 0 ;;
-      failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${_TINE_REPLY#failed:}"; return 1 ;;
-      *)         printf '\r\e[K'; return 0 ;;
-    esac
-  done
+  case "$reply" in
+    idle)      printf '\rtine: learning %s… %s \e[K' "$cmd" "$spinner"; return 3 ;;
+    running:*) printf '\rtine: %s… %s \e[K' "${reply#running:}" "$spinner"; return 3 ;;
+    done:*)    printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${reply#done:}"; return 0 ;;
+    partial:*) printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${reply#partial:}"
+               print -- "tine: only the start of its --help fits the model — the spec may be partial"
+               return 0 ;;
+    incomplete:*) local result=${reply#incomplete:}
+                  local coverage=${result%%:*}
+                  printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${result#*:}"
+                  print -- "tine: $coverage option lines survived validation — the spec is incomplete"
+                  return 0 ;;
+    failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${reply#failed:}"; return 1 ;;
+    *)         printf '\r\e[K'; return 0 ;;
+  esac
 }
 
 # Ask the app which installed tool answers a question, and — where the on-device
@@ -486,22 +489,14 @@ _tine_ask() {
   if [[ -z "${question// /}" ]]; then
     print -u2 -- 'usage: tine ask "convert an image to jpeg"'; return 1
   fi
-  if ! _tine_req ask "$question" 2>/dev/null; then
-    print -u2 -- "tine: could not reach the app (is it running? try: tine restart)"; return 1
-  fi
-  _tine_started "$_TINE_REPLY" || return 1
-  _tine_await_ask "thinking"
+  _tine_await_ask ask "$question" thinking
 }
 
 # Rebuild the corpus `tine ask` searches: every binary on this PATH, described by
 # its man page. Built here, never shipped — it describes this machine.
 _tine_index() {
   emulate -L zsh
-  if ! _tine_req index "" 2>/dev/null; then
-    print -u2 -- "tine: could not reach the app (is it running? try: tine restart)"; return 1
-  fi
-  _tine_started "$_TINE_REPLY" || return 1
-  _tine_await_ask "indexing"
+  _tine_await_ask index "" indexing
 }
 
 # One job at a time in the app, and an app older than this file answers its
@@ -509,31 +504,32 @@ _tine_index() {
 _tine_started() {
   case "$1" in
     started) return 0 ;;
-    busy:*)  print -u2 -- "tine: already busy with \"${1#busy:}\" — try again shortly" ;;
+    busy:*)  if [[ "$2" == learning ]]; then
+               print -u2 -- "tine: already learning ${1#busy:} — try again shortly"
+             else
+               print -u2 -- "tine: already busy with \"${1#busy:}\" — try again shortly"
+             fi ;;
     *)       print -u2 -- "tine: the running app is older than this shell integration — run: tine restart" ;;
   esac
   return 1
 }
 
 _tine_await_ask() {
-  emulate -L zsh
-  local label=$1 spin='|/-\' i=0 waited=0
-  printf 'tine: %s… ' "$label"
-  while true; do
-    sleep 0.2
-    _tine_req askStatus "" 2>/dev/null || { printf '\r\e[K'; print -u2 -- "tine: lost contact with the app"; return 1 }
-    (( waited++ ))
-    if (( waited > 900 )); then
-      printf '\r\e[K'; print -u2 -- "tine: gave up waiting for an answer"; return 1
-    fi
-    case "$_TINE_REPLY" in
-      idle)      printf '\rtine: %s… %s \e[K' "$label" "${spin:$((i%4)):1}"; (( i++ )) ;;
-      running:*) printf '\rtine: %s… %s \e[K' "${_TINE_REPLY#running:}" "${spin:$((i%4)):1}"; (( i++ )) ;;
-      done:*)    printf '\r\e[K'; _tine_show_answer "${_TINE_REPLY#done:}"; return 0 ;;
-      failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${_TINE_REPLY#failed:}"; return 1 ;;
-      *)         printf '\r\e[K'; return 0 ;;
-    esac
-  done
+  _tine_poll "$1" "$2" askStatus "$3" "" _tine_ask_status
+}
+
+_tine_ask_status() {
+  local reply=$1 spinner=$2 waited=$3 label=$4
+  if (( waited >= 600 )); then
+    printf '\r\e[K'; print -u2 -- "tine: gave up waiting for an answer"; return 1
+  fi
+  case "$reply" in
+    idle)      printf '\rtine: %s… %s \e[K' "$label" "$spinner"; return 3 ;;
+    running:*) printf '\rtine: %s… %s \e[K' "${reply#running:}" "$spinner"; return 3 ;;
+    done:*)    printf '\r\e[K'; _tine_show_answer "${reply#done:}"; return 0 ;;
+    failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${reply#failed:}"; return 1 ;;
+    *)         printf '\r\e[K'; return 0 ;;
+  esac
 }
 
 # The answer, one row per US-separated field: a composed command line, the tools
