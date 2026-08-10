@@ -14,6 +14,10 @@ struct LearnedSpec {
     var options: [LearnedOption]
     @Guide(description: "Name of the positional argument the command takes, empty if it takes none")
     var argument: String
+    @Guide(description: "Whether the positional argument is a file or directory path")
+    var takesFilePath: Bool
+    @Guide(description: "Whether the positional argument may be omitted")
+    var isOptional: Bool
 }
 
 @Generable
@@ -34,6 +38,10 @@ struct LearnedOption {
     var description: String
     @Guide(description: "Name of the value the flag takes, empty if it is an on/off flag")
     var argument: String
+    @Guide(description: "Whether the flag value is a file or directory path")
+    var takesFilePath: Bool
+    @Guide(description: "Whether the flag value may be omitted")
+    var isOptional: Bool
 }
 
 /// `tine learn <cmd>`: reads the command's own `--help`, asks the on-device model
@@ -47,10 +55,22 @@ struct LearnedOption {
 /// ever reaches code position.
 @MainActor
 final class SpecLearner: ObservableObject {
+    struct OptionCoverage: Equatable {
+        let surviving: Int
+        let documented: Int
+
+        var ratio: Double {
+            guard documented > 0 else { return 1 }
+            return min(Double(surviving) / Double(documented), 1)
+        }
+
+        var isIncomplete: Bool { ratio < 1 }
+    }
+
     enum Status: Equatable {
         case idle
         case running(String)                    // stage, shown by the shell's spinner
-        case done(path: String, partial: Bool)  // partial = the help was truncated
+        case done(path: String, partial: Bool, coverage: OptionCoverage)
         case failed(String)
     }
 
@@ -61,7 +81,12 @@ final class SpecLearner: ObservableObject {
         switch status {
         case .idle: return "idle"
         case .running(let stage): return "running:\(stage.socketSafe)"
-        case .done(let path, let partial): return "\(partial ? "partial" : "done"):\(path.socketSafe)"
+        case .done(let path, let partial, let coverage):
+            if partial { return "partial:\(path.socketSafe)" }
+            if coverage.isIncomplete {
+                return "incomplete:\(coverage.surviving)/\(coverage.documented):\(path.socketSafe)"
+            }
+            return "done:\(path.socketSafe)"
         case .failed(let message): return "failed:\(message.socketSafe)"
         }
     }
@@ -148,7 +173,9 @@ final class SpecLearner: ObservableObject {
                 try Self.write(module, to: path)
                 await MainActor.run {
                     self.finish(startedAt, .done(path: path,
-                                                 partial: help.count > Self.maxHelpCharacters))
+                                                 partial: help.count > Self.maxHelpCharacters,
+                                                 coverage: Self.optionCoverage(from: spec,
+                                                                               help: help)))
                 }
             } catch {
                 await MainActor.run { self.finish(startedAt, .failed(error.localizedDescription)) }
@@ -324,14 +351,17 @@ final class SpecLearner: ObservableObject {
         var options: [[String: Any]] = []
         for option in spec.options.prefix(maxEntries) {
             var names: [String] = []
-            for name in [option.name, shortFlag(option.short)] {
+            let namesFromHelp = option.name.split { $0 == "," || $0.isWhitespace }.map(String.init)
+            for name in namesFromHelp + [shortFlag(option.short)] {
                 guard isFlag(name), documented(name, in: help),
                       flags.insert(name).inserted else { continue }
                 names.append(name)
             }
             guard !names.isEmpty else { continue }
             options.append(entry(names: names, description: option.description,
-                                 argument: option.argument))
+                                 argument: option.argument,
+                                 takesFilePath: option.takesFilePath,
+                                 isOptional: option.isOptional))
         }
         guard !subcommands.isEmpty || !options.isEmpty else { return nil }
 
@@ -340,17 +370,44 @@ final class SpecLearner: ObservableObject {
         if !description.isEmpty { figSpec["description"] = description }
         if !subcommands.isEmpty { figSpec["subcommands"] = subcommands }
         if !options.isEmpty { figSpec["options"] = options }
-        if let argument = argumentName(spec.argument) { figSpec["args"] = ["name": argument] }
+        if let argument = argumentName(spec.argument) {
+            figSpec["args"] = argumentSpec(name: argument,
+                                            takesFilePath: spec.takesFilePath,
+                                            isOptional: spec.isOptional)
+        }
         return figSpec
     }
 
     private nonisolated static func entry(names: [String], description: String,
-                                          argument: String) -> [String: Any] {
+                                          argument: String, takesFilePath: Bool = false,
+                                          isOptional: Bool = false) -> [String: Any] {
         var entry: [String: Any] = ["name": names.count == 1 ? names[0] : names]
         let summary = text(description)
         if !summary.isEmpty { entry["description"] = summary }
-        if let argument = argumentName(argument) { entry["args"] = ["name": argument] }
+        if let argument = argumentName(argument) {
+            entry["args"] = argumentSpec(name: argument,
+                                         takesFilePath: takesFilePath,
+                                         isOptional: isOptional)
+        }
         return entry
+    }
+
+    private nonisolated static func argumentSpec(name: String, takesFilePath: Bool,
+                                                 isOptional: Bool) -> [String: Any] {
+        var argument: [String: Any] = ["name": name]
+        if takesFilePath { argument["template"] = "filepaths" }
+        if isOptional { argument["isOptional"] = true }
+        return argument
+    }
+
+    nonisolated static func optionCoverage(from spec: LearnedSpec,
+                                           help: String) -> OptionCoverage {
+        let pattern = try? NSRegularExpression(pattern: "(?m)^\\s+-{1,2}\\S")
+        let documentedCount = pattern?.numberOfMatches(
+            in: help, range: NSRange(help.startIndex..., in: help)) ?? 0
+        let survivingCount = figSpec(command: "coverage", from: spec, help: help)?["options"]
+            .flatMap { $0 as? [[String: Any]] }?.count ?? 0
+        return OptionCoverage(surviving: survivingCount, documented: documentedCount)
     }
 
     /// A description is model text derived from untrusted `--help`, so it is

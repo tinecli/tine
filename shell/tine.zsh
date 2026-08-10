@@ -463,6 +463,11 @@ _tine_learn() {
       partial:*) printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${_TINE_REPLY#partial:}"
                  print -- "tine: only the start of its --help fits the model — the spec may be partial"
                  return 0 ;;
+      incomplete:*) local result=${_TINE_REPLY#incomplete:}
+                    local coverage=${result%%:*}
+                    printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${result#*:}"
+                    print -- "tine: $coverage option lines survived validation — the spec is incomplete"
+                    return 0 ;;
       failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${_TINE_REPLY#failed:}"; return 1 ;;
       *)         printf '\r\e[K'; return 0 ;;
     esac

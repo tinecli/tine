@@ -92,15 +92,21 @@ enum LearnHarness {
             ],
             options: [
                 LearnedOption(name: "--verbose", short: "--v",
-                              description: "Print more", argument: ""),
+                              description: "Print more", argument: "",
+                              takesFilePath: false, isOptional: false),
                 LearnedOption(name: "--out", short: "",
-                              description: "Where to write", argument: "<FILE>"),
+                              description: "Where to write", argument: "<FILE>",
+                              takesFilePath: true, isOptional: false),
                 LearnedOption(name: "not-a-flag", short: "",
-                              description: "Dropped", argument: ""),
+                              description: "Dropped", argument: "",
+                              takesFilePath: false, isOptional: false),
                 LearnedOption(name: "--sudo", short: "",
-                              description: "Invented", argument: ""),
+                              description: "Invented", argument: "",
+                              takesFilePath: false, isOptional: false),
             ],
-            argument: "path")
+            argument: "path",
+            takesFilePath: false,
+            isOptional: false)
     }
 
     static func json(of module: String) -> [String: Any]? {
@@ -145,7 +151,82 @@ enum LearnHarness {
                                      help: "no flags here") == nil)
         check("the module carries the header that marks it tine's",
               module.hasPrefix(SpecLearner.header))
+        pairedFlags()
+        argumentShape()
+        coverage()
         shortFlags()
+    }
+
+    static func pairedFlags() {
+        let learned = LearnedSpec(
+            description: "CSV cleaner",
+            subcommands: [],
+            options: [
+                LearnedOption(name: "-d, --delimiter DELIMITER", short: "",
+                              description: "Set delimiter", argument: "DELIMITER",
+                              takesFilePath: false, isOptional: false),
+            ],
+            argument: "",
+            takesFilePath: false,
+            isOptional: false)
+        let help = "  -d, --delimiter DELIMITER  Set delimiter"
+        let names = SpecLearner.specModule(command: "csvclean", from: learned, help: help)
+            .flatMap(json)?["options"] as? [[String: Any]]
+        check("paired flag name carries both forms",
+              names?.first?["name"] as? [String] == ["-d", "--delimiter"])
+
+        let invented = LearnedSpec(
+            description: "CSV cleaner",
+            subcommands: [],
+            options: [
+                LearnedOption(name: "-d, --invented DELIMITER", short: "",
+                              description: "Set delimiter", argument: "DELIMITER",
+                              takesFilePath: false, isOptional: false),
+            ],
+            argument: "",
+            takesFilePath: false,
+            isOptional: false)
+        let kept = SpecLearner.specModule(command: "csvclean", from: invented, help: help)
+            .flatMap(json)?["options"] as? [[String: Any]]
+        check("split flag still requires help containment",
+              kept?.first?["name"] as? String == "-d")
+    }
+
+    static func argumentShape() {
+        let learned = LearnedSpec(
+            description: "CSV cleaner",
+            subcommands: [],
+            options: [
+                LearnedOption(name: "--help", short: "",
+                              description: "Show help", argument: "",
+                              takesFilePath: false, isOptional: false),
+            ],
+            argument: "FILE",
+            takesFilePath: true,
+            isOptional: true)
+        let module = SpecLearner.specModule(command: "csvclean", from: learned,
+                                            help: "  --help  Show help")
+        let args = module.flatMap(json)?["args"] as? [String: Any]
+        check("positional file argument gets filepaths template", args?["template"] as? String == "filepaths")
+        check("positional optional argument is optional", args?["isOptional"] as? Bool == true)
+    }
+
+    static func coverage() {
+        let learned = LearnedSpec(
+            description: "CSV cleaner",
+            subcommands: [],
+            options: [
+                LearnedOption(name: "--help", short: "",
+                              description: "Show help", argument: "",
+                              takesFilePath: false, isOptional: false),
+            ],
+            argument: "",
+            takesFilePath: false,
+            isOptional: false)
+        let help = "  --help  Show help\n  --version  Show version"
+        let coverage = SpecLearner.optionCoverage(from: learned, help: help)
+        check("under-covered help has incomplete coverage",
+              coverage.ratio == 0.5 && coverage.isIncomplete)
     }
 
     /// A help text that documents `--version` alone contains the characters of an
@@ -164,8 +245,11 @@ enum LearnHarness {
             description: "Fake tool for tests",
             subcommands: [],
             options: [LearnedOption(name: "--version", short: "-v",
-                                    description: "Print the version", argument: "")],
-            argument: "")
+                                    description: "Print the version", argument: "",
+                                    takesFilePath: false, isOptional: false)],
+            argument: "",
+            takesFilePath: false,
+            isOptional: false)
         guard let module = SpecLearner.specModule(command: "faketool", from: invented,
                                                   help: "  --version    Print the version"),
               let spec = json(of: module) else {
@@ -261,12 +345,13 @@ enum LearnHarness {
 
     @MainActor
     static func report(learner: SpecLearner, path: String) -> Never {
-        guard case .done(let written, let partial) = learner.status else {
+        guard case .done(let written, let partial, let coverage) = learner.status else {
             check("end-to-end learn succeeded (\(learner.status))", false)
             finish()
         }
         check("spec written to extend/", written == path)
         check("a short help is not reported as partial", !partial)
+        check("complete option coverage is not reported as incomplete", !coverage.isIncomplete)
         let module = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
         print("--- \(path)\n\(module)---")
         guard let spec = json(of: module) else {
