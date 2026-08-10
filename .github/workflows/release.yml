@@ -69,6 +69,10 @@ jobs:
       - run: bun run build
       - run: bun test
 
+      - name: Swift tests
+        working-directory: app
+        run: swift test
+
       - name: Import signing certificate
         env:
           APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}

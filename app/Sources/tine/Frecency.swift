@@ -65,9 +65,11 @@ final class Frecency {
     /// The shell sends it (see `setHistoryIgnore`); until then nothing is ignored.
     private var ignore = HistoryIgnore.none
     private let historyPath: String
+    private let logPath: String
 
-    init(historyPath: String = Frecency.defaultHistoryPath) {
+    init(historyPath: String = Frecency.defaultHistoryPath, logPath: String = TineLog.path) {
         self.historyPath = historyPath
+        self.logPath = logPath
     }
 
     var index: [String: [String: Use]] { queue.sync { merged } }
@@ -97,7 +99,8 @@ final class Frecency {
             ignore = HistoryIgnore(pattern)
             // Length only: a pattern names the commands the user hides, and the
             // log is world-readable.
-            tlog("history ignore: \(pattern.count) chars, compiled: \(ignore.isCompiled)")
+            TineLog.write("history ignore: \(pattern.count) chars, compiled: \(ignore.isCompiled)",
+                          to: logPath)
             rebuild()
             return true
         }

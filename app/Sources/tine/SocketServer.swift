@@ -1,19 +1,5 @@
 import Foundation
 
-let TINE_US = "\u{1f}"
-/// Splits the sections of a multi-part payload (the `env` buffer), one level
-/// above US — which the alias dump already uses as its own line separator.
-let TINE_RS = "\u{1e}"
-
-extension String {
-    /// Safe to put in a socket reply: the shell reads one line of `;`-joined
-    /// fields, so an error message must not carry either separator.
-    var socketSafe: String {
-        components(separatedBy: CharacterSet(charactersIn: "\n\r;\(TINE_US)\(TINE_RS)"))
-            .joined(separator: " ")
-    }
-}
-
 /// One request from the shell feed (shell/tine.zsh).
 /// Wire format (one line): type US cursor US cwd US pos US buffer
 /// `pos` is "anchorRow;anchorCol;cols;rows;cellW;cellH;session" (semicolon-joined):
@@ -35,12 +21,6 @@ struct Request {
     let cellW: Int     // device pixels
     let cellH: Int     // device pixels
     let session: pid_t // the shell's pid, 0 when unknown
-    let buffer: String
-}
-
-struct FeedMessage {
-    let cursor: Int
-    let cwd: String
     let buffer: String
 }
 
