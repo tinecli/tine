@@ -168,7 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return "EXEC"
                 }
                 if let (b, c) = self.state.accept() {
-                    // History and learn-it rows are not usage picks.
+                    // History values are re-logged by zsh; learn-it is not a usage pick.
                     if let name = self.state.selectedName,
                        self.state.selectedType != "history",
                        self.state.selectedType != "learn-it" {

@@ -26,7 +26,7 @@ const specsDir = "/tine-smoke-specs";
 const home = "/home/smoke";
 const files: Record<string, string> = {
   [`${specsDir}/index.json`]: JSON.stringify({
-    completions: ["git", "cd", "cat", "deploy", "wipe"],
+    completions: ["git", "cd", "cat", "deploy", "wipe", "wrapper"],
     diffVersionedCompletions: [],
   }),
   [`${specsDir}/deploy.js`]: `var completionSpec = {
@@ -64,6 +64,11 @@ const files: Record<string, string> = {
     args: { name: "target", isDangerous: true, template: "filepaths" },
   };
   export default completionSpec;`,
+  [`${specsDir}/wrapper.js`]: `var completionSpec = {
+    name: "wrapper",
+    args: { name: "command", isCommand: true },
+  };
+  export default completionSpec;`,
 };
 
 // `ls -1ApL` output per directory, for the filepaths/folders generators.
@@ -80,8 +85,8 @@ let tineSuggest: Suggest;
 let tineValidate: Validate;
 let bundle: string;
 
-const suggest = (line: string): Promise<Result> =>
-  new Promise((resolve) => tineSuggest(line, line.length, "/tmp", resolve));
+const suggest = (line: string, cursor = line.length): Promise<Result> =>
+  new Promise((resolve) => tineSuggest(line, cursor, "/tmp", resolve));
 
 const names = async (line: string) =>
   (await suggest(line)).items.map((item) => item.name);
@@ -97,9 +102,11 @@ beforeAll(async () => {
     __tineReadFile: (path: string) => files[path] ?? "",
     __tineSpecsDir: specsDir,
     __tineHome: home,
+    __tineAliases: { aliaspc: "plug-cli run" },
     __tineFrecency: {
-      pc: {},
-      deploy: {},
+      pc: { "--force": use(4) },
+      aliaspc: { run: use(3) },
+      wrapper: { nested: use(2) },
     },
     __tineRun: (json: string) => {
       const input = JSON.parse(json) as {
@@ -307,26 +314,38 @@ test("a used command with no spec offers to learn it", async () => {
   expect(items).toHaveLength(1);
   expect(items[0]).toMatchObject({
     name: "no spec for `pc` — learn it",
+    description: "writes a spec from `pc --help`",
     insertValue: "tine learn pc",
     type: "learn-it",
   });
 });
 
-test("a typo with no frecency key does not offer to learn it", async () => {
-  expect(await names("px ")).toEqual([]);
+test("only an exact frecency key offers to learn a missing command", async () => {
+  expect(await names("p ")).toEqual([]);
+  expect(await names("pcx ")).toEqual([]);
 });
 
-test("a command with a spec does not offer to learn it", async () => {
-  const { items } = await suggest("deploy ");
-  expect(items.every((item) => item.type !== "learn-it")).toBe(true);
+test("a wrapper whose command argument lacks a spec offers no row", async () => {
+  expect(await names("wrapper nested ")).toEqual([]);
 });
 
-test("the learn-it row replaces the whole line", async () => {
-  const line = "pc --unknown";
-  const { items } = await suggest(line);
+test("an alias offers to learn its resolved missing command", async () => {
+  const { items } = await suggest("aliaspc ");
+  expect(items).toHaveLength(1);
+  expect(items[0]).toMatchObject({
+    name: "no spec for `plug-cli` — learn it",
+    description: "writes a spec from `plug-cli --help`",
+    insertValue: "tine learn plug-cli",
+    type: "learn-it",
+  });
+});
+
+test("the learn-it row keeps normal token replacement scope", async () => {
+  const line = "pc --unknown foo";
+  const { items } = await suggest(line, "pc --unknown".length);
   expect(items).toHaveLength(1);
   expect(items[0].insertValue).toBe("tine learn pc");
-  expect(items[0].queryTerm).toBe(line);
+  expect(items[0].queryTerm).toBe("--unknown");
 });
 
 test("a generator or a spec suggestion keeps history values out", async () => {

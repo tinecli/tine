@@ -72,6 +72,55 @@ const shellAliases = (): Record<string, string> =>
   (globalThis as { __tineAliases?: Record<string, string> }).__tineAliases ??
   {};
 
+const frecencyIndex = (): Record<string, Record<string, unknown>> => {
+  const value = (globalThis as { __tineFrecency?: unknown }).__tineFrecency;
+  if (typeof value !== "object" || value === null) return {};
+
+  const index: Record<string, Record<string, unknown>> = {};
+  for (const [command, params] of Object.entries(value)) {
+    if (
+      typeof params === "object" &&
+      params !== null &&
+      !Array.isArray(params)
+    ) {
+      index[command] = params;
+    }
+  }
+  return index;
+};
+
+const learnItResult = (
+  upToCursor: string,
+  missingCommand: string,
+  resolvedCommand: string,
+): TineResult => {
+  const typedCommand = upToCursor.trimStart().split(/\s+/)[0];
+  if (
+    !typedCommand ||
+    missingCommand !== resolvedCommand ||
+    !Object.prototype.hasOwnProperty.call(frecencyIndex(), typedCommand)
+  ) {
+    return { searchTerm: "", items: [] };
+  }
+
+  const queryTerm = upToCursor.split(/\s+/).at(-1) ?? "";
+  return {
+    searchTerm: "",
+    items: [
+      {
+        name: `no spec for \`${resolvedCommand}\` — learn it`,
+        description: `writes a spec from \`${resolvedCommand} --help\``,
+        insertValue: `tine learn ${resolvedCommand}`,
+        shouldAddSpace: false,
+        type: "learn-it",
+        queryTerm,
+        isDangerous: false,
+        matchIndices: [],
+      },
+    ],
+  };
+};
+
 async function suggest(
   line: string,
   cursor: number,
@@ -100,7 +149,11 @@ async function suggest(
   const parsed = await parseArguments(command as never, context as never).catch(
     rethrowUnlessMissingSpec,
   );
-  if (!parsed) return historyOnlyResult(upToCursor);
+  if (parsed instanceof MissingSpecError) {
+    const history = historyOnlyResult(upToCursor);
+    if (history.items.length > 0) return history;
+    return learnItResult(upToCursor, parsed.command, command.tokens[0].text);
+  }
 
   // Run the current arg's generators (git branches, folder/file listings, …)
   // via the Swift command bridge, and feed the results in as generator states.
@@ -198,8 +251,8 @@ function historyValues(
   return getHistoryValueSuggestions(cmd, historyFlagKey(upToCursor));
 }
 
-const rethrowUnlessMissingSpec = (err: unknown): null => {
-  if (err instanceof MissingSpecError) return null;
+const rethrowUnlessMissingSpec = (err: unknown): MissingSpecError => {
+  if (err instanceof MissingSpecError) return err;
   throw err;
 };
 
@@ -208,46 +261,25 @@ const rethrowUnlessMissingSpec = (err: unknown): null => {
 // through the same pools, grammar filter and frecency as the specced path.
 function historyOnlyResult(upToCursor: string): TineResult {
   const tokens = upToCursor.trimStart().split(/\s+/);
-  const command = tokens[0] ?? "";
-  const frecency = (globalThis as { __tineFrecency?: unknown }).__tineFrecency;
-  const commandWasUsed =
-    command.length > 0 &&
-    typeof frecency === "object" &&
-    frecency !== null &&
-    Object.prototype.hasOwnProperty.call(frecency, command);
-  const empty: TineResult = {
-    searchTerm: "",
-    items: commandWasUsed
-      ? [
-          {
-            name: `no spec for \`${command}\` — learn it`,
-            description: "",
-            insertValue: `tine learn ${command}`,
-            shouldAddSpace: false,
-            type: "learn-it",
-            queryTerm: upToCursor,
-            isDangerous: false,
-            matchIndices: [],
-          },
-        ]
-      : [],
-  };
+  const command = tokens[0];
   // Still on the command name: first-token completion handles that, not this.
-  if (tokens.length < 2) return empty;
+  if (!command || tokens.length < 2) return { searchTerm: "", items: [] };
 
   const current = tokens[tokens.length - 1];
   const separator = current.startsWith("-") ? current.indexOf("=") : -1;
   // A flag is being typed, not its value: with no spec there are none to offer.
-  if (current.startsWith("-") && separator <= 0) return empty;
+  if (current.startsWith("-") && separator <= 0) {
+    return { searchTerm: "", items: [] };
+  }
 
   const searchTerm = separator > 0 ? current.slice(separator + 1) : current;
   // filterSuggestions leaves the empty-search-term case unsorted, so rank first.
   const ranked = getHistoryValueSuggestions(
-    tokens[0],
+    command,
     historyFlagKey(upToCursor),
   ).sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
   const filtered = filterSuggestions(ranked, searchTerm, true, false);
-  if (filtered.length === 0) return empty;
+  if (filtered.length === 0) return { searchTerm: "", items: [] };
   return { searchTerm, items: toItems(filtered, searchTerm) };
 }
 
@@ -333,9 +365,7 @@ function commandNameResult(
   partial: string,
   aliases: Record<string, string>,
 ): TineResult {
-  const frec =
-    (globalThis as { __tineFrecency?: Record<string, Record<string, unknown>> })
-      .__tineFrecency ?? {};
+  const frec = frecencyIndex();
   const { names: specs, descriptions } = specIndex();
   const names = new Set<string>([
     ...specs,

@@ -118,6 +118,9 @@ final class AppState: ObservableObject {
     func accept() -> (buffer: String, cursor: Int)? {
         guard suggestions.indices.contains(selectedIndex) else { return nil }
         let selected = suggestions[selectedIndex]
+        if selected.type == "learn-it" {
+            return (selected.insertValue, selected.insertValue.count)
+        }
         let chars = Array(buffer)
         // Replace only this suggestion's query term (basename for path suggestions;
         // may legitimately be empty right after a "/", meaning append at the cursor).
