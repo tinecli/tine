@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let frecency = Frecency()
     private var idleHide: DispatchWorkItem?
     private var sockPath = ""
+    private var socketListening = false
     private var ownerPID: pid_t?
     private let sessions = SessionOwnership()
     private var focusWatcher: AXFocusWatcher?
@@ -204,7 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return "0"
             }
         }
-        server.start()
+        socketListening = server.start()
         self.server = server
 
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -234,10 +235,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @MainActor func doctorReport() -> DoctorReport {
-        DoctorReport.build(
+        let zshrcPath = (ProcessInfo.processInfo.environment["ZDOTDIR"] ?? NSHomeDirectory())
+            + "/.zshrc"
+        let shellInstalled = FileManager.default.contents(atPath: zshrcPath)
+            .map { String(decoding: $0, as: UTF8.self).contains("tine.zsh") } ?? false
+        return DoctorReport(
             accessibilityGranted: AXCaret.isTrusted,
-            shellInstalled: FileManager.default.fileExists(
-                atPath: "\(NSHomeDirectory())/.local/share/tine/tine.zsh"),
+            shellInstalled: shellInstalled,
             specCount: SpecInstaller.installedCount(),
             packUpdateAvailable: specInstaller.updateAvailable,
             appVersion: (Bundle.main.object(
@@ -245,6 +249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             latestAppVersion: appUpdater.newerVersion,
             stagedAppVersion: appUpdater.readyVersion,
             socketPath: sockPath,
+            socketListening: socketListening,
             panelPlacement: lastPanelPlacement
         )
     }

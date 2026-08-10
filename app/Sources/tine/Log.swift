@@ -18,31 +18,8 @@ struct DoctorReport: Equatable {
     let latestAppVersion: String?
     let stagedAppVersion: String?
     let socketPath: String
+    let socketListening: Bool
     let panelPlacement: PanelPlacement
-
-    static func build(
-        accessibilityGranted: Bool,
-        shellInstalled: Bool,
-        specCount: Int,
-        packUpdateAvailable: Bool,
-        appVersion: String,
-        latestAppVersion: String?,
-        stagedAppVersion: String?,
-        socketPath: String,
-        panelPlacement: PanelPlacement
-    ) -> DoctorReport {
-        DoctorReport(
-            accessibilityGranted: accessibilityGranted,
-            shellInstalled: shellInstalled,
-            specCount: specCount,
-            packUpdateAvailable: packUpdateAvailable,
-            appVersion: appVersion,
-            latestAppVersion: latestAppVersion,
-            stagedAppVersion: stagedAppVersion,
-            socketPath: socketPath,
-            panelPlacement: panelPlacement
-        )
-    }
 
     var socketValue: String {
         "ax=\(accessibilityGranted ? 1 : 0);specs=\(specCount);"

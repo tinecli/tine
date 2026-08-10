@@ -9,7 +9,7 @@ struct SettingsView: View {
     @State private var report: DoctorReport?
     @State private var selectedSpecDir: Int?
     @State private var startAtLogin = SMAppService.mainApp.status == .enabled
-    @State private var pane: Pane? = .status
+    @State private var pane: Pane? = .general
     @StateObject private var previewState = AppState.appearancePreview()
     private let previewTopInset: CGFloat = 18
     private let refresh = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
@@ -47,16 +47,20 @@ struct SettingsView: View {
         } detail: {
             Form { paneBody }
                 .formStyle(.grouped)
-                .navigationTitle((pane ?? .status).rawValue)
+                .navigationTitle((pane ?? .general).rawValue)
         }
-        .frame(minWidth: 440, idealWidth: 590, minHeight: 360, idealHeight: 520)
+        .frame(minWidth: 440, idealWidth: 590, minHeight: 360, idealHeight: 700)
         .background(WindowAccessor())
-        .onAppear { refreshReport() }
-        .onReceive(refresh) { _ in refreshReport() }
+        .onChange(of: pane) { _, pane in
+            if pane == .status { refreshReport() }
+        }
+        .onReceive(refresh) { _ in
+            if pane == .status { refreshReport() }
+        }
     }
 
     @ViewBuilder private var paneBody: some View {
-        switch pane ?? .status {
+        switch pane ?? .general {
         case .status: statusPane
         case .general: generalPane
         case .appearance: appearancePane
@@ -111,8 +115,8 @@ struct SettingsView: View {
                 }
             }
             Section("Runtime") {
-                setupRow("Socket", ok: !report.socketPath.isEmpty,
-                         detail: report.socketPath.isEmpty ? "Not listening" : report.socketPath) {
+                setupRow("Socket", ok: report.socketListening,
+                         detail: report.socketListening ? report.socketPath : "Not listening") {
                     EmptyView()
                 }
                 setupRow("Panel placement",

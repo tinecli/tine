@@ -1,7 +1,7 @@
 import Testing
 
 struct DoctorReportTests {
-    private let report = DoctorReport.build(
+    private let report = DoctorReport(
         accessibilityGranted: true,
         shellInstalled: false,
         specCount: 417,
@@ -10,10 +10,11 @@ struct DoctorReportTests {
         latestAppVersion: "0.1.33",
         stagedAppVersion: "0.1.32",
         socketPath: "/tmp/tine-test.sock",
+        socketListening: true,
         panelPlacement: .terminalGrid
     )
 
-    @Test func builderAssemblesEveryReportValue() {
+    @Test func reportStoresEveryValue() {
         #expect(report.accessibilityGranted)
         #expect(!report.shellInstalled)
         #expect(report.specCount == 417)
@@ -22,6 +23,7 @@ struct DoctorReportTests {
         #expect(report.latestAppVersion == "0.1.33")
         #expect(report.stagedAppVersion == "0.1.32")
         #expect(report.socketPath == "/tmp/tine-test.sock")
+        #expect(report.socketListening)
         #expect(report.panelPlacement == .terminalGrid)
     }
 
@@ -31,7 +33,7 @@ struct DoctorReportTests {
     }
 
     @Test func socketValueUsesEmptyUpdateVersionsAndNumericFlags() {
-        let quiet = DoctorReport.build(
+        let quiet = DoctorReport(
             accessibilityGranted: false,
             shellInstalled: true,
             specCount: 0,
@@ -40,6 +42,7 @@ struct DoctorReportTests {
             latestAppVersion: nil,
             stagedAppVersion: nil,
             socketPath: "",
+            socketListening: false,
             panelPlacement: .awaitingInput
         )
 
