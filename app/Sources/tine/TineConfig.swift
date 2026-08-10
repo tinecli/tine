@@ -1,33 +1,26 @@
 import Foundation
 
-/// User settings, persisted as ~/.config/tine/config.json (also hand-editable).
 struct TineConfig: Codable, Equatable {
     var maxVisibleRows: Int = 12
-    var glass: Bool = true          // Liquid Glass vs. a solid panel
+    var glass: Bool = true
     var fontName: String = ""       // "" = system monospaced; else a named font
     var fontSize: Double = 12
-    var firstTokenCompletion: Bool = true   // complete bare command names
-    var showDetail: Bool = false            // Ctrl+K detail pane visible
-    var showMenuBarIcon: Bool = true        // status-bar item visible
-    var openWindowAtStart: Bool = true      // open the dashboard window on launch
-    var autoUpdateSpecs: Bool = true        // download a newer spec pack by itself
-    var autoUpdateApp: Bool = true          // false = only tell the user about releases
-    var updateNotifications: Bool = true    // notify about installed/available updates
-    // User's own spec locations. Each holds override/<cmd>.js (replace) and
-    // extend/<cmd>.js (merge) subfolders. Default lives under ~/.config/tine,
-    // alongside this config; add more (e.g. a team-shared repo) in Settings.
+    var firstTokenCompletion: Bool = true
+    var showDetail: Bool = false
+    var showMenuBarIcon: Bool = true
+    var openWindowAtStart: Bool = true
+    var autoUpdateSpecs: Bool = true
+    var autoUpdateApp: Bool = true
+    var updateNotifications: Bool = true
     var localSpecsDirs: [String] = ["\(NSHomeDirectory())/.config/tine/specs"]
 
-    /// The spec dirs with a leading `~` expanded — safe to hand to the file layer.
     var localSpecsDirsExpanded: [String] {
         localSpecsDirs.map { ($0 as NSString).expandingTildeInPath }
     }
 
     init() {}
 
-    /// Decoded key by key: a config written by an older tine is missing whatever
-    /// keys were added since, and the synthesized decoder would throw on the first
-    /// one — silently resetting every setting the user does have.
+    /// Per-key, not synthesized: the synthesized decoder throws on a missing key and resets every setting.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T {

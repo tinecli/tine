@@ -1,7 +1,5 @@
 import Foundation
 
-/// Dead-simple file logger for development. Writes to /tmp/tine.log so it can be
-/// read regardless of unified-log quirks. Replace with os_log later.
 enum TineLog {
     static let path = "/tmp/tine.log"
 

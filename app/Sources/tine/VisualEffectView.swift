@@ -1,8 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// Real macOS vibrancy (frosted glass) behind the panel — blurs the terminal
-/// content behind it, unlike SwiftUI's flat `.regularMaterial`.
 struct VisualEffectView: NSViewRepresentable {
     var material: NSVisualEffectView.Material = .hudWindow
 
