@@ -6,6 +6,7 @@ describe("getCommand", () => {
     woman: "man",
     quote: "'q'",
     g: "git",
+    gco: "git checkout",
   };
   const expectText = (command: Command | null) =>
     expect(command?.tokens.map((token) => token.text) ?? []);
@@ -30,5 +31,12 @@ describe("getCommand", () => {
     expectText(getCommand("man woman ", aliases)).toEqual(["man", "woman", ""]);
     // Handle quotes
     expectText(getCommand("quote ", aliases)).toEqual(["q", ""]);
+    // Expand a multi-word alias into multiple tokens.
+    expectText(getCommand("gco ", aliases)).toEqual(["git", "checkout", ""]);
+    expectText(getCommand("gco my-branch", aliases)).toEqual([
+      "git",
+      "checkout",
+      "my-branch",
+    ]);
   });
 });
