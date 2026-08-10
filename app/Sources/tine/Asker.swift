@@ -14,6 +14,8 @@ struct PickedTool {
 struct ComposedCommand {
     @Guide(description: "The whole command line to run, starting with the tool's name")
     var command: String
+    @Guide(description: "A concrete example command grounded in the supplied documentation, or empty")
+    var example: String
 }
 
 /// What the engine's parser makes of a command line.
@@ -44,6 +46,7 @@ final class Asker: ObservableObject {
     /// One line of the answer, as the shell renders it.
     enum Row: Equatable {
         case command(String, dangerous: Bool)
+        case example(String)
         case tool(String, String)
         case note(String)
     }
@@ -59,6 +62,8 @@ final class Asker: ObservableObject {
 
     /// The shell's PATH — the app's own is launchd's, which has no Homebrew in it.
     var shellPath: (() -> String)?
+
+    var frecency: (() -> [String: [String: Frecency.Use]])?
 
     private let packDir: String
 
@@ -87,6 +92,8 @@ final class Asker: ObservableObject {
         switch row {
         case .command(let line, let dangerous):
             return ["cmd", line.socketSafe, dangerous ? "danger" : ""].joined(separator: TINE_RS)
+        case .example(let line):
+            return ["example", line.socketSafe, ""].joined(separator: TINE_RS)
         case .tool(let name, let description):
             return ["tool", name.socketSafe, description.socketSafe].joined(separator: TINE_RS)
         case .note(let message):
@@ -167,7 +174,8 @@ final class Asker: ObservableObject {
             finish(startedAt, .failed(error.localizedDescription))
             return
         }
-        let hits = AskIndex.rank(question, in: entries, limit: Self.candidates)
+        let hits = AskIndex.rank(question, in: entries, limit: Self.candidates,
+                                 frecency: frecency?() ?? [:])
         guard !hits.isEmpty else {
             finish(startedAt, .failed("no tool on your PATH looks like a match for that"))
             return
@@ -190,7 +198,7 @@ final class Asker: ObservableObject {
             finish(startedAt, .done(rows([picked] + reordered)))
             return
         }
-        finish(startedAt, .done([composed] + rows([picked] + reordered)))
+        finish(startedAt, .done(composed + rows([picked] + reordered)))
     }
 
     /// How many tools the model chooses between, and how many the shell lists.
@@ -216,7 +224,7 @@ final class Asker: ObservableObject {
     /// No spec, no command: a 3B model asked to invoke a tool it has never been
     /// shown the flags of writes something plausible and wrong, and tine would
     /// have nothing to catch it with.
-    private func compose(question: String, tool: AskEntry, startedAt: Date) async -> Row? {
+    private func compose(question: String, tool: AskEntry, startedAt: Date) async -> [Row]? {
         let documented = outline?(tool.name) ?? []
         guard !documented.isEmpty else { return nil }
         report(startedAt, .running("composing a \(tool.name) command"))
@@ -224,7 +232,7 @@ final class Asker: ObservableObject {
         for _ in 0..<Self.attempts {
             guard let answer = await Self.composedLine(question: question, tool: tool,
                                                        flags: documented, rejected: rejected),
-                  let line = Self.checked(answer, installed: [tool.name])
+                  let line = Self.checked(answer.command, installed: [tool.name])
             else { return nil }
             let verdict = validate?(line) ?? .unchecked
             // The spec has no place for one of those words. Name it and try again.
@@ -236,7 +244,12 @@ final class Asker: ObservableObject {
             // a spec exists, so anything else here means the check itself did not
             // run — and an unchecked line is what this whole path exists to avoid.
             guard case .ok(let dangerous) = verdict else { return nil }
-            return .command(line, dangerous: dangerous || Self.looksDestructive(line))
+            let command = Row.command(line, dangerous: dangerous || Self.looksDestructive(line))
+            guard let example = Self.checkedExample(answer.example, tool: tool),
+                  case .ok(let exampleDangerous) = validate?(example) ?? .unchecked,
+                  !exampleDangerous, !Self.looksDestructive(example)
+            else { return [command] }
+            return [command, .example(example)]
         }
         return nil
     }
@@ -341,14 +354,21 @@ final class Asker: ObservableObject {
 
     /// The tool's own spec is the whole vocabulary the model gets: its documented
     /// flags and subcommands, and the word the parser threw out last time.
+    private struct Composition: Sendable {
+        let command: String
+        let example: String
+    }
+
     private nonisolated static func composedLine(question: String, tool: AskEntry,
                                                  flags: [String],
-                                                 rejected: String) async -> String? {
+                                                 rejected: String) async -> Composition? {
         let session = LanguageModelSession(instructions: """
             You write one command line for the tool you are given, using only the \
             flags and subcommands listed for it. Write the simplest line that does \
             the job — one command, no pipes, no shell operators, no flag that is not \
-            on the list. Prefer no flags at all over a flag you are unsure of.
+            on the list. Also give one concrete example command only when the supplied \
+            documentation supports it; otherwise leave the example empty. Prefer no \
+            flags at all over a flag you are unsure of.
             """)
         let correction = rejected.isEmpty ? ""
             : "\n\nYour last answer used \(rejected), which \(tool.name) does not have. "
@@ -360,12 +380,16 @@ final class Asker: ObservableObject {
 
             Everything \(tool.name) documents, and nothing else may appear:
             \(flags.prefix(maxFlags).joined(separator: " "))
+
+            Its man page's EXAMPLES or DESCRIPTION section:
+            \(tool.documentation)
             """ + correction
         return await bounded {
-            try await session.respond(
+            let content = try await session.respond(
                 to: prompt, generating: ComposedCommand.self,
-                options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 120)
-            ).content.command
+                options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 180)
+            ).content
+            return Composition(command: content.command, example: content.example)
         }
     }
 
@@ -404,6 +428,11 @@ final class Asker: ObservableObject {
     }
 
     nonisolated static let maxCommand = 300
+
+    nonisolated static func checkedExample(_ raw: String, tool: AskEntry) -> String? {
+        guard !tool.documentation.isEmpty else { return nil }
+        return checked(raw, installed: [tool.name])
+    }
 
     /// Every character zsh would read as more than one word of one command — `!`
     /// included: history expansion runs on the buffer at accept-line, so an

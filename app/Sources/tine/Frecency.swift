@@ -390,6 +390,11 @@ final class Frecency {
         Double(use.count) * pow(2, -max(0, now - use.lastUsed) / halfLifeMs)
     }
 
+    static func commandScore(_ uses: [String: Use], now: Double = Date().timeIntervalSince1970 * 1000)
+        -> Double {
+        uses.values.map { score($0, now) }.max() ?? 0
+    }
+
     /// Bound the pool: the most frecent values per (command, flag), the rest go.
     private static func capValues(_ values: [String: [String: [String: Use]]],
                                   _ now: Double) -> [String: [String: [String: Use]]] {

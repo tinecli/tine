@@ -76,6 +76,18 @@ enum AskHarness {
         \\fBmagick\\fP [\\fIinput-options\\fP]
         """
 
+    static let documentedPage = """
+        .SH NAME
+        magick \\- convert images
+        .SH DESCRIPTION
+        Convert an input image to an output image.
+        .SH EXAMPLES
+        .B magick input.jpg output.png
+        Converts a JPEG file to PNG.
+        .SH SEE ALSO
+        identify(1)
+        """
+
     static func parsing() {
         check("mdoc NAME", AskIndex.nameLine(inManPage: mdocPage) == "ls - list directory contents")
         check("man NAME",
@@ -89,6 +101,14 @@ enum AskHarness {
               AskIndex.nameLine(inManPage: ".SH \"NAME\"\nfoo - a thing\n") == "foo - a thing")
         check("roff comment dropped",
               AskIndex.nameLine(inManPage: ".SH NAME\n.\\\" hidden\nfoo - a thing\n") == "foo - a thing")
+        check("EXAMPLES ground usage ahead of DESCRIPTION",
+              AskIndex.documentation(inManPage: documentedPage)
+                  == "magick input.jpg output.png Converts a JPEG file to PNG.")
+        check("DESCRIPTION grounds usage when EXAMPLES is absent",
+              AskIndex.documentation(inManPage: ".SH DESCRIPTION\nConverts image files.\n")
+                  == "Converts image files.")
+        check("unrelated sections do not ground usage",
+              AskIndex.documentation(inManPage: ".SH SYNOPSIS\nfoo input output\n").isEmpty)
 
         check("font escape stripped", AskIndex.unroff("a \\fBbold\\fP word") == "a bold word")
         check("bracketed font stripped", AskIndex.unroff("a \\f(CWmono\\fP word") == "a mono word")
@@ -175,6 +195,19 @@ enum AskHarness {
         check("the user's own word outranks a synonym of it",
               AskIndex.weighted(["delete"])["delete"] == 1
                   && AskIndex.weighted(["delete"])["remove"] == 0.6)
+        check("jpg expands to jpeg and jpe",
+              AskIndex.weighted(["jpg"])["jpeg"] == 0.6
+                  && AskIndex.weighted(["jpg"])["jpe"] == 0.6)
+        check("tif expands to tiff", AskIndex.weighted(["tif"])["tiff"] == 0.6)
+        let now = Date().timeIntervalSince1970 * 1000
+        let tied = [
+            AskEntry(name: "ztool", description: "convert image formats"),
+            AskEntry(name: "atool", description: "convert image formats"),
+        ]
+        let use = Frecency.Use(count: 20, lastUsed: now)
+        check("frecency promotes the used tool",
+              AskIndex.rank("convert image", in: tied, limit: 1,
+                            frecency: ["atool": ["convert": use]]).first?.entry.name == "atool")
         check("one description takes one row",
               !AskIndex.rank("remove a directory", in: corpus, limit: 9)
                   .contains { $0.entry.name == "rmdir" })
@@ -208,6 +241,16 @@ enum AskHarness {
         check("prose rejected", Asker.checked("You can use ls", installed: installed) == nil)
         check("an over-long line rejected",
               Asker.checked("ls " + String(repeating: "a", count: 400), installed: installed) == nil)
+        let documented = AskEntry(name: "magick", description: "convert images",
+                                  documentation: "magick input.jpg output.png")
+        let undocumented = AskEntry(name: "magick", description: "convert images")
+        check("documented example accepted",
+              Asker.checkedExample("magick input.jpg output.png", tool: documented)
+                  == "magick input.jpg output.png")
+        check("undocumented example omitted",
+              Asker.checkedExample("magick input.jpg output.png", tool: undocumented) == nil)
+        check("unsafe example rejected",
+              Asker.checkedExample("magick input.jpg output.png; rm x", tool: documented) == nil)
         check("a question is bounded and stripped",
               Asker.question("  convert\nan image\u{1f}to jpeg  ") == "convert an image to jpeg")
         check("an empty question is rejected", Asker.question("   ") == nil)
@@ -229,6 +272,11 @@ enum AskHarness {
         let loaded = AskIndex.load()
         check("index round-trips", loaded?.entries == entries && loaded?.signature == "sig")
         check("index lands in the data dir", AskIndex.path.hasPrefix(AskIndex.dir))
+        let legacy = """
+            {"signature":"old","builtAt":0,"entries":[{"name":"jq","description":"JSON"}]}
+            """
+        let decoded = try? JSONDecoder().decode(AskIndex.Stored.self, from: Data(legacy.utf8))
+        check("old index decodes without documentation", decoded?.entries.first?.documentation == "")
     }
 
     // MARK: - Live build (opt-in)

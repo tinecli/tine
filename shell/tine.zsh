@@ -547,6 +547,7 @@ _tine_show_answer() {
             print -- "$name"
             [[ "$text" == danger ]] &&
               print -- $'\e[31m'"tine: this one destroys data — read it before you run it"$'\e[0m' ;;
+      example) print -- "  example: $name" ;;
       tool) if [[ -n "$text" ]]; then printf '  %-16s %s\n' "$name" "$text"
             else printf '  %s\n' "$name"; fi ;;
       note) print -- "tine: $name" ;;
