@@ -143,22 +143,25 @@ enum AskIndex {
         return paths
     }
 
-    private static let maxPageBytes = 128 * 1024
+    private static let maxNamePageBytes = 128 * 1024
+    private static let maxExamplesPageBytes = 512 * 1024
 
     static func nameLine(inManPageAt path: String) -> String? {
         guard !path.isEmpty else { return nil }
-        return manPage(at: path).flatMap(nameLine(inManPage:))
+        return manPage(at: path, maxBytes: maxNamePageBytes).flatMap(nameLine(inManPage:))
     }
 
     static func examples(inManPageAt path: String) -> String? {
         guard !path.isEmpty else { return nil }
-        return manPage(at: path).flatMap(examples(inManPage:))
+        let toolName = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+        return manPage(at: path, maxBytes: maxExamplesPageBytes)
+            .flatMap { examples(inManPage: $0, toolName: toolName) }
     }
 
-    private static func manPage(at path: String) -> String? {
+    private static func manPage(at path: String, maxBytes: Int) -> String? {
         guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
         defer { try? handle.close() }
-        guard let data = try? handle.read(upToCount: maxPageBytes), !data.isEmpty else { return nil }
+        guard let data = try? handle.read(upToCount: maxBytes), !data.isEmpty else { return nil }
         return String(decoding: data, as: UTF8.self)
     }
 
@@ -180,39 +183,232 @@ enum AskIndex {
         String(line.dropFirst(macro.count)).trimmingCharacters(in: .whitespaces)
     }
 
-    static func examples(inManPage source: String) -> String? {
-        guard let lines = section(named: ["EXAMPLE", "EXAMPLES"], in: source, maxLines: 80)
+    static func examples(inManPage source: String, toolName explicitName: String? = nil) -> String? {
+        guard containsExamplesHeading(in: source) else { return nil }
+        guard let lines = section(named: ["EXAMPLE", "EXAMPLES"], in: source, maxLines: 80,
+                                  includingSubsections: true)
         else { return nil }
+        let toolName = explicitName ?? mdocToolName(in: source)
         let text = lines.compactMap { line -> String? in
             if line.hasPrefix(".\\\"") || line.hasPrefix(".\"") { return nil }
             guard line.hasPrefix(".") || line.hasPrefix("'") else { return String(line) }
-            let fields = line.split(maxSplits: 1, whereSeparator: \.isWhitespace)
-            return fields.count == 2 ? String(fields[1]) : nil
+            return mdocExampleLine(String(line), toolName: toolName)
         }.joined(separator: " ")
         let cleaned = unroff(text, limit: maxExamples)
         return cleaned.isEmpty ? nil : cleaned
     }
 
+    private static let examplesHeadingPattern = try! NSRegularExpression(
+        pattern: #"(?im)^\.(?:SH|SS)[\t ]+"?EXAMPLES?(?=["\t ]|$)"#
+    )
+
+    private static func containsExamplesHeading(in source: String) -> Bool {
+        examplesHeadingPattern.firstMatch(
+            in: source, range: NSRange(source.startIndex..<source.endIndex, in: source)
+        ) != nil
+    }
+
+    private static func mdocToolName(in source: String) -> String? {
+        guard let lines = section(named: ["NAME"], in: source, maxLines: 12) else { return nil }
+        for line in lines where line.hasPrefix(".Nm") {
+            let name = after(".Nm", String(line)).split(whereSeparator: \.isWhitespace).first
+            if let name, !name.isEmpty { return String(name) }
+        }
+        return nil
+    }
+
+    private struct MdocToken {
+        let text: String
+        let quoted: Bool
+    }
+
+    private static let mdocWrappers: Set<String> = ["D1", "Dl", "It", "Ss"]
+    private static let mdocDroppedLineMacros: Set<String> = ["Bd", "Bl", "Ed", "El", "Pp"]
+    private static let mdocArguments: Set<String> = [
+        "Ar", "Cm", "Dv", "Em", "Ev", "Ic", "Li", "No", "Pa", "Sy", "Va",
+    ]
+    private static let mdocQuoteDelimiters: [String: (String, String)] = [
+        "Aq": ("<", ">"), "Bq": ("[", "]"), "Brq": ("{", "}"),
+        "Dq": ("\"", "\""), "Pq": ("(", ")"), "Ql": ("`", "'"),
+        "Qq": ("\"", "\""), "Sq": ("`", "'"),
+    ]
+    private static let mdocDroppedInlineMacros: Set<String> = [
+        "Dc", "Do", "Oc", "Oo", "Op", "Qc", "Qo", "Sc", "So",
+    ]
+    private static let translatedMdocMacros = mdocArguments
+        .union(mdocQuoteDelimiters.keys).union(mdocDroppedInlineMacros)
+        .union(["Fl", "Nm", "Ns", "Pf"])
+
+    private static func mdocExampleLine(_ line: String, toolName: String?) -> String? {
+        let fields = line.split(maxSplits: 1, whereSeparator: \.isWhitespace)
+        guard let request = fields.first else { return nil }
+        let macro = String(request.dropFirst())
+        let arguments = fields.count == 2 ? String(fields[1]) : ""
+        if mdocDroppedLineMacros.contains(macro) { return nil }
+
+        let expression: String
+        if mdocWrappers.contains(macro) {
+            expression = arguments
+        } else if translatedMdocMacros.contains(macro) {
+            expression = ([macro] + (arguments.isEmpty ? [] : [arguments])).joined(separator: " ")
+        } else {
+            if isMdocMacro(macro) {
+                return ([macro] + (arguments.isEmpty ? [] : [arguments])).joined(separator: " ")
+            }
+            return arguments.isEmpty ? nil : arguments
+        }
+        return translateMdoc(expression, toolName: toolName) ?? (arguments.isEmpty ? nil : arguments)
+    }
+
+    private static func translateMdoc(_ expression: String, toolName: String?) -> String? {
+        let tokens = mdocTokens(expression)
+        guard !tokens.contains(where: {
+            !$0.quoted && isMdocMacro($0.text) && !translatedMdocMacros.contains($0.text)
+        }) else { return nil }
+
+        var output = ""
+        var joinNext = false
+        var quoteClosings: [String] = []
+        var index = 0
+        while index < tokens.count {
+            let token = tokens[index]
+            var piece = ""
+            var pieceJoinsFollowing = false
+            guard !token.quoted, translatedMdocMacros.contains(token.text) else {
+                piece = token.text
+                if output.isEmpty || joinNext { output += piece } else { output += " " + piece }
+                joinNext = false
+                index += 1
+                continue
+            }
+            switch token.text {
+            case "Nm":
+                if index + 1 < tokens.count,
+                   tokens[index + 1].quoted
+                    || !translatedMdocMacros.contains(tokens[index + 1].text) {
+                    piece = tokens[index + 1].text
+                    index += 1
+                } else {
+                    guard let toolName, !toolName.isEmpty else { return nil }
+                    piece = toolName
+                }
+            case "Fl":
+                piece = "-"
+                if index + 1 < tokens.count,
+                   tokens[index + 1].quoted
+                    || !translatedMdocMacros.contains(tokens[index + 1].text) {
+                    piece += tokens[index + 1].text
+                    index += 1
+                }
+            case "Ns":
+                joinNext = true
+            case "Pf":
+                if index + 1 < tokens.count,
+                   tokens[index + 1].quoted
+                    || !translatedMdocMacros.contains(tokens[index + 1].text) {
+                    piece = tokens[index + 1].text
+                    pieceJoinsFollowing = true
+                    index += 1
+                }
+            case let macro where mdocArguments.contains(macro):
+                if index + 1 < tokens.count,
+                   tokens[index + 1].quoted
+                    || !translatedMdocMacros.contains(tokens[index + 1].text) {
+                    piece = tokens[index + 1].text
+                    index += 1
+                }
+            case let macro where mdocQuoteDelimiters[macro] != nil:
+                guard index + 1 < tokens.count,
+                      let delimiters = mdocQuoteDelimiters[macro] else { return nil }
+                piece = delimiters.0
+                pieceJoinsFollowing = true
+                quoteClosings.append(delimiters.1)
+            default:
+                break
+            }
+            if !piece.isEmpty {
+                if output.isEmpty || joinNext { output += piece } else { output += " " + piece }
+                joinNext = pieceJoinsFollowing
+            }
+            index += 1
+        }
+        for closing in quoteClosings.reversed() { output += closing }
+        return output.isEmpty ? nil : output
+    }
+
+    private static func isMdocMacro(_ token: String) -> Bool {
+        let scalars = token.unicodeScalars
+        guard (2...4).contains(scalars.count), let first = scalars.first else {
+            return false
+        }
+        return CharacterSet.uppercaseLetters.contains(first)
+            && scalars.dropFirst().allSatisfy(CharacterSet.lowercaseLetters.contains)
+    }
+
+    private static func mdocTokens(_ source: String) -> [MdocToken] {
+        var tokens: [MdocToken] = []
+        var text = ""
+        var quoted = false
+        var tokenWasQuoted = false
+        var previousWasBackslash = false
+        var index = source.startIndex
+        while index < source.endIndex {
+            let character = source[index]
+            let next = source.index(after: index)
+            if !quoted, character == "\\", next < source.endIndex, source[next] == "\"" { break }
+            if character == "\"", !previousWasBackslash {
+                if quoted {
+                    quoted = false
+                    if !tokenWasQuoted { text.append(character) }
+                } else {
+                    quoted = true
+                    tokenWasQuoted = text.isEmpty
+                    if !tokenWasQuoted { text.append(character) }
+                }
+            } else if character.isWhitespace, !quoted {
+                if !text.isEmpty {
+                    tokens.append(MdocToken(text: text, quoted: tokenWasQuoted))
+                    text = ""
+                    tokenWasQuoted = false
+                }
+            } else {
+                text.append(character)
+            }
+            previousWasBackslash = character == "\\" && !previousWasBackslash
+            index = next
+        }
+        if !text.isEmpty { tokens.append(MdocToken(text: text, quoted: tokenWasQuoted)) }
+        return tokens
+    }
+
     private static let maxExamples = 1200
 
     private static func section(named names: Set<String>, in source: String,
-                                maxLines: Int) -> [Substring]? {
-        var found = false
+                                maxLines: Int, includingSubsections: Bool = false) -> [Substring]? {
+        var foundLevel: Int?
         var section: [Substring] = []
         for line in source.split(separator: "\n", omittingEmptySubsequences: false) {
-            if !found {
-                found = names.contains(headingName(line))
+            let level = headingLevel(line)
+            guard let foundLevel else {
+                if names.contains(headingName(line)) { foundLevel = level }
                 continue
             }
-            if isHeading(line) { return section }
+            if level > 0, !includingSubsections || level <= foundLevel { return section }
             section.append(line)
             if section.count >= maxLines { return section }
         }
-        return found ? section : nil
+        return foundLevel == nil ? nil : section
     }
 
     private static func isHeading(_ line: Substring) -> Bool {
-        line.hasPrefix(".SH") || line.hasPrefix(".Sh") || line.hasPrefix(".SS")
+        headingLevel(line) > 0
+    }
+
+    private static func headingLevel(_ line: Substring) -> Int {
+        let request = line.split(whereSeparator: \.isWhitespace).first ?? ""
+        if request == ".SH" || request == ".Sh" { return 1 }
+        if request == ".SS" || request == ".Ss" { return 2 }
+        return 0
     }
 
     private static func headingName(_ line: Substring) -> String {

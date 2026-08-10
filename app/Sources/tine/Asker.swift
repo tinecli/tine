@@ -205,8 +205,7 @@ final class Asker: ObservableObject {
             let command = Row.command(line, dangerous: dangerous || Self.looksDestructive(line))
             guard let example = Self.checkedExample(answer.example, tool: tool,
                                                     examples: examples, command: line),
-                  case .ok(let exampleDangerous) = validate?(example) ?? .unchecked,
-                  !exampleDangerous
+                  Self.isSafeExample(example, validation: validate?(example) ?? .unchecked)
             else { return [command] }
             return [command, .example(example)]
         }
@@ -224,6 +223,11 @@ final class Asker: ObservableObject {
     private nonisolated static let destructive: Set<String> = [
         "rm", "rmdir", "shred", "srm", "dd", "mkfs", "fdisk", "diskutil",
     ]
+
+    nonisolated static func isSafeExample(_ line: String, validation: AskValidation) -> Bool {
+        guard case .ok(let dangerous) = validation else { return false }
+        return !dangerous && !looksDestructive(line)
+    }
 
     private func corpus(rebuild: Bool, startedAt: Date) async throws -> [AskEntry] {
         let path = shellPath?() ?? ProcessInfo.processInfo.environment["PATH"] ?? ""
