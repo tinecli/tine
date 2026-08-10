@@ -260,11 +260,13 @@ enum AskIndex {
     /// name ("csvlook — csvlook Documentation") says nothing, so it is dropped:
     /// an empty description ranks on the name alone instead of on a false match.
     static func description(_ raw: String, of name: String) -> String {
+        // Man writes "tool - what it does", and a page shared by a family of tools
+        // ("lzegrep" reading xzgrep's page) writes a name that isn't this one. The
+        // name is the entry's key either way, so the whole heading goes.
         var text = raw
-        // Man writes "tool - what it does"; the name is already the entry's key.
-        for prefix in ["\(name) -", "\(name)-", name] where text.hasPrefix(prefix) {
-            text = String(text.dropFirst(prefix.count))
-            break
+        if let dash = text.range(of: " - "), text[..<dash.lowerBound].count <= name.count + 24,
+           !text[..<dash.lowerBound].contains(" ") || text.hasPrefix(name) {
+            text = String(text[dash.upperBound...])
         }
         text = text.trimmingCharacters(in: CharacterSet(charactersIn: " -–—,:"))
         let words = terms(text).filter { $0 != name.lowercased() && !filler.contains($0) }
@@ -288,7 +290,7 @@ enum AskIndex {
     /// `NLEmbedding.sentenceEmbedding` were both measured against this corpus and
     /// ranked *worse* than this does (see the PR for #32).
     static func rank(_ query: String, in entries: [AskEntry], limit: Int) -> [Hit] {
-        let queryTerms = Set(terms(query).filter { !stopwords.contains($0) })
+        let queryTerms = weighted(terms(query).filter { !stopwords.contains($0) })
         guard !queryTerms.isEmpty else { return [] }
 
         let documents = entries.map { terms($0.name) + terms($0.description) }
@@ -308,37 +310,74 @@ enum AskIndex {
             let document = documents[index]
             let nameTerms = Set(terms(entry.name))
             var score = 0.0
-            for term in queryTerms {
+            for (term, weight) in queryTerms {
                 let occurrences = Double(document.filter { $0 == term }.count)
                     + (nameTerms.contains(term) ? nameWeight : 0)
                 if occurrences > 0 {
                     let length = Double(document.count)
-                    score += inverseFrequency(term) * (occurrences * (k1 + 1))
+                    score += weight * inverseFrequency(term) * (occurrences * (k1 + 1))
                         / (occurrences + k1 * (1 - b + b * length / max(averageLength, 1)))
                 } else if term.count >= 3, entry.name.lowercased().contains(term) {
                     // `csvlook` for "csv": the name is the only place tools like
                     // this say what they are for.
-                    score += inverseFrequency(term) * partialNameWeight
+                    score += weight * inverseFrequency(term) * partialNameWeight
                 }
             }
             if score > 0 { hits.append(Hit(entry: entry, score: score)) }
         }
-        return prune(hits).sorted { ($0.score, $1.entry.name) > ($1.score, $0.entry.name) }
-            .prefix(limit).map { $0 }
+        let ranked = hits.sorted { ($0.score, $1.entry.name) > ($1.score, $0.entry.name) }
+        return Array(prune(ranked).prefix(limit))
     }
 
     private static let k1 = 1.2
     private static let b = 0.6
     private static let nameWeight = 2.0
     private static let partialNameWeight = 1.2
+    private static let synonymWeight = 0.6
 
-    /// `json_xs` and `json_xs5.34` are one tool listed twice; the version-suffixed
-    /// copy never wins a row of its own.
-    private static func prune(_ hits: [Hit]) -> [Hit] {
-        let names = Set(hits.map { $0.entry.name })
-        return hits.filter { hit in
-            guard let base = versionlessName(hit.entry.name) else { return true }
-            return !names.contains(base)
+    /// The question's own words, plus the words a man page would have used
+    /// instead — a page says "remove", the user says "delete". Weighted below the
+    /// words the user actually wrote.
+    static func weighted(_ queryTerms: [String]) -> [String: Double] {
+        var weights: [String: Double] = [:]
+        for term in queryTerms { weights[term] = 1 }
+        for term in queryTerms {
+            for synonym in synonyms[term] ?? [] where weights[synonym] == nil {
+                weights[synonym] = synonymWeight
+            }
+        }
+        return weights
+    }
+
+    private static let synonyms: [String: [String]] = [
+        "delete": ["remove", "erase", "unlink"],
+        "remove": ["delete", "erase"],
+        "search": ["find", "grep", "match"],
+        "find": ["search", "locate"],
+        "folder": ["directory"],
+        "directory": ["folder"],
+        "photo": ["image", "picture"],
+        "picture": ["image", "photo"],
+        "image": ["picture", "photo"],
+        "compress": ["archive", "compression", "zip"],
+        "archive": ["compress", "tar", "zip"],
+        "rename": ["move"],
+        "download": ["fetch", "retrieve", "transfer"],
+        "convert": ["transform", "encode"],
+        "monitor": ["watch", "report"],
+        "csv": ["delimited", "comma"],
+    ]
+
+    /// One row per tool, and one per answer. `json_xs5.34` is `json_xs` listed
+    /// twice, and a man page shared by a family — `lzgrep`, `xzgrep`, `zipgrep`,
+    /// all reading one page — would otherwise fill the whole list with a single
+    /// description. Takes the ranked hits, so the best-scoring name keeps the row.
+    private static func prune(_ ranked: [Hit]) -> [Hit] {
+        let names = Set(ranked.map { $0.entry.name })
+        var shown = Set<String>()
+        return ranked.filter { hit in
+            if let base = versionlessName(hit.entry.name), names.contains(base) { return false }
+            return hit.entry.description.isEmpty || shown.insert(hit.entry.description).inserted
         }
     }
 

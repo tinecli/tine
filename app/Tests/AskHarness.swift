@@ -4,12 +4,16 @@
 //   swiftc -swift-version 5 -o /private/tmp/tine-harness/ask app/Tests/AskHarness.swift \
 //       app/Sources/tine/AskIndex.swift app/Sources/tine/Asker.swift \
 //       app/Sources/tine/CommandRunner.swift app/Sources/tine/SocketServer.swift \
-//       app/Sources/tine/Log.swift
+//       app/Sources/tine/Log.swift app/Sources/tine/SpecLearner.swift \
+//       app/Sources/tine/TineConfig.swift app/Sources/tine/JSEngine.swift \
+//       app/Sources/tine/Frecency.swift
 //   TINE_DATA_DIR=/private/tmp/tine-harness /private/tmp/tine-harness/ask
 //
 // Man-page parsing, description cleaning, ranking and answer validation run
-// everywhere. With `--live` it also builds the real index for this machine's
-// PATH and prints what it retrieves, which is how the ranking was tuned.
+// everywhere. `--live` builds the real index for this machine's PATH and prints
+// what it retrieves, which is how the ranking was tuned. `--answer` drives the
+// whole verb — real engine, real specs, real model — and needs the on-device
+// model to be available. Both write only inside TINE_DATA_DIR.
 
 import Foundation
 
@@ -43,6 +47,7 @@ enum AskHarness {
         answers()
         store()
         if CommandLine.arguments.contains("--live") { live() }
+        if CommandLine.arguments.contains("--answer") { MainActor.assumeIsolated { answering() } }
         print("\n\(pass) passed, \(fail) failed")
         exit(fail == 0 ? 0 : 1)
     }
@@ -108,6 +113,16 @@ enum AskHarness {
               AskIndex.description("jq - Command-line JSON processor", of: "jq")
                   == "Command-line JSON processor")
         check("empty stays empty", AskIndex.description("", of: "foo") == "")
+        // A page shared by a family names the family, not this tool.
+        check("another tool's heading dropped",
+              AskIndex.description("xzgrep - search possibly-compressed files", of: "lzegrep")
+                  == "search possibly-compressed files")
+        check("a comma-separated heading dropped",
+              AskIndex.description("rm, unlink - remove directory entries", of: "rm")
+                  == "remove directory entries")
+        check("a dash inside the description survives",
+              AskIndex.description("a well-known thing - and more", of: "foo")
+                  == "a well-known thing - and more")
     }
 
     // MARK: - Names
@@ -136,6 +151,8 @@ enum AskHarness {
         AskEntry(name: "du", description: "display disk usage statistics"),
         AskEntry(name: "curl", description: "transfer a URL"),
         AskEntry(name: "tar", description: "manipulate tape archives"),
+        AskEntry(name: "rm", description: "remove directory entries"),
+        AskEntry(name: "rmdir", description: "remove directory entries"),
     ]
 
     static func top(_ query: String) -> [String] {
@@ -151,6 +168,15 @@ enum AskHarness {
         check("version twin never shown",
               !AskIndex.rank("pretty print json", in: corpus, limit: 9)
                   .contains { $0.entry.name == "json_pp5.34" })
+        // The page says "remove", the user says "delete".
+        check("a synonym of the tool's own word matches",
+              top("delete a whole directory").first == "rm")
+        check("the user's own word outranks a synonym of it",
+              AskIndex.weighted(["delete"])["delete"] == 1
+                  && AskIndex.weighted(["delete"])["remove"] == 0.6)
+        check("one description takes one row",
+              !AskIndex.rank("remove a directory", in: corpus, limit: 9)
+                  .contains { $0.entry.name == "rmdir" })
         check("a question of only stopwords retrieves nothing", top("what can I do").isEmpty)
         check("empty question retrieves nothing", top("").isEmpty)
         check("limit honoured", AskIndex.rank("json", in: corpus, limit: 1).count == 1)
@@ -223,5 +249,44 @@ enum AskHarness {
         let t0 = Date()
         for _ in 0..<20 { _ = AskIndex.rank(query, in: built.entries, limit: 5) }
         print(String(format: "  rank: %.1f ms", Date().timeIntervalSince(t0) * 1000 / 20))
+    }
+
+    // MARK: - A real answer (opt-in)
+
+    /// The whole path the socket verb drives, wired the way the app wires it: a
+    /// real engine over the installed pack, the real index, the real model. Only
+    /// the scratch data dir is not real.
+    @MainActor
+    static func answering() {
+        let environment = ProcessInfo.processInfo.environment
+        let pack = environment["TINE_SPECS_DIR"] ?? "\(NSHomeDirectory())/.local/share/tine/specs"
+        let resources = environment["TINE_RESOURCES_DIR"] ?? "app/engine"
+        let engine = JSEngine(specsDir: pack, localSpecsDirs: [], resourcesDir: resources)
+        check("engine ready", engine.ready)
+        check("engine rejects an invented flag",
+              engine.validate(line: "git --quantum") == .invalid("--quantum"))
+        check("engine accepts a real one", engine.validate(line: "git --version") == .ok(dangerous: false))
+        check("engine outlines a tool's flags", engine.outline(command: "git").contains("--version"))
+
+        let asker = Asker(packDir: pack)
+        asker.shellPath = { environment["PATH"] ?? "" }
+        asker.validate = { engine.validate(line: $0) }
+        asker.outline = { engine.outline(command: $0) }
+
+        for question in ["convert an image to jpeg", "a cli that can format csv",
+                         "search for text inside files", "delete a directory and everything in it"] {
+            let started = Date()
+            print("\nask: \(question) → \(asker.ask(question: question))")
+            while Date().timeIntervalSince(started) < 90 {
+                RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+                let line = asker.statusLine
+                if line.hasPrefix("done:") || line.hasPrefix("failed:") {
+                    print(String(format: "  %.2fs %@", Date().timeIntervalSince(started),
+                                 line.replacingOccurrences(of: TINE_US, with: "\n    ")
+                                     .replacingOccurrences(of: TINE_RS, with: " | ")))
+                    break
+                }
+            }
+        }
     }
 }
