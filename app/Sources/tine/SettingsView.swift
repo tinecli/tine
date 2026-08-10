@@ -122,19 +122,25 @@ struct SettingsView: View {
     private var preview: some View {
         let size = SuggestionListView.panelSize(rows: previewState.suggestions.count,
                                                 config: previewState.config)
-        let scale = previewWidth > 0 ? min(1, previewWidth / size.width) : 1
-        return ZStack(alignment: .topLeading) {
-            terminalBackdrop
-            SuggestionListView()
-                .environmentObject(previewState)
-                .allowsHitTesting(false)
-                .frame(width: size.width, height: size.height)
-                .scaleEffect(scale, anchor: .topLeading)
-                .frame(width: size.width * scale, height: size.height * scale,
-                       alignment: .topLeading)
-                .padding(.top, 18)
+        let heightScale = previewWidth > 0 ? min(1, previewWidth / size.width) : 1
+        return GeometryReader { geometry in
+            let scale = min(1, max(0, geometry.size.width / size.width))
+            ZStack(alignment: .topLeading) {
+                terminalBackdrop
+                    .frame(width: geometry.size.width, height: geometry.size.height,
+                           alignment: .topLeading)
+                    .clipped()
+                SuggestionListView()
+                    .environmentObject(previewState)
+                    .allowsHitTesting(false)
+                    .frame(width: size.width, height: size.height)
+                    .scaleEffect(scale, anchor: .topLeading)
+                    .frame(width: size.width * scale, height: size.height * scale,
+                           alignment: .topLeading)
+                    .padding(.top, 18)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: size.height * heightScale + 18, alignment: .topLeading)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { previewWidth = $0 }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 10).fill(.black.opacity(0.88)))
