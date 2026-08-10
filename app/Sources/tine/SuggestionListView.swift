@@ -14,11 +14,8 @@ struct SuggestionListView: View {
             : .custom(state.config.fontName, size: fontSize)
     }
 
-    // The user's system accent color (System Settings › Appearance).
     private var tint: Color { .accentColor }
 
-    /// Scroll only when the selection crosses an edge of the visible window,
-    /// pinning it there — so it can't run off the pane (Finder-style).
     private func keepVisible(_ sel: Int) {
         let top = topID ?? 0
         if sel < top {
@@ -47,8 +44,7 @@ struct SuggestionListView: View {
         .frame(height: rowHeight * CGFloat(min(count == 0 ? 1 : count, maxRows)))
         .padding(.vertical, 4)
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        // A generator is still running while more suggestions are already showing:
-        // a small unobtrusive spinner in the corner (Fig-style).
+        // Distinct from `loadingRow`: this is the still-loading state once rows already exist.
         .overlay(alignment: .topTrailing) {
             if state.isLoading && count > 0 {
                 ProgressView().controlSize(.small).scaleEffect(0.6).padding(4)
@@ -68,8 +64,7 @@ struct SuggestionListView: View {
     }
 
     private var content: some View {
-        // Pin to the top: when the detail pane is taller than the list (few rows,
-        // long description), the list must stay at the top, not center in the gap.
+        // .top, not the HStack default .center: a taller detail pane must not push the list down.
         HStack(alignment: .top, spacing: 0) {
             list.frame(width: Self.listWidth)
             if state.config.showDetail {
@@ -81,8 +76,7 @@ struct SuggestionListView: View {
 
     @ViewBuilder var body: some View {
         if state.config.glass {
-            // Apple hosts glass in a container (perf + correct edge/blend rendering);
-            // the material draws its own edge, so we add no border of our own.
+            // Unlike materialContent below, glassEffect draws its own edge — no border needed.
             GlassEffectContainer {
                 content.glassEffect(in: RoundedRectangle(cornerRadius: 12))
             }
@@ -98,7 +92,6 @@ struct SuggestionListView: View {
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.12)))
     }
 
-    /// Ctrl+K detail column for the selected suggestion (Apple-HUD style).
     @ViewBuilder private var detail: some View {
         let sel = state.suggestions.indices.contains(state.selectedIndex)
             ? state.suggestions[state.selectedIndex] : nil
@@ -152,7 +145,6 @@ struct SuggestionListView: View {
         }
     }
 
-    /// Name with fuzzy-matched characters bolded (in the configured font).
     private func highlighted(_ label: String, _ indices: [Int]) -> Text {
         guard !indices.isEmpty else { return Text(label) }
         let hit = Set(indices)
@@ -166,8 +158,7 @@ struct SuggestionListView: View {
         return Text(out)
     }
 
-    /// Shown when the pane is empty but a generator is still running (the panel is
-    /// only presented with no suggestions while `isLoading`).
+    /// The panel is only ever presented with zero suggestions while `isLoading`.
     private var loadingRow: some View {
         HStack(spacing: 7) {
             ProgressView().controlSize(.small).scaleEffect(0.6).frame(width: 13)
@@ -182,8 +173,8 @@ struct SuggestionListView: View {
     @ViewBuilder
     private func row(index: Int, s: Suggestion) -> some View {
         let selected = index == state.selectedIndex
-        // The "↪" auto-execute row's name is itself a glyph — show its label
-        // (e.g. "Immediately execute") instead so it doesn't read as two icons.
+        // "↪" as a name would look like a second icon next to `iconName` — show the
+        // description (e.g. "Immediately execute") for that row instead.
         let isNameLabel = !(s.isExecute && s.name == "↪")
         let label = isNameLabel ? s.name : s.description
         let iconName = s.isDangerous ? "exclamationmark.triangle.fill" : icon(for: s)

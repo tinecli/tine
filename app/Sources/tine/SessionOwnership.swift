@@ -1,21 +1,15 @@
 import AppKit
 
-/// Which shell session drives the panel. Every message carries the shell's `$$`,
-/// so one terminal tab can be told from another: a session takes the panel over
-/// only by editing its own line while its terminal app is frontmost. A
-/// background shell's async prompt redraw (p10k-class plugins, a `TMOUT` clock)
-/// therefore can neither re-own, move, nor dismiss the panel.
+/// A session (identified by its shell's `$$`) takes over the panel only by editing its own
+/// line while its terminal is frontmost — so a background shell's async prompt redraw
+/// (p10k-class plugins, a `TMOUT` clock) can never re-own, move, or dismiss the panel.
 final class SessionOwnership {
     struct Verdict {
-        /// This session's own line changed — the panel may follow its caret.
         let changed: Bool
-        /// The app to place the panel over, or nil when the session's terminal
-        /// isn't frontmost.
         let appPID: pid_t?
     }
 
-    /// The session holding the panel. Shells that predate the session id send 0
-    /// and are always treated as the owner, keeping the old global behaviour.
+    /// Shells that predate the session id send 0, which `isOwner` always treats as owning.
     private(set) var owner: pid_t?
     private var lines: [pid_t: FeedMessage] = [:]
     private var apps: [pid_t: pid_t] = [:] // 0 = no application ancestor
@@ -35,7 +29,6 @@ final class SessionOwnership {
 
     func disown() { owner = nil }
 
-    /// Rule the update: nil when it must not touch the panel at all.
     func admit(session: pid_t, _ msg: FeedMessage) -> Verdict? {
         let changed = lines[session].map {
             $0.buffer != msg.buffer || $0.cursor != msg.cursor || $0.cwd != msg.cwd
@@ -43,17 +36,14 @@ final class SessionOwnership {
         lines[session] = msg
         prune()
         let app = frontmostTerminal(of: session)
-        // An empty line never earns the panel: a background shell's first redraw
-        // would otherwise take it over and dismiss what the user has up.
+        // A non-owner can't take over on an empty line, or a background shell's first
+        // redraw would seize the panel and dismiss what the user has up.
         guard isOwner(session) || (changed && !msg.buffer.isEmpty && app != nil) else { return nil }
         if changed, app != nil { owner = session }
         return Verdict(changed: changed, appPID: app)
     }
 
-    /// The app the panel may be placed over for this session: the frontmost one,
-    /// but only when the session runs under it. A session with no application
-    /// ancestor (tmux, ssh) can't be told apart that way and keeps the old
-    /// frontmost-app behaviour.
+    /// Under tmux or ssh there's no application ancestor to compare, so any frontmost app qualifies.
     private func frontmostTerminal(of session: pid_t) -> pid_t? {
         let front = frontmostPID()
         guard let app = terminalApp(of: session) else { return front }
@@ -62,12 +52,9 @@ final class SessionOwnership {
 
     private func terminalApp(of session: pid_t) -> pid_t? {
         if let cached = apps[session] {
-            // 0 = the walk found no application ancestor (tmux, ssh).
             if cached == 0 { return nil }
-            // A cached terminal that has quit means the OS reused the pid for a
-            // shell somewhere else: resolve it again rather than answer for a
-            // terminal that is gone, which would leave that shell unable to ever
-            // show the panel.
+            // Re-resolve rather than trust a cached terminal that has quit: the OS may have
+            // reused its pid for something else, which would strand this shell without a panel.
             if isRunningApp(cached) { return cached }
         }
         let found = terminalPID(session) ?? 0
@@ -75,17 +62,13 @@ final class SessionOwnership {
         return found == 0 ? nil : found
     }
 
-    /// Forget shells that have exited, so a long-lived app doesn't accumulate
-    /// their lines (and can't answer for a pid the OS has since reused).
+    /// `kill(pid, 0)` sends no signal — it only reports whether the pid is still alive.
     private func prune() {
         guard lines.count > 64 else { return }
         lines = lines.filter { kill($0.key, 0) == 0 }
         apps = apps.filter { lines[$0.key] != nil }
     }
 
-    /// The nearest ancestor process that is a running application — the terminal
-    /// the shell runs in. Nil under tmux or ssh, where the shell descends from a
-    /// daemon instead of an app.
     static func applicationAncestor(of session: pid_t) -> pid_t? {
         let apps = Set(NSWorkspace.shared.runningApplications.map(\.processIdentifier))
         var pid = session

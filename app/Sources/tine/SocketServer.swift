@@ -1,31 +1,25 @@
 import Foundation
 
 let TINE_US = "\u{1f}"
-/// Splits the sections of a multi-part payload (the `env` buffer), one level
-/// above US — which the alias dump already uses as its own line separator.
+/// One level above US, which the `env` payload's alias dump already uses as its own separator.
 let TINE_RS = "\u{1e}"
 
 extension String {
-    /// Safe to put in a socket reply: the shell reads one line of `;`-joined
-    /// fields, so an error message must not carry either separator.
+    /// Strips characters the wire protocol reserves, so a value can't be mistaken for a separator.
     var socketSafe: String {
         components(separatedBy: CharacterSet(charactersIn: "\n\r;\(TINE_US)\(TINE_RS)"))
             .joined(separator: " ")
     }
 }
 
-/// One request from the shell feed (shell/tine.zsh).
-/// Wire format (one line): type US cursor US cwd US pos US buffer
-/// `pos` is "anchorRow;anchorCol;cols;rows;cellW;cellH;session" (semicolon-joined):
-/// the prompt-start cell + terminal grid + cell size in device pixels, captured
-/// once per prompt via idle-tty DSR, then the shell's `$$`. The cell fields let
-/// the app place the panel in canvas terminals (Ghostty) whose Accessibility
-/// can't report the caret — the app derives the caret cell from the
-/// buffer/cursor it already holds. The session tells one shell from another
-/// (SessionOwnership); a shell that predates it sends six fields and reads as
-/// session 0, which keeps the old app-wide behaviour.
+/// One request from the shell feed (shell/tine.zsh). Wire format (one line):
+/// `type US cursor US cwd US pos US buffer`, where `pos` is
+/// "anchorRow;anchorCol;cols;rows;cellW;cellH;session", captured once per prompt via
+/// idle-tty DSR. The cell geometry lets the app place the panel in canvas terminals
+/// (Ghostty) whose Accessibility can't report the caret. A shell that predates
+/// `session` (SessionOwnership) sends six fields and reads as session 0.
 struct Request {
-    let type: String   // dispatched by AppDelegate's socket handler (App.swift)
+    let type: String
     let cursor: Int
     let cwd: String
     let anchorRow: Int
@@ -34,7 +28,7 @@ struct Request {
     let rows: Int
     let cellW: Int     // device pixels
     let cellH: Int     // device pixels
-    let session: pid_t // the shell's pid, 0 when unknown
+    let session: pid_t // 0 when unknown
     let buffer: String
 }
 
@@ -44,8 +38,8 @@ struct FeedMessage {
     let buffer: String
 }
 
-/// Unix-domain-socket request/response server. No pseudo-terminal (replaces
-/// figterm). The handler runs on the main thread and returns the reply line.
+/// Unix-domain-socket server, no pseudo-terminal (replaces figterm). `handler`
+/// runs on the main thread — it may touch UI/AppState state directly.
 final class SocketServer {
     private let path: String
     private let handler: (Request) -> String
@@ -92,7 +86,6 @@ final class SocketServer {
     }
 
     private func handle(_ conn: Int32) {
-        // Read one newline-terminated request line.
         var data = Data()
         var chunk = [UInt8](repeating: 0, count: 4096)
         readLoop: while true {
@@ -116,8 +109,7 @@ final class SocketServer {
         guard let s = String(data: data, encoding: .utf8) else { return nil }
         let parts = s.components(separatedBy: TINE_US)
         guard parts.count >= 4 else { return nil }
-        // Extended feed carries a positioning field before the buffer; the buffer
-        // stays last (it may itself contain the US separator).
+        // Rejoined below with TINE_US: the buffer itself may contain that separator.
         let extended = parts.count >= 5
         let pos = extended ? parts[3].components(separatedBy: ";").map { Int($0) ?? 0 } : []
         func p(_ i: Int) -> Int { i < pos.count ? pos[i] : 0 }

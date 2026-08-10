@@ -9,14 +9,14 @@ struct Suggestion {
     let type: String      // subcommand | option | arg | folder | file | auto-execute | …
     let queryTerm: String // chars before the cursor this replaces (basename for paths)
     let isDangerous: Bool
-    let matchIndices: [Int] // matched char positions in name (fuzzy), for highlighting
+    let matchIndices: [Int] // fuzzy-match positions in `name`, for highlighting
 
-    // Fig's "auto-execute" row: run the line as-is (insertValue "\n").
+    /// Fig's row for running the line as-is; its insertValue is "\n".
     var isExecute: Bool { type == "auto-execute" }
 }
 
-/// Wraps the Fig autocomplete engine running in JavaScriptCore. Not thread-safe —
-/// call on one thread (we use the main thread from the socket callback).
+/// Wraps the Fig autocomplete engine (tine-engine.js) in a JSContext, which is not
+/// thread-safe — call this only from the main thread.
 final class JSEngine {
     private let ctx = JSContext()!
     private(set) var ready = false
@@ -24,28 +24,22 @@ final class JSEngine {
     init(specsDir: String, localSpecsDirs: [String], resourcesDir: String) {
         ctx.exceptionHandler = { _, exc in tlog("JS EXC: \(exc?.toString() ?? "?")") }
 
-        // Synchronous file read for the spec loader (fread -> __tineReadFile).
         let readFile: @convention(block) (String) -> String = { path in
             (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
         }
         ctx.setObject(readFile, forKeyedSubscript: "__tineReadFile" as NSString)
         ctx.setObject(specsDir as NSString, forKeyedSubscript: "__tineSpecsDir" as NSString)
-        // User's own spec locations (merged onto the pack). Create the
-        // override/ + extend/ subfolders so it's obvious where specs go.
         for d in localSpecsDirs {
             try? FileManager.default.createDirectory(atPath: "\(d)/override", withIntermediateDirectories: true)
             try? FileManager.default.createDirectory(atPath: "\(d)/extend", withIntermediateDirectories: true)
         }
         ctx.setObject(localSpecsDirs as NSArray, forKeyedSubscript: "__tineLocalSpecsDirs" as NSString)
 
-        // Command bridge for dynamic generators (git branch, ls, file paths, ).
         let runCommand: @convention(block) (String) -> String = { CommandRunner.run($0) }
         ctx.setObject(runCommand, forKeyedSubscript: "__tineRun" as NSString)
-        // HOME so the path generators expand `~` (e.g. `cd ~/`).
         ctx.setObject(NSHomeDirectory() as NSString, forKeyedSubscript: "__tineHome" as NSString)
 
-        // Shims are baked into the bundle (tine-engine.ts imports them), so this
-        // is the single self-contained artifact.
+        // tine-engine.js already has its shims baked in, so no other file is loaded here.
         let path = "\(resourcesDir)/tine-engine.js"
         guard let src = try? String(contentsOfFile: path, encoding: .utf8) else {
             tlog("engine: missing \(path)")
@@ -56,13 +50,11 @@ final class JSEngine {
         tlog("engine ready=\(ready) specsDir=\(specsDir)")
     }
 
-    /// Cache the shell's aliases so the parser can expand them (e.g. `pc` → `plug-cli`).
     func setAliases(_ aliases: [String: String]) {
         guard ready else { return }
         ctx.setObject(aliases as NSDictionary, forKeyedSubscript: "__tineAliases" as NSString)
     }
 
-    /// Provide the frecency index ([cmd: [param: {count, lastUsed}]]) for ranking.
     func setFrecency(_ index: [String: [String: Frecency.Use]]) {
         guard ready else { return }
         let bridged = index.mapValues {
@@ -71,11 +63,9 @@ final class JSEngine {
         ctx.setObject(bridged as NSDictionary, forKeyedSubscript: "__tineFrecency" as NSString)
     }
 
-    /// Re-bridge one command's params after a pick. Accept happens per keystroke,
-    /// so it must not walk the whole index; this is the same property write the
-    /// full bridge performs for that key, over untouched siblings, so the result
-    /// is the state `setFrecency` would leave. Dropped before the load-path
-    /// bridge sets the global — that bridge already carries the pick.
+    /// Updates one command's key in `__tineFrecency` in place, leaving siblings untouched,
+    /// so the result matches what a full `setFrecency` reload would produce — without the
+    /// full walk that per-keystroke use here can't afford.
     func setFrecencyCommand(_ cmd: String, params: [String: Frecency.Use]) {
         guard ready, let index = ctx.objectForKeyedSubscript("__tineFrecency"), index.isObject
         else { return }
@@ -83,8 +73,7 @@ final class JSEngine {
         index.setObject(bridged as NSDictionary, forKeyedSubscript: cmd as NSString)
     }
 
-    /// Provide the argument values learned from history ([cmd: [flag: [value: Use]]]),
-    /// suggested when the spec has nothing for the current arg.
+    /// Falls back to these values when the spec has nothing for the current arg.
     func setHistoryValues(_ index: [String: [String: [String: Frecency.Use]]]) {
         guard ready else { return }
         let bridged = index.mapValues {
@@ -93,22 +82,19 @@ final class JSEngine {
         ctx.setObject(bridged as NSDictionary, forKeyedSubscript: "__tineHistoryValues" as NSString)
     }
 
-    /// Drop the cached specs so a spec written after launch (`tine learn`) is used
-    /// on the next keystroke instead of after a restart.
+    /// Lets a spec written after launch (`tine learn`) take effect on the next keystroke.
     func resetSpecCache() {
         guard ready else { return }
         ctx.evaluateScript("if (typeof tineResetSpecs === 'function') tineResetSpecs();")
     }
 
-    /// Toggle first-token (command-name) completion.
     func setFirstTokenEnabled(_ on: Bool) {
         guard ready else { return }
         ctx.setObject(NSNumber(value: on), forKeyedSubscript: "__tineFirstToken" as NSString)
     }
 
-    /// Does this command line parse against the installed spec? `tine ask` puts
-    /// a model's answer through the same parser the panel uses, so a flag the
-    /// tool does not document never reaches the user.
+    /// `tine ask` runs a model's answer through this same parser, so a flag the
+    /// tool's spec doesn't document never reaches the user — model output is untrusted data.
     func validate(line: String) -> AskValidation {
         guard ready else { return .unchecked }
         ctx.setObject(line as NSString, forKeyedSubscript: "__v_line" as NSString)
@@ -124,8 +110,7 @@ final class JSEngine {
         }
     }
 
-    /// The flags and subcommands a tool's spec documents — what the model is
-    /// allowed to use when its first answer failed to parse.
+    /// The allowlist offered back to the model when its first answer failed `validate`.
     func outline(command: String) -> [String] {
         let line = "\(command) "
         return suggest(line: line, cursor: line.count, cwd: NSHomeDirectory())
@@ -133,8 +118,8 @@ final class JSEngine {
             .map { $0.name }
     }
 
-    /// Synchronous because the spec read hook is synchronous, so the engine's
-    /// promise chain drains within JSC's microtask flush before this returns.
+    /// Callback-based but effectively synchronous: the spec read hook is synchronous, so
+    /// the engine's promise chain drains within JSC's microtask flush before this returns.
     func suggest(line: String, cursor: Int, cwd: String) -> [Suggestion] {
         guard ready else { return [] }
         ctx.setObject(line as NSString, forKeyedSubscript: "__q_line" as NSString)

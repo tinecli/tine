@@ -1,7 +1,5 @@
 import Foundation
 
-/// One installed tool, the one line that says what it does, and where its man
-/// page can be read if this tool is picked for composition.
 struct AskEntry: Codable, Equatable {
     let name: String
     let description: String
@@ -14,14 +12,8 @@ struct AskEntry: Codable, Equatable {
     }
 }
 
-/// The corpus `tine ask` searches: every binary on the shell's PATH, described by
-/// its man page's NAME line, or by the spec pack where the pack has a description
-/// and man does not.
-///
-/// Per-machine by definition — it describes what *this* user has installed — so
-/// it is never shipped, only built into the runtime data dir. Building it reads
-/// files and spawns nothing, so it needs no per-page timeout: the whole job is
-/// bounded by the number of binaries on PATH.
+/// Per-machine by definition — it describes what *this* user has installed — so it
+/// is never shipped, only built into the runtime data dir.
 enum AskIndex {
     struct Stored: Codable {
         let signature: String
@@ -29,7 +21,7 @@ enum AskIndex {
         let entries: [AskEntry]
     }
 
-    /// Runtime data dir, beside the spec pack. `TINE_DATA_DIR` is for the harness.
+    /// `TINE_DATA_DIR` overrides this for the test harness.
     static var dir: String {
         ProcessInfo.processInfo.environment["TINE_DATA_DIR"]
             ?? "\(NSHomeDirectory())/.local/share/tine"
@@ -56,8 +48,7 @@ enum AskIndex {
 
     // MARK: - Build
 
-    /// A machine whose PATH still holds the same directories, each unchanged, has
-    /// the same tools installed — so the index it built is still the truth.
+    /// Unchanged mtimes on the same PATH dirs mean the installed tools haven't changed either.
     static func signature(pathDirs: [String]) -> String {
         let parts = pathDirs.map { dir -> String in
             let attrs = try? FileManager.default.attributesOfItem(atPath: dir)
@@ -67,13 +58,12 @@ enum AskIndex {
         return parts.joined(separator: ":")
     }
 
-    /// A corpus this size already covers every binary on a full dev machine; the
-    /// cap is what stops a pathological PATH from turning the build into a crawl.
+    /// Already covers every binary on a full dev machine; stops a pathological PATH
+    /// from turning the build into a crawl.
     static let maxEntries = 8000
 
-    /// Descriptions the spec pack carries for the CLIs it covers (autocomplete#11
-    /// put them in index.json), filling in for a tool that ships no man page. A
-    /// pack that predates that has none, and man alone answers.
+    /// Fills in for a tool with no man page (autocomplete#11 added these to index.json);
+    /// an older pack simply has none.
     static func packDescriptions(in packDir: String) -> [String: String] {
         guard let data = FileManager.default.contents(atPath: "\(packDir)/index.json"),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -104,14 +94,14 @@ enum AskIndex {
         }
     }
 
-    /// Executable names on PATH, first hit wins — the one the shell would run.
+    /// First hit per name wins, matching shell PATH shadowing.
     static func binaries(in dirs: [String]) -> [String] {
         var seen = Set<String>()
         var names: [String] = []
         for dir in dirs {
             let contents = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
             for name in contents.sorted() where isToolName(name) {
-                // A directory on PATH is executable too, and is not a tool.
+                // isExecutableFile is true for directories too — filtered out below.
                 var isDir: ObjCBool = false
                 _ = FileManager.default.fileExists(atPath: "\(dir)/\(name)", isDirectory: &isDir)
                 guard !isDir.boolValue,
@@ -123,15 +113,13 @@ enum AskIndex {
         return names
     }
 
-    /// A name tine is willing to print back to the user, and to hand the parser.
     static func isToolName(_ name: String) -> Bool {
         !name.isEmpty && name.count <= 64
             && name.range(of: "^[A-Za-z0-9][A-Za-z0-9._+-]*$", options: .regularExpression) != nil
     }
 
-    /// Man directories, derived from PATH — `/opt/homebrew/bin` documents itself in
-    /// `/opt/homebrew/share/man`. `manpath(1)` knows about a few more (Xcode's
-    /// toolchain), so the caller may add them; this alone already covers a Mac.
+    /// `/opt/homebrew/bin` documents itself in `/opt/homebrew/share/man`, etc. Covers a Mac;
+    /// `manpath(1)` knows about a few more (Xcode's toolchain) the caller may add.
     static func manDirs(pathDirs: [String]) -> [String] {
         var seen = Set<String>()
         var dirs: [String] = []
@@ -147,13 +135,11 @@ enum AskIndex {
         return dirs
     }
 
-    /// Command sections only: a page in `man3` describes a C function, not a tool.
+    /// `man3` and similar describe a C function, not a command-line tool.
     private static let sections = ["man1", "man6", "man8"]
 
-    /// Page path per tool name, by listing the section directories — one readdir
-    /// each, instead of a `man -w` process per binary. Nothing is opened here:
-    /// only the tools actually on PATH are worth reading. Compressed pages are
-    /// left out — tine has no gunzip, and macOS ships a handful of them.
+    /// A readdir per section dir, instead of spawning `man -w` per binary. Compressed
+    /// pages are skipped — tine has no gunzip, and macOS ships only a handful of them.
     static func manPages(in manDirs: [String]) -> [String: String] {
         var paths: [String: String] = [:]
         for manDir in manDirs {
@@ -169,7 +155,6 @@ enum AskIndex {
         return paths
     }
 
-    /// Enough of a bounded page to reach nearby EXAMPLES sections.
     private static let maxPageBytes = 128 * 1024
 
     static func nameLine(inManPageAt path: String) -> String? {
@@ -191,10 +176,9 @@ enum AskIndex {
 
     // MARK: - Man page parsing (pure, exercised by app/Tests/AskHarness.swift)
 
-    /// The NAME section of a man page, in either of the two macros macOS ships:
-    /// man's `.SH NAME` with a plain "tool \- what it does" line, and mdoc's
-    /// `.Nm`/`.Nd` pair. Untrusted text: it is a local file, but tine did not
-    /// write it, so it is bounded and stripped before anything else sees it.
+    /// Handles both macOS man-page macro sets: man's plain "tool \- what it does" line
+    /// under `.SH NAME`, and mdoc's `.Nm`/`.Nd` pair. Result is unroffed below — tine
+    /// didn't write this file, so nothing displays it raw.
     static func nameLine(inManPage source: String) -> String? {
         guard let section = section(named: ["NAME"], in: source, maxLines: 12) else { return nil }
         var parts: [String] = []
@@ -254,8 +238,8 @@ enum AskIndex {
         return first.trimmingCharacters(in: CharacterSet(charactersIn: "\"")).uppercased()
     }
 
-    /// Roff escapes, reduced to the text they stand for. Everything left that a
-    /// terminal would read as an escape is dropped.
+    /// Reduces roff escapes to the text they stand for; anything a terminal would
+    /// still read as an escape afterward is dropped.
     static func unroff(_ raw: String, limit: Int = maxDescription) -> String {
         var out = ""
         var iterator = raw.startIndex
@@ -301,13 +285,11 @@ enum AskIndex {
 
     static let maxDescription = 180
 
-    /// What the entry stores. A page whose NAME line only repeats the tool's own
-    /// name ("csvlook — csvlook Documentation") says nothing, so it is dropped:
-    /// an empty description ranks on the name alone instead of on a false match.
+    /// A NAME line that only repeats the tool's own name ("csvlook — csvlook Documentation")
+    /// says nothing, so it's dropped in favor of ranking on the name alone.
     static func description(_ raw: String, of name: String) -> String {
-        // Man writes "tool - what it does", and a page shared by a family of tools
-        // ("lzegrep" reading xzgrep's page) writes a name that isn't this one. The
-        // name is the entry's key either way, so the whole heading goes.
+        // The heading goes either way, even for a family-shared page ("lzegrep" reading
+        // xzgrep's) whose name doesn't match `name` — the entry's key is `name` regardless.
         var text = raw
         if let dash = text.range(of: " - "), text[..<dash.lowerBound].count <= name.count + 24,
            !text[..<dash.lowerBound].contains(" ") || text.hasPrefix(name) {
@@ -327,13 +309,9 @@ enum AskIndex {
         let score: Double
     }
 
-    /// The best `limit` tools for a question, by BM25 over name and description
-    /// with the name weighted — plus a bonus where a query word appears inside a
-    /// tool's name, which is how a "csv" question finds `csvlook`.
-    ///
-    /// Keyword, not embeddings: mean-pooled `NLContextualEmbedding` and
-    /// `NLEmbedding.sentenceEmbedding` were both measured against this corpus and
-    /// ranked *worse* than this does (see the PR for #32).
+    /// BM25 over name and description, name weighted, plus a name-substring bonus
+    /// (finds `csvlook` for "csv"). Keyword, not embeddings: `NLContextualEmbedding` and
+    /// `NLEmbedding.sentenceEmbedding` both measured worse on this corpus (see PR #32).
     static func rank(_ query: String, in entries: [AskEntry], limit: Int,
                      frecency: (String) -> Double = { _ in 0 }) -> [Hit] {
         let queryTerms = weighted(terms(query).filter { !stopwords.contains($0) })
@@ -364,8 +342,6 @@ enum AskIndex {
                     score += weight * inverseFrequency(term) * (occurrences * (k1 + 1))
                         / (occurrences + k1 * (1 - b + b * length / max(averageLength, 1)))
                 } else if term.count >= 3, entry.name.lowercased().contains(term) {
-                    // `csvlook` for "csv": the name is the only place tools like
-                    // this say what they are for.
                     score += weight * inverseFrequency(term) * partialNameWeight
                 }
             }
@@ -387,9 +363,8 @@ enum AskIndex {
     private static let frecencyWeight = 0.25
     private static let maxFrecencyBonus = 1.0
 
-    /// The question's own words, plus the words a man page would have used
-    /// instead — a page says "remove", the user says "delete". Weighted below the
-    /// words the user actually wrote.
+    /// Adds each term's synonyms (a page says "remove", the user says "delete"),
+    /// weighted below the words the user actually wrote.
     static func weighted(_ queryTerms: [String]) -> [String: Double] {
         var weights: [String: Double] = [:]
         for term in queryTerms { weights[term] = 1 }
@@ -425,10 +400,8 @@ enum AskIndex {
         "csv": ["delimited", "comma"],
     ]
 
-    /// One row per tool, and one per answer. `json_xs5.34` is `json_xs` listed
-    /// twice, and a man page shared by a family — `lzgrep`, `xzgrep`, `zipgrep`,
-    /// all reading one page — would otherwise fill the whole list with a single
-    /// description. Takes the ranked hits, so the best-scoring name keeps the row.
+    /// Drops a versioned duplicate (`json_xs5.34` alongside `json_xs`) and collapses a
+    /// family sharing one man page (`lzgrep`/`xzgrep`/`zipgrep`) to its best-scoring name.
     private static func prune(_ ranked: [Hit]) -> [Hit] {
         let names = Set(ranked.map { $0.entry.name })
         var shown = Set<String>()
@@ -445,8 +418,6 @@ enum AskIndex {
         return stripped.isEmpty ? nil : stripped
     }
 
-    /// Lowercased words, with the plural folded onto the singular so "files"
-    /// matches "file".
     static func terms(_ text: String) -> [String] {
         text.lowercased()
             .split { !$0.isLetter && !$0.isNumber }
@@ -464,8 +435,7 @@ enum AskIndex {
         return word
     }
 
-    /// Words that carry no signal in a question about command-line tools — "a cli
-    /// that can format csv" is a question about "format csv".
+    /// "a cli that can format csv" is really a question about "format csv".
     private static let stopwords: Set<String> = [
         "the", "and", "for", "that", "with", "from", "into", "how", "can", "use", "using",
         "are", "cli", "tool", "command", "line", "get", "make", "run", "program", "some",

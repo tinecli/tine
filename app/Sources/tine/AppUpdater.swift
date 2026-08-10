@@ -1,11 +1,8 @@
 import AppKit
 import UserNotifications
 
-/// Keeps the app on the latest release: reads the newest tag from the
-/// `releases/latest` redirect, downloads and verifies the dmg in the background,
-/// then swaps the bundle through a detached helper once this process has quit.
-/// Never rewrites the running bundle in place, and never installs anything that
-/// isn't signed by our Developer ID team.
+/// Never rewrites the running bundle in place: downloads and verifies the dmg in the
+/// background, then swaps the bundle through a detached helper once this process quits.
 @MainActor
 final class AppUpdater: ObservableObject {
     enum Status: Equatable {
@@ -18,14 +15,12 @@ final class AppUpdater: ObservableObject {
     }
 
     @Published private(set) var status: Status = .idle
-    /// The newest release seen, once it is newer than ours. Kept apart from
-    /// `status` because a blocked or failed update still has a version to report.
+    /// Kept apart from `status`: a blocked or failed update still has a version to report.
     @Published private(set) var newerVersion: String?
 
     nonisolated static let releasesURL =
         URL(string: "https://github.com/tinecli/tine/releases/latest")!
-    /// Our Developer ID team. A download that doesn't satisfy this never reaches
-    /// the bundle, whatever the dmg claims to be.
+    /// A download that doesn't satisfy this never reaches the bundle, whatever the dmg claims to be.
     nonisolated static let teamRequirement =
         "=anchor apple generic and certificate leaf[subject.OU] = \"82K3YC8HVF\""
     nonisolated static let currentVersion =
@@ -37,7 +32,6 @@ final class AppUpdater: ObservableObject {
     private var wakeObserver: NSObjectProtocol?
     private var swapping = false
 
-    /// The verified version waiting to replace this one on quit.
     var readyVersion: String? { staged?.version }
 
     var updateActionable: Bool {
@@ -46,7 +40,6 @@ final class AppUpdater: ObservableObject {
         return false
     }
 
-    /// Plain status line for the `tine update` poll (appUpdateStatus socket case).
     var statusLine: String {
         switch status {
         case .idle: return "idle"
@@ -60,8 +53,7 @@ final class AppUpdater: ObservableObject {
         }
     }
 
-    /// Only a released .app can replace itself — a dev bundle or a bare `swift
-    /// run` binary must never be swapped for the shipping app.
+    /// A dev bundle or a bare `swift run` binary must never be swapped for the shipping app.
     nonisolated static var isSelfUpdatable: Bool {
         guard let id = Bundle.main.bundleIdentifier, !id.hasSuffix(".dev") else { return false }
         return Bundle.main.bundleURL.pathExtension == "app"
@@ -77,14 +69,12 @@ final class AppUpdater: ObservableObject {
         }
     }
 
-    /// Check now, then daily. A staged bundle from a previous run is discarded:
-    /// only a bundle this process verified itself is ever installed.
     func start() {
         guard Self.isSelfUpdatable else {
             status = .blocked("this build does not self-update")
             return
         }
-        Self.clearStaging()
+        Self.clearStaging() // only a bundle this process verified itself is ever installed
         check()
         timer = Timer.scheduledTimer(withTimeInterval: Self.checkInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.check() }
@@ -96,8 +86,7 @@ final class AppUpdater: ObservableObject {
         }
     }
 
-    /// Ask GitHub for the latest tag and act on it. Fails closed: an unreachable
-    /// network leaves the installed app and the status untouched.
+    /// Fails closed: an unreachable network leaves the installed app and the status untouched.
     func check(manual: Bool = false) {
         guard Self.isSelfUpdatable else {
             status = .blocked("this build does not self-update")
@@ -125,15 +114,12 @@ final class AppUpdater: ObservableObject {
             return
         }
         guard Self.isNewer(latest, than: Self.currentVersion) else {
-            // Clears a version reported by an earlier check that this app has
-            // since caught up with, so doctor stops offering it.
-            newerVersion = nil
+            newerVersion = nil // this app has since caught up with a version reported earlier
             status = .upToDate(Self.currentVersion)
             return
         }
         newerVersion = latest
-        // The config key governs the automatic channel only — asking for the
-        // update explicitly still installs it, like `tine install` does for specs.
+        // autoUpdateApp gates the automatic channel only — an explicit request still installs.
         guard TineConfig.load().autoUpdateApp || manual else {
             settle(.available(latest), "Run `tine update` to install it.", once: "app-\(latest)")
             return
@@ -152,23 +138,20 @@ final class AppUpdater: ObservableObject {
             settle(.ready(latest), "Downloaded — relaunch tine to finish the update.",
                    once: "app-ready-\(latest)")
         } catch {
-            // Fail closed and stay quiet: the next check retries, and the reason
-            // is there for anyone who asks (Settings, `tine update`).
+            // Stays quiet — the next check retries, and the reason is there for anyone who asks.
             Self.clearStaging()
             status = .failed(error.localizedDescription)
             if manual { NSWorkspace.shared.open(Self.releasesURL) }
         }
     }
 
-    /// Land on a final status and tell the user once per new version.
     private func settle(_ next: Status, _ notice: String, once key: String) {
         status = next
         guard let version = newerVersion else { return }
         UpdateNotice.post("tine \(version) is available", notice, once: key)
     }
 
-    /// Swap now and come back. The helper waits for this process to exit, so the
-    /// terminate has to follow the spawn.
+    /// The helper waits for this process to exit, so the terminate has to follow the spawn.
     @discardableResult
     func applyAndRelaunch() -> String? {
         if let reason = spawnSwap(relaunch: true) {
@@ -179,19 +162,16 @@ final class AppUpdater: ObservableObject {
         return nil
     }
 
-    /// The user quit with an update staged: swap, but don't drag the app back up.
     func applyOnQuit() {
         guard staged != nil else { return }
         _ = spawnSwap(relaunch: false)
     }
 
-    /// Hand the staged bundle to a detached helper. Returns a reason on refusal.
     private func spawnSwap(relaunch: Bool) -> String? {
         guard !swapping else { return nil }
         guard let staged else { return "no update downloaded" }
-        // The staged bundle can be hours old: something else (a manual reinstall,
-        // `brew upgrade --greedy`) may have replaced the app underneath us since.
-        // Read the target back off disk so the swap can never be a downgrade.
+        // Something else (a manual reinstall, `brew upgrade --greedy`) may have replaced the
+        // app since staging — re-read the installed version so the swap can never be a downgrade.
         let installed = Self.bundleVersion(of: Bundle.main.bundleURL)
         guard Self.mayInstall(staged.version, over: installed) else {
             self.staged = nil
@@ -213,8 +193,7 @@ final class AppUpdater: ObservableObject {
 
     // MARK: - Release check
 
-    /// Latest published version, from the `releases/latest` redirect target — one
-    /// HEAD, no GitHub API, no rate limit. nil on any network or format failure.
+    /// One HEAD against the redirect target — no GitHub API call, no rate limit.
     nonisolated static func latestVersion() async -> String? {
         var req = URLRequest(url: releasesURL)
         req.httpMethod = "HEAD"
@@ -225,20 +204,20 @@ final class AppUpdater: ObservableObject {
         return version(fromLocation: location)
     }
 
-    /// `…/releases/tag/v0.1.29` → `0.1.29`. Rejects anything that isn't a plain
-    /// dotted number, so a surprising redirect can't reach the download URL.
+    /// `…/releases/tag/v0.1.29` → `0.1.29`. Rejects anything not a plain dotted number,
+    /// so a surprising redirect can't reach the download URL built from this.
     nonisolated static func version(fromLocation location: String) -> String? {
         guard let tag = location.split(separator: "/").last else { return nil }
         let v = tag.hasPrefix("v") ? String(tag.dropFirst()) : String(tag)
-        // ASCII digits only: `isNumber` alone also accepts other scripts' digits,
-        // which Int() would reject later — after the URL had been built from them.
+        // isASCII guards against isNumber accepting other scripts' digits, which would
+        // reach the URL below before Int() ever got a chance to reject them.
         guard !v.isEmpty, v.allSatisfy({ ($0.isASCII && $0.isNumber) || $0 == "." })
         else { return nil }
         return v
     }
 
-    /// An unreadable target is a broken install, not a newer one — replacing it
-    /// is a repair. Anything readable must be strictly older to be replaced.
+    /// No readable installed version is treated as a broken install to repair, not a
+    /// newer one to preserve.
     nonisolated static func mayInstall(_ staged: String, over installed: String?) -> Bool {
         guard let installed else { return true }
         return isNewer(staged, than: installed)
@@ -263,8 +242,8 @@ final class AppUpdater: ObservableObject {
 
     // MARK: - Download, verify, stage
 
-    /// Staged beside the installed bundle, so the swap is a rename on the same
-    /// volume. Hidden and versionless: `clearStaging()` sweeps every one of them.
+    /// Beside the installed bundle so the swap is a same-volume rename; the dot-prefix
+    /// is what lets `clearStaging()` sweep every one of these regardless of version.
     nonisolated private static func stagingRoot() -> URL {
         installDir.appendingPathComponent(".tine-update-\(UUID().uuidString)")
     }
@@ -277,9 +256,7 @@ final class AppUpdater: ObservableObject {
         }
     }
 
-    /// Download the release dmg, verify the app inside it against our team
-    /// requirement, and copy it out. Throws — and leaves nothing behind — unless
-    /// the result is a bundle we would be willing to run.
+    /// `keep` guards the cleanup defer below: throwing here leaves nothing staged behind.
     nonisolated static func downloadVerified(version: String) async throws -> URL {
         let fm = FileManager.default
         let root = stagingRoot()
@@ -315,8 +292,7 @@ final class AppUpdater: ObservableObject {
         return app
     }
 
-    /// Signed, unmodified, and signed by *us*. `spctl` is deliberately not used:
-    /// it false-negatives on stapled builds (see #22).
+    /// `spctl` is deliberately not used: it false-negatives on stapled builds (see #22).
     nonisolated static func isTrusted(_ app: URL) -> Bool {
         run("/usr/bin/codesign", ["--verify", "--strict", "-R", teamRequirement, app.path])
     }
@@ -347,8 +323,8 @@ final class AppUpdater: ObservableObject {
 
     // MARK: - Swap helper
 
-    /// Runs after we exit, so it can move the bundle we're running from. Every
-    /// path arrives as an argument — nothing is interpolated into the script.
+    /// Every path arrives as an argument, not interpolated into the script — this
+    /// runs after we exit, and it moves the bundle we're running from.
     nonisolated static let helperScript = """
     #!/bin/sh
     set -u
@@ -380,8 +356,7 @@ final class AppUpdater: ObservableObject {
     }
 }
 
-/// Turns URLSession's automatic redirect following off, so a HEAD on
-/// `releases/latest` hands back the 302 (and its `location`) instead of the page.
+/// Without this, URLSession follows the redirect and the 302's `Location` is lost.
 private final class RedirectBlocker: NSObject, URLSessionTaskDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse,
@@ -391,11 +366,9 @@ private final class RedirectBlocker: NSObject, URLSessionTaskDelegate {
     }
 }
 
-/// User-facing update notices. The permission prompt is deliberately deferred to
-/// the first notice worth showing — an agent that stays up for days must not ask
-/// at launch, mid-typing.
+/// The notification permission prompt is deliberately deferred to the first notice worth
+/// showing — an agent that stays up for days must not ask at launch, mid-typing.
 enum UpdateNotice {
-    /// Post a notice, at most once per `key` on this machine.
     static func post(_ title: String, _ body: String, once key: String? = nil) {
         guard TineConfig.load().updateNotifications,
               Bundle.main.bundleURL.pathExtension == "app",
