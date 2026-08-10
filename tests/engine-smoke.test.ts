@@ -1,4 +1,5 @@
 import { beforeAll, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
 // A bare vm context has no window/TextEncoder/timers, so the bundle only runs
@@ -26,9 +27,10 @@ const specsDir = "/tine-smoke-specs";
 const home = "/home/smoke";
 const files: Record<string, string> = {
   [`${specsDir}/index.json`]: JSON.stringify({
-    completions: ["git", "cd", "cat", "deploy", "wipe", "wrapper"],
+    completions: ["git", "cd", "cat", "deploy", "wipe", "wrapper", "tine"],
     diffVersionedCompletions: [],
   }),
+  [`${specsDir}/tine.js`]: readFileSync(`${root}builtin-specs/tine.js`, "utf8"),
   [`${specsDir}/deploy.js`]: `var completionSpec = {
     name: "deploy",
     options: [
@@ -80,6 +82,10 @@ const listings: Record<string, string> = {
 
 const use = (count: number) => ({ count, lastUsed: Date.now() });
 
+// isCommandName's own cap (SpecLearner.swift): 64 chars is learnable, 65 is not.
+const name64 = `a${"b".repeat(63)}`;
+const name65 = `a${"b".repeat(64)}`;
+
 let context: vm.Context;
 let tineSuggest: Suggest;
 let tineValidate: Validate;
@@ -102,6 +108,7 @@ beforeAll(async () => {
     __tineReadFile: (path: string) => files[path] ?? "",
     __tineSpecsDir: specsDir,
     __tineHome: home,
+    __tineLocalSpecsDirs: ["/tine-smoke-local"],
     __tineAliases: { aliaspc: "plug-cli run" },
     __tineFrecency: {
       git: { checkout: use(5) },
@@ -109,12 +116,30 @@ beforeAll(async () => {
       both: { value: use(4) },
       aliaspc: { run: use(3) },
       wrapper: { nested: use(2) },
+      "./nospec": { run: use(3) },
+      "+": { run: use(3) },
+      [name64]: { run: use(3) },
+      [name65]: { run: use(3) },
     },
     __tineRun: (json: string) => {
       const input = JSON.parse(json) as {
         executable: string;
         workingDirectory?: string;
       };
+      // Stands in for the real $PATH + local-specs-dir scan the `learn` arg's
+      // generator runs, tagged "P" (PATH candidate) / "L" (has a local spec)
+      // the way the real shell script does.
+      if (input.executable === "/bin/sh") {
+        const stdout = [
+          "Pgit",
+          "Pcat",
+          "Pmytool",
+          "Pnewtool",
+          "Plocaltool",
+          "Llocaltool",
+        ].join("\n");
+        return JSON.stringify({ stdout, stderr: "", exitCode: 0 });
+      }
       const stdout =
         input.executable === "ls"
           ? (listings[input.workingDirectory ?? ""] ?? "")
@@ -228,8 +253,35 @@ test("a whitespace-only buffer suggests nothing without an error", async () => {
   expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
 });
 
-test("a leading semicolon suggests nothing without an error", async () => {
-  expect(await names("; pc ")).toEqual([]);
+test("a leading separator suggests on the trailing segment", async () => {
+  const { items, searchTerm } = await suggest("; git ch");
+  expect(items.map((item) => item.name)).toEqual(["checkout", "cherry-pick"]);
+  expect(searchTerm).toBe("ch");
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+});
+
+test("a leading && suggests on the trailing segment with no spec", async () => {
+  const { items } = await suggest("&& pc ");
+  expect(items).toHaveLength(1);
+  expect(items[0]).toMatchObject({
+    name: "no spec for `pc` — learn it",
+    insertValue: "tine learn pc",
+    type: "learn-it",
+  });
+});
+
+test("a bare semicolon suggests nothing without an error", async () => {
+  expect(await names(";")).toEqual([]);
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+});
+
+test("a bare && suggests nothing without an error", async () => {
+  expect(await names("&&")).toEqual([]);
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+});
+
+test("a quoted semicolon is not treated as a separator", async () => {
+  expect(await names('echo ";" ')).toEqual([]);
   expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
 });
 
@@ -355,6 +407,17 @@ test("a used command with no spec offers to learn it", async () => {
   });
 });
 
+test("a leading separator still resolves the trailing segment's learn-it row", async () => {
+  const { items } = await suggest("; pc ");
+  expect(items).toHaveLength(1);
+  expect(items[0]).toMatchObject({
+    name: "no spec for `pc` — learn it",
+    description: "writes a spec from `pc --help`",
+    insertValue: "tine learn pc",
+    type: "learn-it",
+  });
+});
+
 test("history values take precedence over the learn-it row", async () => {
   const { items } = await suggest("both ");
   expect(items.map((item) => item.name)).toEqual(["remembered.example.com"]);
@@ -368,6 +431,34 @@ test("only an exact frecency key offers to learn a missing command", async () =>
 
 test("a wrapper whose command argument lacks a spec offers no row", async () => {
   expect(await names("wrapper nested ")).toEqual([]);
+});
+
+test("a path command nested under a wrapper offers no row", async () => {
+  expect(await names("wrapper ./nested ")).toEqual([]);
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+});
+
+test("a path command with a matching frecency key still offers no row", async () => {
+  // Its missing basename ("nospec") never equals the resolved path ("./nospec").
+  expect(await names("./nospec ")).toEqual([]);
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+});
+
+test("a command tine learn would refuse offers no row even with a frecency match", async () => {
+  // "+" resolves to itself and clears the wrapper gate, but isCommandName refuses it.
+  expect(await names("+ ")).toEqual([]);
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+});
+
+test("a command name at isCommandName's 64-char cap still offers the row", async () => {
+  expect(await names(`${name64} `)).toEqual([
+    `no spec for \`${name64}\` — learn it`,
+  ]);
+});
+
+test("a command name past isCommandName's 64-char cap offers no row", async () => {
+  expect(await names(`${name65} `)).toEqual([]);
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
 });
 
 test("a chained missing command does not inherit the first command's frecency", async () => {
@@ -401,6 +492,36 @@ test("the learn-it row keeps normal token replacement scope", async () => {
   expect(items).toHaveLength(1);
   expect(items[0].insertValue).toBe("tine learn pc");
   expect(items[0].queryTerm).toBe("--unknown");
+});
+
+test("tine learn completes PATH commands that have no spec yet", async () => {
+  const learnNames = await names("tine learn ");
+  expect(learnNames).toContain("mytool");
+  expect(learnNames).toContain("newtool");
+  expect(learnNames).not.toContain("git");
+  expect(learnNames).not.toContain("cat");
+});
+
+test("a command with a local override/extend spec is filtered like a pack one", async () => {
+  const learnNames = await names("tine learn ");
+  expect(learnNames).not.toContain("localtool");
+});
+
+test("--force already on the line drops the no-spec filter", async () => {
+  const forced = await names("tine learn --force ");
+  expect(forced).toContain("git");
+  expect(forced).toContain("cat");
+  expect(forced).toContain("mytool");
+  expect(forced).toContain("newtool");
+  expect(forced).toContain("localtool");
+});
+
+test("a typo prefix narrows the learn candidates", async () => {
+  expect(await names("tine learn my")).toEqual(["mytool"]);
+});
+
+test("the -f alias also drops the no-spec filter", async () => {
+  expect(await names("tine learn -f ")).toContain("git");
 });
 
 test("a generator or a spec suggestion keeps history values out", async () => {

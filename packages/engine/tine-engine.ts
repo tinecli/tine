@@ -104,6 +104,11 @@ const frecencyIndex = (): Record<string, Record<string, unknown>> => {
   return index;
 };
 
+// Mirrors SpecLearner.isCommandName (app-side): `tine learn` refuses anything
+// this doesn't match — notably a path, which always contains a "/".
+const isLearnableCommandName = (name: string): boolean =>
+  name.length <= 64 && /^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(name);
+
 const learnItResult = (
   upToCursor: string,
   typedCommand: string,
@@ -114,6 +119,7 @@ const learnItResult = (
   if (
     !typedCommand ||
     missingCommand !== resolvedCommand ||
+    !isLearnableCommandName(resolvedCommand) ||
     !Object.prototype.hasOwnProperty.call(frecencyIndex(), typedCommand)
   ) {
     return { searchTerm: "", items: [] };
@@ -165,10 +171,10 @@ async function suggest(
   const parsed = await parseArguments(command as never, context as never).catch(
     rethrowUnlessUnavailableSpec,
   );
-  if (parsed instanceof LoadLocalSpecError) {
-    return historyOnlyResult(upToCursor);
-  }
-  if (parsed instanceof MissingSpecError) {
+  if (
+    parsed instanceof LoadLocalSpecError ||
+    parsed instanceof MissingSpecError
+  ) {
     const history = historyOnlyResult(upToCursor);
     if (history.items.length > 0) return history;
     return learnItResult(
@@ -491,6 +497,26 @@ async function offendingWord(line: string): Promise<string> {
 // `tine learn` wrote a spec into a location the loader already reads, so only the
 // cached specs stand between the new file and the next suggestion.
 (globalThis as Record<string, unknown>).tineResetSpecs = resetCaches;
+
+// Primed by the `learn` arg's generator (builtin-specs/tine.js) from its own
+// batched scan of override/<cmd>.js, <cmd>.js, and extend/<cmd>.js across
+// __tineLocalSpecsDirs — the same dirs and file convention loadSubcommandCached
+// resolves (loadSpec.ts). One scan per generator run feeds this, rather than a
+// readFile probe per PATH candidate, since a candidate list can run to
+// thousands of names.
+let localSpecNames = new Set<string>();
+(globalThis as Record<string, unknown>).tineSetLocalSpecNames = (
+  names: string[],
+): void => {
+  localSpecNames = new Set(names);
+};
+
+// The `learn` arg's generator filters PATH executables against this — the
+// same pack completions index the parser already treats as "has a spec", plus
+// the local names above — so the candidate set can never drift from what the
+// parser knows, pack or local.
+(globalThis as Record<string, unknown>).tineHasSpec = (name: string): boolean =>
+  specIndex().names.includes(name) || localSpecNames.has(name);
 
 // Async result delivered via callback (JSC-friendly; no Swift/JS promise bridge).
 (globalThis as Record<string, unknown>).tineSuggest = (

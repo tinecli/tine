@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { parse } from "../parser";
+import { type AssignmentListNode, NodeType, parse } from "../parser";
 
 function parseCommand(command: string): string {
   return JSON.stringify(parse(command), null, "  ");
@@ -64,6 +64,28 @@ function mapKeysDiff<K, V>(mapA: Map<K, V>, mapB: Map<K, V>) {
     notIncludedIn(keysB, keysA), // keys of B not included in A
   ];
 }
+
+describe("an empty command stopped by its enclosing terminator stays incomplete", () => {
+  it("does not close an unclosed command substitution just because it's empty", () => {
+    const [command] = parse("$()").children;
+    const [substitution] = command.children;
+    expect(substitution.type).toBe(NodeType.CommandSubstitution);
+    expect(substitution.complete).toBe(false);
+  });
+
+  it("does not close an unclosed subshell just because it's empty", () => {
+    const [subshell] = parse("()").children;
+    expect(subshell.type).toBe(NodeType.Subshell);
+    expect(subshell.complete).toBe(false);
+  });
+
+  it("does not read a command after an unterminated empty substitution as its own command", () => {
+    const [assignmentList] = parse("ENV=$() cmd").children;
+    expect((assignmentList as AssignmentListNode).hasCommand).toBe(false);
+    expect(assignmentList.children).toHaveLength(1);
+    expect(assignmentList.children[0].complete).toBe(false);
+  });
+});
 
 describe("parser fixtures", () => {
   const fixturesPath = path.join(import.meta.dirname, "fixtures");

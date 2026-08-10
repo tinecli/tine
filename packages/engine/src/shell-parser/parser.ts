@@ -488,12 +488,22 @@ function parseCommand(
     terminalChar,
   );
 
+  // An empty command that stopped at its enclosing nesting terminator
+  // (`)`, `}`) must stay incomplete and swallow the rest of the buffer, so
+  // an unclosed `$()`/`()` is never mistaken for a closed, empty one. An
+  // empty command that stopped at a separator (leading `;`, `&&`, ...)
+  // keeps its natural, zero-width endIndex so parseStatements can see the
+  // separator and parse the trailing statement.
+  const stoppedAtNestingTerminator =
+    children.length === 0 &&
+    terminalChar !== "" &&
+    str.charAt(endIndex) === terminalChar;
+
   return createNode<BaseNode<NodeType.Command>>(str, {
     startIndex,
     type: NodeType.Command,
     complete: children.length > 0,
-    // Extend command up to separator.
-    endIndex: children.length > 0 ? endIndex : str.length,
+    endIndex: stoppedAtNestingTerminator ? str.length : endIndex,
     children,
   });
 }

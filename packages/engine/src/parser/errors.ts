@@ -13,7 +13,15 @@ export class MissingSpecError extends Error {
 export const WrongDiffVersionedSpecError = createErrorInstance(
   "WrongDiffVersionedSpecError",
 );
-export const LoadLocalSpecError = createErrorInstance("LoadLocalSpecError");
+export class LoadLocalSpecError extends Error {
+  constructor(
+    message: string,
+    readonly command = "",
+  ) {
+    super(message);
+    this.name = "AmazonQ.LoadLocalSpecError";
+  }
+}
 export const SpecCDNError = createErrorInstance("SpecCDNError");
 
 // ParsingErrors
