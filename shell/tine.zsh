@@ -328,8 +328,9 @@ _tine_resource_if_changed() {
   source "$_TINE_SRC" && print -- "tine: reloaded shell integration"
 }
 
-# Start one app job and poll its status. The handler returns 0/1 when done, 2 to
-# keep polling, or 3 to keep polling and advance the deadline counter.
+# Start one app job and poll its status. Handlers receive
+# (reply, spinner, waited, label, payload), return 0/1 when done, 2 to keep
+# polling, or 3 to keep polling and advance the deadline counter.
 _tine_poll() {
   emulate -L zsh
   local verb=$1 payload=$2 status_verb=$3 label=$4 busy_kind=$5 handler=$6
@@ -361,10 +362,11 @@ _tine_install() {
 }
 
 _tine_install_status() {
-  case "$1" in
-    running)   printf '\rtine: downloading specs… %s ' "$2"; return 2 ;;
-    done:*)    printf '\rtine: %s\e[K\n' "${1#done:}"; return 0 ;;
-    failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${1#failed:}"; return 1 ;;
+  local reply=$1 spinner=$2
+  case "$reply" in
+    running)   printf '\rtine: downloading specs… %s ' "$spinner"; return 2 ;;
+    done:*)    printf '\rtine: %s\e[K\n' "${reply#done:}"; return 0 ;;
+    failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${reply#failed:}"; return 1 ;;
     *)         printf '\r\e[K'; return 0 ;;
   esac
 }
@@ -403,20 +405,21 @@ _tine_update() {
 }
 
 _tine_update_status() {
+  local reply=$1 spinner=$2 waited=$3
   local releases="https://github.com/tinecli/tine/releases/latest"
-  case "$1" in
-    idle|checking) if (( $3 >= 200 )); then
+  case "$reply" in
+    idle|checking) if (( waited >= 200 )); then
                      printf '\r\e[K'; print -u2 -- "tine: could not check for updates"; return 1
                    fi
-                   printf '\rtine: checking for updates… %s ' "$2"; return 3 ;;
-    downloading)   printf '\rtine: downloading update… %s ' "$2"; return 2 ;;
-    uptodate:*)    printf '\rtine: %s is the latest version\e[K\n' "${1#uptodate:}"; return 0 ;;
+                   printf '\rtine: checking for updates… %s ' "$spinner"; return 3 ;;
+    downloading)   printf '\rtine: downloading update… %s ' "$spinner"; return 2 ;;
+    uptodate:*)    printf '\rtine: %s is the latest version\e[K\n' "${reply#uptodate:}"; return 0 ;;
     staged:*)      return 0 ;;
     available:*)   printf '\r\e[K'
-                   print -- "tine: ${1#available:} is available — automatic updates are off"
+                   print -- "tine: ${reply#available:} is available — automatic updates are off"
                    print -- "tine: download it from $releases"; return 0 ;;
     blocked:*|failed:*)
-                   printf '\r\e[K'; print -u2 -- "tine: ${1#*:}"
+                   printf '\r\e[K'; print -u2 -- "tine: ${reply#*:}"
                    print -u2 -- "tine: download it from $releases"; return 1 ;;
     *)             printf '\r\e[K'; return 0 ;;
   esac
@@ -452,23 +455,24 @@ _tine_learn() {
 }
 
 _tine_learn_status() {
-  local cmd=${5%%$_TINE_RS*}
-  if (( $3 >= 600 )); then
+  local reply=$1 spinner=$2 waited=$3 payload=$5
+  local cmd=${payload%%$_TINE_RS*}
+  if (( waited >= 600 )); then
     printf '\r\e[K'; print -u2 -- "tine: gave up waiting for the model"; return 1
   fi
-  case "$1" in
-    idle)      printf '\rtine: learning %s… %s \e[K' "$cmd" "$2"; return 3 ;;
-    running:*) printf '\rtine: %s… %s \e[K' "${1#running:}" "$2"; return 3 ;;
-    done:*)    printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${1#done:}"; return 0 ;;
-    partial:*) printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${1#partial:}"
+  case "$reply" in
+    idle)      printf '\rtine: learning %s… %s \e[K' "$cmd" "$spinner"; return 3 ;;
+    running:*) printf '\rtine: %s… %s \e[K' "${reply#running:}" "$spinner"; return 3 ;;
+    done:*)    printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${reply#done:}"; return 0 ;;
+    partial:*) printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${reply#partial:}"
                print -- "tine: only the start of its --help fits the model — the spec may be partial"
                return 0 ;;
-    incomplete:*) local result=${1#incomplete:}
+    incomplete:*) local result=${reply#incomplete:}
                   local coverage=${result%%:*}
                   printf '\rtine: learned %s → %s\e[K\n' "$cmd" "${result#*:}"
                   print -- "tine: $coverage option lines survived validation — the spec is incomplete"
                   return 0 ;;
-    failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${1#failed:}"; return 1 ;;
+    failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${reply#failed:}"; return 1 ;;
     *)         printf '\r\e[K'; return 0 ;;
   esac
 }
@@ -515,14 +519,15 @@ _tine_await_ask() {
 }
 
 _tine_ask_status() {
-  if (( $3 >= 600 )); then
+  local reply=$1 spinner=$2 waited=$3 label=$4
+  if (( waited >= 600 )); then
     printf '\r\e[K'; print -u2 -- "tine: gave up waiting for an answer"; return 1
   fi
-  case "$1" in
-    idle)      printf '\rtine: %s… %s \e[K' "$4" "$2"; return 3 ;;
-    running:*) printf '\rtine: %s… %s \e[K' "${1#running:}" "$2"; return 3 ;;
-    done:*)    printf '\r\e[K'; _tine_show_answer "${1#done:}"; return 0 ;;
-    failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${1#failed:}"; return 1 ;;
+  case "$reply" in
+    idle)      printf '\rtine: %s… %s \e[K' "$label" "$spinner"; return 3 ;;
+    running:*) printf '\rtine: %s… %s \e[K' "${reply#running:}" "$spinner"; return 3 ;;
+    done:*)    printf '\r\e[K'; _tine_show_answer "${reply#done:}"; return 0 ;;
+    failed:*)  printf '\r\e[K'; print -u2 -- "tine: ${reply#failed:}"; return 1 ;;
     *)         printf '\r\e[K'; return 0 ;;
   esac
 }
