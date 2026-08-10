@@ -492,6 +492,12 @@ async function offendingWord(line: string): Promise<string> {
 // cached specs stand between the new file and the next suggestion.
 (globalThis as Record<string, unknown>).tineResetSpecs = resetCaches;
 
+// The `learn` arg's generator (builtin-specs/tine.js) filters PATH executables
+// against this — the same completions index the parser already treats as
+// "has a spec" — so the candidate set can never drift from what the parser knows.
+(globalThis as Record<string, unknown>).tineHasSpec = (name: string): boolean =>
+  specIndex().names.includes(name);
+
 // Async result delivered via callback (JSC-friendly; no Swift/JS promise bridge).
 (globalThis as Record<string, unknown>).tineSuggest = (
   line: string,

@@ -1,4 +1,5 @@
 import { beforeAll, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
 // A bare vm context has no window/TextEncoder/timers, so the bundle only runs
@@ -26,9 +27,10 @@ const specsDir = "/tine-smoke-specs";
 const home = "/home/smoke";
 const files: Record<string, string> = {
   [`${specsDir}/index.json`]: JSON.stringify({
-    completions: ["git", "cd", "cat", "deploy", "wipe", "wrapper"],
+    completions: ["git", "cd", "cat", "deploy", "wipe", "wrapper", "tine"],
     diffVersionedCompletions: [],
   }),
+  [`${specsDir}/tine.js`]: readFileSync(`${root}builtin-specs/tine.js`, "utf8"),
   [`${specsDir}/deploy.js`]: `var completionSpec = {
     name: "deploy",
     options: [
@@ -115,6 +117,11 @@ beforeAll(async () => {
         executable: string;
         workingDirectory?: string;
       };
+      // Stands in for the real $PATH scan the `learn` arg's generator runs.
+      if (input.executable === "/bin/sh") {
+        const stdout = ["git", "cat", "mytool", "newtool"].join("\n");
+        return JSON.stringify({ stdout, stderr: "", exitCode: 0 });
+      }
       const stdout =
         input.executable === "ls"
           ? (listings[input.workingDirectory ?? ""] ?? "")
@@ -401,6 +408,30 @@ test("the learn-it row keeps normal token replacement scope", async () => {
   expect(items).toHaveLength(1);
   expect(items[0].insertValue).toBe("tine learn pc");
   expect(items[0].queryTerm).toBe("--unknown");
+});
+
+test("tine learn completes PATH commands that have no spec yet", async () => {
+  const learnNames = await names("tine learn ");
+  expect(learnNames).toContain("mytool");
+  expect(learnNames).toContain("newtool");
+  expect(learnNames).not.toContain("git");
+  expect(learnNames).not.toContain("cat");
+});
+
+test("--force already on the line drops the no-spec filter", async () => {
+  const forced = await names("tine learn --force ");
+  expect(forced).toContain("git");
+  expect(forced).toContain("cat");
+  expect(forced).toContain("mytool");
+  expect(forced).toContain("newtool");
+});
+
+test("a typo prefix narrows the learn candidates", async () => {
+  expect(await names("tine learn my")).toEqual(["mytool"]);
+});
+
+test("the -f alias also drops the no-spec filter", async () => {
+  expect(await names("tine learn -f ")).toContain("git");
 });
 
 test("a generator or a spec suggestion keeps history values out", async () => {

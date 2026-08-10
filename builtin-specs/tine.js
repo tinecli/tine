@@ -16,7 +16,29 @@ export default {
     {
       name: "learn",
       description: "Write a spec for a command from its own --help",
-      args: { name: "command", isCommand: true },
+      args: {
+        name: "command",
+        isCommand: true,
+        generators: {
+          script: [
+            "/bin/sh",
+            "-c",
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: shell parameter expansion, not a JS template
+            'IFS=:; for d in $PATH; do for f in "$d"/*; do [ -x "$f" ] && [ ! -d "$f" ] && printf "%s\\n" "${f##*/}"; done; done 2>/dev/null',
+          ],
+          cache: { ttl: 60000 },
+          // --force overwrites, so a command that already has a spec is a valid
+          // target again; otherwise offer only what tine doesn't know yet.
+          postProcess: (out, tokens) => {
+            const names = [...new Set(out.split("\n").filter(Boolean))];
+            const hasForce =
+              tokens.includes("--force") || tokens.includes("-f");
+            const hasSpec = globalThis.tineHasSpec;
+            if (hasForce || typeof hasSpec !== "function") return names;
+            return names.filter((name) => !hasSpec(name));
+          },
+        },
+      },
       options: [
         {
           name: ["--force", "-f"],
