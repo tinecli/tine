@@ -1,30 +1,21 @@
 import Foundation
 
-/// Downloads the completion spec pack at runtime and installs it to
-/// ~/.local/share/tine/specs — so specs update without an app release. The pack
-/// is built + published by the tinecli/autocomplete fork; the app's own
-/// built-in specs (builtin-specs/, e.g. the `tine` CLI) are merged in on top.
 @MainActor
 final class SpecInstaller: ObservableObject {
     enum Status: Equatable {
         case idle, running, done(String), failed(String)
     }
     @Published var status: Status = .idle
-    /// True when the fork's pack is newer than what's installed (cached from a
-    /// background HEAD check). Surfaced by `tine doctor`. Fails closed: stays
-    /// false when GitHub is unreachable, so doctor never nags on a flaky network.
+    /// Fails closed on a network error — never flip this to fail-open, or doctor nags on flaky Wi-Fi.
     @Published var updateAvailable = false
 
-    /// Pinned HTTPS release asset — same trust root as the notarized app. Never
-    /// make this a user-configurable host.
+    /// Never make this user-configurable — it's the trust root for what tine installs.
     nonisolated static let packURL = URL(string:
         "https://github.com/tinecli/autocomplete/releases/download/specs/specs.tar.gz")!
     nonisolated static let specsDir = "\(NSHomeDirectory())/.local/share/tine/specs"
-    /// The installed pack's ETag, kept *beside* (not inside) specsDir — the install
-    /// swap wipes specsDir, so a marker in it wouldn't survive.
+    /// Must stay outside specsDir: the install swap wipes specsDir, and a marker inside it wouldn't survive.
     nonisolated static let markerPath = "\(NSHomeDirectory())/.local/share/tine/.pack-etag"
 
-    /// Plain status line for the `tine install` poll (installStatus socket case).
     var statusLine: String {
         switch status {
         case .idle: return "idle"
@@ -36,18 +27,14 @@ final class SpecInstaller: ObservableObject {
 
     private var timer: Timer?
 
-    /// Called after a successful install (main thread) so the app can refresh.
     var onInstalled: (() -> Void)?
 
-    /// True once at least one spec tile is present.
     nonisolated static func isInstalled() -> Bool {
         (try? FileManager.default.contentsOfDirectory(atPath: specsDir))?
             .contains { $0.hasSuffix(".js") } ?? false
     }
 
-    /// Distinct CLIs covered by the pack — unique top-level entries (one `foo.js`
-    /// or one `foo/` directory each), NOT index.json entries (which list one per
-    /// spec *file*; `aws` alone fragments into hundreds).
+    /// Not index.json's entry count — that's one per spec *file* and fragments `aws` into hundreds.
     nonisolated static func installedCount() -> Int { commandCount(in: specsDir) }
 
     nonisolated static func commandCount(in dir: String) -> Int {
@@ -66,14 +53,9 @@ final class SpecInstaller: ObservableObject {
         return clis.count
     }
 
-    /// A pack this small isn't a pack. The fork ships ~730 commands, so anything
-    /// near zero means a truncated or empty tarball — which would otherwise wipe
-    /// the installed specs down to the app's own builtins.
     nonisolated static let minimumPackCommands = 100
 
-    /// Throws unless the freshly extracted pack looks like one. Called before the
-    /// installed pack is touched and before the ETag is recorded, so a bad
-    /// download leaves the user's specs alone and the next check tries again.
+    /// Must run before the installed pack is touched or the ETag recorded, or a bad download wipes good specs.
     nonisolated static func validate(pack dir: String) throws {
         guard FileManager.default.fileExists(atPath: "\(dir)/index.json") else {
             throw NSError(domain: "tine", code: 3,
@@ -87,11 +69,6 @@ final class SpecInstaller: ObservableObject {
         }
     }
 
-    /// Download + install, but skip the download when the installed pack already
-    /// matches the fork's (compared by ETag). Drives both first-run and `tine
-    /// install`; the shell polls `statusLine` while this runs.
-    /// `announce` posts a notification once the swap has happened — for installs
-    /// the user didn't ask for, so ~730 CLIs never change underneath them silently.
     func install(announce: Bool = false) {
         guard status != .running else { return }
         status = .running
@@ -116,22 +93,16 @@ final class SpecInstaller: ObservableObject {
         }
     }
 
-    /// What a check should do about the pack the fork is currently serving.
     enum UpdateAction: Equatable { case none, adoptBaseline, flag, autoInstall }
 
     nonisolated static func updateAction(remote: String?, stored: String?,
                                          autoInstall: Bool) -> UpdateAction {
-        // Fails closed: no ETag means no network, which is never a reason to act.
         guard let remote else { return .none }
-        // No marker yet (installed before ETag tracking): adopt the current pack
-        // as the baseline instead of nagging everyone once, post-upgrade.
         guard let stored else { return .adoptBaseline }
         guard remote != stored else { return .none }
         return autoInstall ? .autoInstall : .flag
     }
 
-    /// Check now, then daily — the agent stays up for days, so a launch-only check
-    /// would leave a long-running session on a stale pack forever.
     func startChecking() {
         checkForUpdate()
         timer = Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) { [weak self] _ in
@@ -139,8 +110,6 @@ final class SpecInstaller: ObservableObject {
         }
     }
 
-    /// Background HEAD check: install the newer pack, or just flag it for `tine
-    /// doctor` when the user turned automatic spec updates off.
     func checkForUpdate() {
         Task {
             guard Self.isInstalled() else { return }
@@ -159,9 +128,6 @@ final class SpecInstaller: ObservableObject {
         }
     }
 
-    /// The current pack asset's ETag (HEAD, following GitHub's redirect to the
-    /// object store). Content-derived and stable, so it changes exactly when the
-    /// fork republishes. Returns nil on any non-200 / network failure.
     nonisolated private static func remoteETag() async throws -> String? {
         var req = URLRequest(url: packURL)
         req.httpMethod = "HEAD"
@@ -174,10 +140,7 @@ final class SpecInstaller: ObservableObject {
         try? String(contentsOfFile: markerPath, encoding: .utf8)
     }
 
-    /// Re-copy the app's built-in specs into the installed pack so they track the
-    /// running app version. The pack only re-merges them on download, so without
-    /// this an app update that changes builtin-specs/ (e.g. new `tine` subcommands)
-    /// would never reach an already-installed pack. Cheap — a couple of tiny files.
+    /// Skip this and an app update's builtin-spec changes never reach an already-installed pack.
     nonisolated static func refreshBuiltins() {
         guard isInstalled() else { return }
         mergeBuiltins(into: specsDir)
@@ -208,20 +171,17 @@ final class SpecInstaller: ObservableObject {
         mergeBuiltins(into: staging)
         try validate(pack: staging)
 
-        // Swap into place: remove the old dir, move staging in.
         try fm.createDirectory(atPath: (specsDir as NSString).deletingLastPathComponent,
                                withIntermediateDirectories: true)
         try? fm.removeItem(atPath: specsDir)
         try fm.moveItem(atPath: staging, toPath: specsDir)
-        // Record the ETag so the next check can tell if the fork has moved on.
         if let etag = http.value(forHTTPHeaderField: "Etag") {
             try? etag.write(toFile: markerPath, atomically: true, encoding: .utf8)
         }
         return installedCount()
     }
 
-    /// Copy the app's bundled built-in specs (builtin-specs/, e.g. tine.js) into
-    /// the pack and register them in index.json so they resolve like pack specs.
+    /// Copying the .js files alone isn't enough — skip the index.json registration and they never resolve.
     nonisolated private static func mergeBuiltins(into dir: String) {
         let fm = FileManager.default
         guard let res = Bundle.main.resourcePath else { return }

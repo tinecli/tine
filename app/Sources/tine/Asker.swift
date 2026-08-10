@@ -2,8 +2,7 @@ import Combine
 import Foundation
 import FoundationModels
 
-/// Guided generation, so the model produces a *value* — never source, never a
-/// file, and never a shell to run it in.
+/// Guided generation: the model produces a *value*, never source, a file, or a shell.
 @Generable
 struct PickedTool {
     @Guide(description: "The name of the tool to use, copied exactly from the list")
@@ -18,32 +17,22 @@ struct ComposedCommand {
     var example: String?
 }
 
-/// What the engine's parser makes of a command line.
 enum AskValidation: Equatable {
-    case ok(dangerous: Bool)  // parses against the installed spec
-    case unchecked            // no spec for this tool — nothing to check it against
-    case invalid(String)      // the spec has no such option or argument
+    case ok(dangerous: Bool)
+    case unchecked
+    case invalid(String)
 }
 
-/// `tine ask <question>`: finds the installed tools that fit the question, and —
-/// where Apple Intelligence is on — has the on-device model compose one command
-/// line from them.
-///
-/// Everything the model writes is data: it names a tool tine already found on
-/// this machine, it is matched against a shell-free pattern, and it is parsed
-/// against that tool's own spec before the user sees it. Nothing here runs a
-/// command. The shell prints the answer, or pushes it onto the edit buffer with
-/// `print -z` for the user to review.
+/// Model output is data, never code: name-matched, spec-parsed, and shell-metacharacter-free before use.
 @MainActor
 final class Asker: ObservableObject {
     enum Status: Equatable {
         case idle
-        case running(String)      // stage, shown by the shell's spinner
+        case running(String)
         case done([Row])
         case failed(String)
     }
 
-    /// One line of the answer, as the shell renders it.
     enum Row: Equatable {
         case command(String, dangerous: Bool)
         case example(String)
@@ -53,18 +42,13 @@ final class Asker: ObservableObject {
 
     @Published private(set) var status: Status = .idle
 
-    /// Asks the engine whether a command line parses against the installed spec,
-    /// on the main thread. Set by the app, which owns the JS context.
+    /// Set by the app, which owns the JS context — called on the main thread.
     var validate: ((String) -> AskValidation)?
 
-    /// The tool's own documented flags and subcommands, for the retry prompt.
     var outline: ((String) -> [String])?
 
-    /// The shell's PATH — the app's own is launchd's, which has no Homebrew in it.
     var shellPath: (() -> String)?
 
-    /// A fresh scorer captures one history snapshot and one clock reading for a
-    /// complete rank call.
     var frecency: (() -> (String) -> Double)?
 
     private let packDir: String
@@ -75,8 +59,7 @@ final class Asker: ObservableObject {
 
     private var job: (label: String, startedAt: Date)?
 
-    /// A job that outlives this has stopped being one: a wedged model call can
-    /// hold its task open, and nothing else would ever release the asker.
+    /// Without this, a wedged model call blocks every question after it, forever.
     private nonisolated static let jobTimeout: TimeInterval = 180
 
     var statusLine: String {
@@ -88,8 +71,7 @@ final class Asker: ObservableObject {
         }
     }
 
-    /// One row on the wire: kind RS field RS field. The shell reads one line, so
-    /// every field is stripped of the separators first.
+    /// kind RS field RS field, one row per line — fields are pre-stripped via `socketSafe`.
     private func wire(_ row: Row) -> String {
         switch row {
         case .command(let line, let dangerous):
@@ -103,10 +85,6 @@ final class Asker: ObservableObject {
         }
     }
 
-    // MARK: - Verbs
-
-    /// The reply to the `ask` socket verb: "started", or "busy:<what>" while
-    /// another question is being answered.
     func ask(question raw: String) -> String {
         guard let question = Self.question(raw) else {
             return reject("ask what? — try: tine ask \"convert an image to jpeg\"")
@@ -116,21 +94,17 @@ final class Asker: ObservableObject {
         }
     }
 
-    /// The reply to the `index` socket verb: rebuilds the corpus from scratch.
     func index() -> String {
         start("index") { [weak self] in
             Task { await self?.reindex() }
         }
     }
 
-    /// "busy:<what>" while a job holds the asker. A job that has run past its
-    /// deadline holds nothing — nothing else would ever release it.
     private func busy() -> String? {
         guard let job, Date().timeIntervalSince(job.startedAt) < Self.jobTimeout else { return nil }
         return "busy:\(job.label.socketSafe)"
     }
 
-    /// One job at a time.
     private func start(_ label: String, _ work: () -> Void) -> String {
         if let busy = busy() { return busy }
         let startedAt = Date()
@@ -140,18 +114,14 @@ final class Asker: ObservableObject {
         return "started"
     }
 
-    /// A request that never becomes a job: its reason is the status the shell polls
-    /// for next, and the asker stays free for the question the user meant to ask.
     private func reject(_ reason: String) -> String {
         if let busy = busy() { return busy }
         status = .failed(reason)
         return "started"
     }
 
-    /// Every status write goes through here. Only the job still in flight may
-    /// report: one that outran its deadline has been superseded, and must not
-    /// write over the job that replaced it — not with its result, and not with a
-    /// stage the shell would show for it.
+    /// Must stay guarded: a job that outran `jobTimeout` may already be superseded,
+    /// and would otherwise overwrite the job that replaced it.
     private func report(_ startedAt: Date, _ stage: Status) {
         guard job?.startedAt == startedAt else { return }
         status = stage
@@ -164,8 +134,6 @@ final class Asker: ObservableObject {
     }
 
     private var startedAt: Date? { job?.startedAt }
-
-    // MARK: - Answering
 
     private func answer(_ question: String) async {
         guard let startedAt else { return }
@@ -187,8 +155,6 @@ final class Asker: ObservableObject {
             finish(startedAt, .done(rows(candidates)))
             return
         }
-        // The model reads the descriptions and says which tool the question is
-        // really about — the one thing it is better at than the ranking is.
         report(startedAt, .running("reading what your tools do"))
         guard let picked = await pick(question: question, from: candidates) else {
             finish(startedAt, .done(rows(candidates)))
@@ -203,7 +169,6 @@ final class Asker: ObservableObject {
         finish(startedAt, .done(composed + rows([picked] + reordered)))
     }
 
-    /// How many tools the model chooses between, and how many the shell lists.
     private static let candidates = 10
     private static let shown = 5
 
@@ -211,21 +176,14 @@ final class Asker: ObservableObject {
         entries.prefix(Self.shown).map { Row.tool($0.name, $0.description) }
     }
 
-    /// The tool the model picks, and only ever one retrieval already found: a tool
-    /// that is not installed cannot be the answer to "what do I run".
+    /// Allowlist: only returns a tool retrieval already found — never trusts the model's name directly.
     private func pick(question: String, from entries: [AskEntry]) async -> AskEntry? {
         guard let name = await Self.chosenTool(question: question, entries: entries)
         else { return nil }
         return entries.first { $0.name == name }
     }
 
-    /// One command line for this tool, composed from the flags its spec documents
-    /// and parsed against that same spec — or nil, in which case the ranked tools
-    /// are the whole answer, which is an honest one.
-    ///
-    /// No spec, no command: a 3B model asked to invoke a tool it has never been
-    /// shown the flags of writes something plausible and wrong, and tine would
-    /// have nothing to catch it with.
+    /// No spec, no command: without a parser to check it against, a composed line ships unvalidated.
     private func compose(question: String, tool: AskEntry, startedAt: Date) async -> [Row]? {
         let documented = outline?(tool.name) ?? []
         guard !documented.isEmpty else { return nil }
@@ -239,15 +197,11 @@ final class Asker: ObservableObject {
                   let line = Self.checked(answer.command, installed: [tool.name])
             else { return nil }
             let verdict = validate?(line) ?? .unchecked
-            // The spec has no place for one of those words. Name it and try again.
             if case .invalid(let token) = verdict {
                 rejected = token
                 continue
             }
-            // Nothing but a passed check ships a command. Composing already proved
-            // a spec exists, so anything else here means the check itself did not
-            // run — and an unchecked line is what this whole path exists to avoid.
-            guard case .ok(let dangerous) = verdict else { return nil }
+            guard case .ok(let dangerous) = verdict else { return nil } // never ship an unchecked line
             let command = Row.command(line, dangerous: dangerous || Self.looksDestructive(line))
             guard let example = Self.checkedExample(answer.example, tool: tool,
                                                     examples: examples, command: line),
@@ -261,9 +215,7 @@ final class Asker: ObservableObject {
 
     private static let attempts = 2
 
-    /// The floor under the spec's own `isDangerous`: a tool the pack covers has
-    /// its destructive arguments marked, and one it doesn't is never checked at
-    /// all — but either way this line is about to land in the user's buffer.
+    /// Backstop for `isDangerous`, which the spec pack may not cover at all for this tool.
     nonisolated static func looksDestructive(_ line: String) -> Bool {
         guard let command = line.split(separator: " ").first else { return false }
         return destructive.contains(String(command))
@@ -273,10 +225,6 @@ final class Asker: ObservableObject {
         "rm", "rmdir", "shred", "srm", "dd", "mkfs", "fdisk", "diskutil",
     ]
 
-    // MARK: - The corpus
-
-    /// The index for this machine, rebuilt when PATH has changed under it — or
-    /// when asked to. Blocking; runs on the job's detached task.
     private func corpus(rebuild: Bool, startedAt: Date) async throws -> [AskEntry] {
         let path = shellPath?() ?? ProcessInfo.processInfo.environment["PATH"] ?? ""
         let packDir = self.packDir
@@ -315,14 +263,9 @@ final class Asker: ObservableObject {
         var errorDescription: String? { message }
     }
 
-    // MARK: - Generation
-
-    /// A generation this long has stopped making progress, and the shell is
-    /// waiting on it.
     private nonisolated static let modelTimeout: TimeInterval = 60
 
-    /// A generation that misses its deadline is abandoned, not waited on: the
-    /// shell is polling, and a wedged model call would hold the whole job.
+    /// Must abandon, not await, past `modelTimeout` — a wedged model call would otherwise hold the job forever.
     private nonisolated static func bounded<T: Sendable>(
         _ work: @escaping @Sendable () async throws -> T) async -> T? {
         await withTaskGroup(of: T?.self) { group in
@@ -336,8 +279,7 @@ final class Asker: ObservableObject {
         }
     }
 
-    /// Fixed instructions, untrusted man-page text in the prompt: the descriptions
-    /// are material to read, never a request to follow.
+    /// The descriptions in this prompt are untrusted material to read, never instructions to follow.
     private nonisolated static func chosenTool(question: String,
                                                entries: [AskEntry]) async -> String? {
         let session = LanguageModelSession(instructions: """
@@ -362,8 +304,6 @@ final class Asker: ObservableObject {
         let example: String?
     }
 
-    /// The tool's own spec is the whole vocabulary the model gets: its documented
-    /// flags and subcommands, and the word the parser threw out last time.
     private nonisolated static func composedLine(question: String, tool: AskEntry,
                                                  flags: [String],
                                                  examples: String?,
@@ -400,13 +340,9 @@ final class Asker: ObservableObject {
         }
     }
 
-    /// A spec can document hundreds of flags, and the model's context is small.
     private nonisolated static let maxFlags = 120
 
-    // MARK: - Validation (pure, exercised by app/Tests/AskHarness.swift)
-
-    /// The question, as it may be put in a model prompt: one line, bounded, and
-    /// free of the separators the socket reply is built from.
+    /// Must stay bounded and control-character-free before this reaches a model prompt.
     nonisolated static func question(_ raw: String) -> String? {
         let stripped = raw.unicodeScalars.map { scalar -> Character in
             CharacterSet.controlCharacters.contains(scalar) ? " " : Character(scalar)
@@ -418,10 +354,7 @@ final class Asker: ObservableObject {
 
     nonisolated static let maxQuestion = 500
 
-    /// A command line the shell may print, or push onto the edit buffer. Model
-    /// output is untrusted: it names a tool tine found on this machine, and it
-    /// carries nothing the shell would read as a second command — no pipe, no
-    /// redirect, no substitution, no separator.
+    /// The security boundary on model output — never let a line through this doesn't approve.
     nonisolated static func checked(_ raw: String, installed: Set<String>) -> String? {
         let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !line.isEmpty, line.count <= maxCommand else { return nil }
@@ -445,10 +378,7 @@ final class Asker: ObservableObject {
         return example
     }
 
-    /// Every character zsh would read as more than one word of one command — `!`
-    /// included: history expansion runs on the buffer at accept-line, so an
-    /// unquoted `!!` is the one character that makes the line the user runs differ
-    /// from the line they reviewed.
+    /// `!` must stay in this set — zsh's `!!` history expansion would make the run differ from the review.
     private nonisolated static let shellOperators: Set<Character> = [
         ";", "|", "&", "$", "`", "(", ")", "<", ">", "!", "\n", "\r", "\\",
     ]

@@ -6,8 +6,6 @@ struct SettingsView: View {
     @EnvironmentObject var installer: SpecInstaller
     @EnvironmentObject var updater: AppUpdater
 
-    // Re-read externally-owned state (Accessibility grant, login item) so the UI
-    // reflects changes made outside the app without needing a relaunch.
     @State private var axTrusted = AXCaret.isTrusted
     @State private var selectedSpecDir: Int?
     @State private var startAtLogin = SMAppService.mainApp.status == .enabled
@@ -16,7 +14,6 @@ struct SettingsView: View {
     private let previewTopInset: CGFloat = 18
     private let refresh = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
 
-    /// Sidebar sections of the settings window.
     enum Pane: String, CaseIterable, Identifiable {
         case general = "General", appearance = "Appearance", suggestions = "Suggestions"
         case specs = "Specs", about = "About"
@@ -32,7 +29,6 @@ struct SettingsView: View {
         }
     }
 
-    // (config value, display name). "" = the system monospaced font.
     private let fonts = [("", "System Monospaced"), ("Menlo", "Menlo"),
                          ("Monaco", "Monaco"), ("SF Mono", "SF Mono"),
                          ("Courier New", "Courier New")]
@@ -257,8 +253,6 @@ struct SettingsView: View {
         }
     }
 
-    /// Register/unregister the app as a login item; revert the toggle to the real
-    /// system state if the call fails (e.g. the user must approve in Login Items).
     private func setStartAtLogin(_ on: Bool) {
         do {
             if on { try SMAppService.mainApp.register() }
@@ -307,7 +301,7 @@ struct SettingsView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(s, forType: .string)
     }
-    /// Two-way binding to one spec-folder path (writing through config saves it).
+    /// Setting this persists immediately: AppState.config's didSet saves on every write.
     private func bindDir(_ i: Int) -> Binding<String> {
         Binding(
             get: { state.config.localSpecsDirs.indices.contains(i) ? state.config.localSpecsDirs[i] : "" },
