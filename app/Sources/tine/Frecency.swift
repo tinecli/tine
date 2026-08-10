@@ -38,9 +38,10 @@ final class Frecency {
         var scoped: [String: Index]
     }
 
-    private enum CachedProjectRoot {
-        case root(String)
-        case missing(expiresAt: TimeInterval)
+    private struct CachedProjectRoot {
+        let root: String?
+        let expiresAt: TimeInterval
+        var lastAccess: UInt64
     }
 
     private enum ProjectRootCacheLookup {
@@ -56,15 +57,20 @@ final class Frecency {
     private static let maxLiveEntries = 5000
     private static let maxValuesPerKey = 20
     private static let writeDelay = 1.0
+    private static let maxProjectPools = 100
+    private static let maxProjectRootCacheEntries = 1024
+    private static let projectPoolTTL: TimeInterval = 90 * 24 * 60 * 60
     private static let projectRootMissTTL: TimeInterval = 30
+    private static let projectRootTTL: TimeInterval = 5 * 60
     private static let halfLifeMs = 7.0 * 24 * 60 * 60 * 1000
 
-    private let queue = DispatchQueue(label: "tine.frecency", qos: .utility)
+    private let queue: DispatchQueue
     private var merged: Index = [:]
     private var live: Index = [:]
     private var scoped: [String: Index] = [:]
     private var projectRoots: [String: CachedProjectRoot] = [:]
-    private var projectRootCallbacks: [String: [(Index) -> Void]] = [:]
+    private var projectRootCacheClock: UInt64 = 0
+    private var projectRootCallbacks: [String: [(String?, Index) -> Void]] = [:]
     private var aliases: [String: String] = [:]
     /// Must never be persisted — a value is more likely than a flag to be a secret.
     private var values: [String: [String: [String: Use]]] = [:]
@@ -74,16 +80,33 @@ final class Frecency {
     private let historyPath: String
     private let storePath: String
     private let logPath: String
+    private let maxProjectPools: Int
+    private let maxProjectRootCacheEntries: Int
+    private let projectPoolTTL: TimeInterval
     private let projectRootMissTTL: TimeInterval
+    private let projectRootTTL: TimeInterval
+    private let now: () -> TimeInterval
 
     init(historyPath: String = Frecency.defaultHistoryPath,
          storePath: String = Frecency.storePath,
          logPath: String = TineLog.path,
-         projectRootMissTTL: TimeInterval = Frecency.projectRootMissTTL) {
+         maxProjectPools: Int = Frecency.maxProjectPools,
+         maxProjectRootCacheEntries: Int = Frecency.maxProjectRootCacheEntries,
+         projectPoolTTL: TimeInterval = Frecency.projectPoolTTL,
+         projectRootMissTTL: TimeInterval = Frecency.projectRootMissTTL,
+         projectRootTTL: TimeInterval = Frecency.projectRootTTL,
+         now: @escaping () -> TimeInterval = { Date().timeIntervalSince1970 },
+         queue: DispatchQueue = DispatchQueue(label: "tine.frecency", qos: .utility)) {
         self.historyPath = historyPath
         self.storePath = storePath
         self.logPath = logPath
+        self.maxProjectPools = maxProjectPools
+        self.maxProjectRootCacheEntries = maxProjectRootCacheEntries
+        self.projectPoolTTL = projectPoolTTL
         self.projectRootMissTTL = projectRootMissTTL
+        self.projectRootTTL = projectRootTTL
+        self.now = now
+        self.queue = queue
     }
 
     var index: Index { queue.sync { merged } }
@@ -103,26 +126,28 @@ final class Frecency {
         }
     }
 
-    func resolveProjectRoot(for cwd: String, completion: @escaping (Index) -> Void) {
-        let start = queue.sync { () -> String? in
-            guard case let .miss(standardized) = cachedProjectRoot(for: cwd) else {
-                return nil
-            }
-            projectRootCallbacks[standardized, default: []].append(completion)
-            return projectRootCallbacks[standardized]?.count == 1 ? standardized : nil
-        }
-        guard let start else { return }
-
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let root = Self.findProjectRoot(startingAt: start)
-            self?.queue.async { [weak self] in
-                guard let self else { return }
-                self.projectRoots[start] = root.map(CachedProjectRoot.root)
-                    ?? .missing(expiresAt: Date().timeIntervalSince1970
-                        + self.projectRootMissTTL)
-                let index = root.flatMap { self.scoped[$0] } ?? [:]
-                let callbacks = self.projectRootCallbacks.removeValue(forKey: start) ?? []
-                callbacks.forEach { $0(index) }
+    func resolveProjectRoot(for cwd: String,
+                            completion: @escaping (String?, Index) -> Void) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            switch self.cachedProjectRoot(for: cwd) {
+            case let .hit(root):
+                completion(root, root.flatMap { self.scoped[$0] } ?? [:])
+            case let .miss(start):
+                self.projectRootCallbacks[start, default: []].append(completion)
+                guard self.projectRootCallbacks[start]?.count == 1 else { return }
+                DispatchQueue.global(qos: .utility).async { [weak self] in
+                    let root = Self.findProjectRoot(startingAt: start).map {
+                        URL(fileURLWithPath: $0, isDirectory: true).resolvingSymlinksInPath().path
+                    }
+                    self?.queue.async { [weak self] in
+                        guard let self else { return }
+                        self.cacheProjectRoot(root, for: start)
+                        let index = root.flatMap { self.scoped[$0] } ?? [:]
+                        let callbacks = self.projectRootCallbacks.removeValue(forKey: start) ?? []
+                        callbacks.forEach { $0(root, index) }
+                    }
+                }
             }
         }
     }
@@ -191,15 +216,31 @@ final class Frecency {
     private func cachedProjectRoot(for cwd: String) -> ProjectRootCacheLookup {
         guard cwd.hasPrefix("/") else { return .hit(nil) }
         let standardized = URL(fileURLWithPath: cwd, isDirectory: true).standardized.path
-        guard let cached = projectRoots[standardized] else { return .miss(standardized) }
-        switch cached {
-        case let .root(root):
-            return .hit(root)
-        case let .missing(expiresAt):
-            guard Date().timeIntervalSince1970 >= expiresAt else { return .hit(nil) }
+        guard var cached = projectRoots[standardized] else { return .miss(standardized) }
+        guard now() < cached.expiresAt else {
             projectRoots[standardized] = nil
             return .miss(standardized)
         }
+        cached.lastAccess = nextProjectRootCacheAccess()
+        projectRoots[standardized] = cached
+        return .hit(cached.root)
+    }
+
+    private func cacheProjectRoot(_ root: String?, for standardized: String) {
+        let ttl = root == nil ? projectRootMissTTL : projectRootTTL
+        projectRoots[standardized] = CachedProjectRoot(
+            root: root,
+            expiresAt: now() + ttl,
+            lastAccess: nextProjectRootCacheAccess())
+        while projectRoots.count > maxProjectRootCacheEntries,
+              let oldest = projectRoots.min(by: { $0.value.lastAccess < $1.value.lastAccess })?.key {
+            projectRoots[oldest] = nil
+        }
+    }
+
+    private func nextProjectRootCacheAccess() -> UInt64 {
+        projectRootCacheClock &+= 1
+        return projectRootCacheClock
     }
 
     private static func findProjectRoot(startingAt cwd: String) -> String? {
@@ -261,6 +302,18 @@ final class Frecency {
     private func pruneLive() {
         live = Self.pruned(live)
         scoped = scoped.mapValues(Self.pruned)
+        let cutoff = (now() - projectPoolTTL) * 1000
+        let fresh = scoped.compactMap { root, index -> (String, Double)? in
+            let newest = index.values.flatMap(\.values).map(\.lastUsed).max()
+            guard let newest, newest >= cutoff else { return nil }
+            return (root, newest)
+        }
+        let keep = fresh.sorted {
+            $0.1 == $1.1 ? $0.0 < $1.0 : $0.1 > $1.1
+        }.prefix(maxProjectPools)
+        scoped = keep.reduce(into: [:]) { result, pool in
+            result[pool.0] = scoped[pool.0]
+        }
     }
 
     private static func pruned(_ index: Index) -> Index {

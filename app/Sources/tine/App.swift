@@ -15,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var server: SocketServer?
     weak var dashboardWindow: NSWindow?
     private let frecency = Frecency()
+    private var appliedProjectRoot: String?
+    private var pendingProjectFrecencyApply = false
     private var idleHide: DispatchWorkItem?
     private var sockPath = ""
     private var socketListening = false
@@ -90,8 +92,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.lastFeed = (req.anchorRow, req.anchorCol, req.cols, req.rows,
                                  req.cellW, req.cellH, req.cursor, req.buffer)
                 if req.cwd != self.state.cwd {
-                    self.state.engine?.setProjectFrecency(
-                        self.frecency.scopedIndex(for: req.cwd))
+                    self.state.engine?.setProjectFrecency([:])
+                    self.pendingProjectFrecencyApply = true
                 }
                 self.resolveProjectFrecency(for: req.cwd)
                 self.state.update(feed)
@@ -231,15 +233,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func selectProjectFrecency(for cwd: String) {
-        state.engine?.setProjectFrecency(frecency.scopedIndex(for: cwd))
+        state.engine?.setProjectFrecency([:])
+        pendingProjectFrecencyApply = true
         resolveProjectFrecency(for: cwd)
     }
 
     private func resolveProjectFrecency(for cwd: String) {
-        frecency.resolveProjectRoot(for: cwd) { [weak self] index in
+        frecency.resolveProjectRoot(for: cwd) { [weak self] root, index in
             DispatchQueue.main.async {
                 guard let self, self.state.cwd == cwd else { return }
+                guard self.pendingProjectFrecencyApply
+                        || root != self.appliedProjectRoot else { return }
                 self.state.engine?.setProjectFrecency(index)
+                self.appliedProjectRoot = root
+                self.pendingProjectFrecencyApply = false
+                self.scheduleRefresh()
             }
         }
     }
