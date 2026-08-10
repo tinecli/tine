@@ -27,7 +27,17 @@ const specsDir = "/tine-smoke-specs";
 const home = "/home/smoke";
 const files: Record<string, string> = {
   [`${specsDir}/index.json`]: JSON.stringify({
-    completions: ["git", "cd", "cat", "deploy", "wipe", "wrapper", "tine"],
+    completions: [
+      "git",
+      "cd",
+      "cat",
+      "deploy",
+      "wipe",
+      "wrapper",
+      "tine",
+      "tie",
+      "different",
+    ],
     diffVersionedCompletions: [],
   }),
   [`${specsDir}/tine.js`]: readFileSync(`${root}builtin-specs/tine.js`, "utf8"),
@@ -71,6 +81,16 @@ const files: Record<string, string> = {
     args: { name: "command", isCommand: true },
   };
   export default completionSpec;`,
+  [`${specsDir}/tie.js`]: `var completionSpec = {
+    name: "tie",
+    subcommands: [{ name: "global-first" }, { name: "project-first" }],
+  };
+  export default completionSpec;`,
+  [`${specsDir}/different.js`]: `var completionSpec = {
+    name: "different",
+    subcommands: [{ name: "global-first" }, { name: "project-first" }],
+  };
+  export default completionSpec;`,
 };
 
 // `ls -1ApL` output per directory, for the filepaths/folders generators.
@@ -81,6 +101,7 @@ const listings: Record<string, string> = {
 };
 
 const use = (count: number) => ({ count, lastUsed: Date.now() });
+const tiedUse = { count: 2, lastUsed: Date.now() };
 
 // isCommandName's own cap (SpecLearner.swift): 64 chars is learnable, 65 is not.
 const name64 = `a${"b".repeat(63)}`;
@@ -120,6 +141,12 @@ beforeAll(async () => {
       "+": { run: use(3) },
       [name64]: { run: use(3) },
       [name65]: { run: use(3) },
+      tie: { "global-first": tiedUse, "project-first": tiedUse },
+      different: { "global-first": use(3), "project-first": use(2) },
+    },
+    __tineProjectFrecency: {
+      tie: { "project-first": use(10) },
+      different: { "project-first": use(10_000) },
     },
     __tineRun: (json: string) => {
       const input = JSON.parse(json) as {
@@ -335,6 +362,14 @@ test("a folder with a space is escaped on insert", async () => {
   const { items } = await suggest("cd my");
   expect(items.map((item) => item.name)).toEqual(["my dir/"]);
   expect(items[0].insertValue).toBe("my\\ dir/");
+});
+
+test("project frecency breaks an identical global-score tie", async () => {
+  expect(await names("tie ")).toEqual(["project-first", "global-first"]);
+});
+
+test("project frecency never overtakes a different global score", async () => {
+  expect(await names("different ")).toEqual(["global-first", "project-first"]);
 });
 
 test("an arg the spec says nothing about falls back to history values", async () => {

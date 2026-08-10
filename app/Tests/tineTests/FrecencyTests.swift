@@ -194,3 +194,85 @@ struct FrecencyPoolTests {
         #expect(leftovers == ["zsh_history"])
     }
 }
+
+struct ProjectFrecencyTests {
+    @Test func recordsAndReloadsTheProjectPool() throws {
+        let dir = Scratch.dir("project-frecency")
+        let repo = dir + "/repo"
+        let cwd = repo + "/Sources/Feature"
+        let store = dir + "/frecency.json"
+        try FileManager.default.createDirectory(
+            atPath: repo + "/.git", withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: cwd, withIntermediateDirectories: true)
+
+        let frecency = Frecency(historyPath: dir + "/missing-history", storePath: store)
+        frecency.load()
+        let result = frecency.record(cmd: "git", param: "rebase", cwd: cwd)
+        #expect(result?.global["rebase"]?.count == 1)
+        #expect(result?.scoped?["rebase"]?.count == 1)
+        #expect(frecency.scopedIndex(for: cwd)["git"]?["rebase"]?.count == 1)
+        frecency.flush()
+
+        let reloaded = Frecency(historyPath: dir + "/missing-history", storePath: store)
+        reloaded.load()
+        #expect(reloaded.index["git"]?["rebase"]?.count == 1)
+        #expect(reloaded.scopedIndex(for: cwd)["git"]?["rebase"]?.count == 1)
+    }
+
+    @Test func cachesEachCwdProjectRootLookup() throws {
+        let dir = Scratch.dir("project-root-cache")
+        let repo = dir + "/repo"
+        let cwd = repo + "/Sources/Feature"
+        try FileManager.default.createDirectory(
+            atPath: repo + "/.git", withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: cwd, withIntermediateDirectories: true)
+
+        let frecency = Frecency(
+            historyPath: dir + "/missing-history",
+            storePath: dir + "/frecency.json")
+        #expect(frecency.projectRoot(for: cwd) == repo)
+        try FileManager.default.createDirectory(
+            atPath: repo + "/Sources/.git", withIntermediateDirectories: true)
+        #expect(frecency.projectRoot(for: cwd) == repo)
+        #expect(frecency.projectRoot(for: cwd + "/Nested") == repo + "/Sources")
+
+        let outside = dir + "/outside"
+        try FileManager.default.createDirectory(atPath: outside, withIntermediateDirectories: true)
+        #expect(frecency.projectRoot(for: outside) == nil)
+        try FileManager.default.createDirectory(
+            atPath: outside + "/.git", withIntermediateDirectories: true)
+        #expect(frecency.projectRoot(for: outside) == nil)
+    }
+
+    @Test func loadsTheFlatStoreFormatWithoutChangingItsScores() throws {
+        let dir = Scratch.dir("old-frecency-store")
+        let store = dir + "/frecency.json"
+        let oldStore = #"{"git":{"checkout":1700000000000}}"#
+        try oldStore.write(toFile: store, atomically: true, encoding: .utf8)
+
+        let frecency = Frecency(historyPath: dir + "/missing-history", storePath: store)
+        frecency.load()
+        #expect(frecency.index["git"]?["checkout"]?.count == 1)
+        #expect(frecency.index["git"]?["checkout"]?.lastUsed == 1_700_000_000_000)
+        #expect(frecency.scopedIndex(for: dir).isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: store + ".bak"))
+    }
+
+    @Test func capsEveryProjectPool() throws {
+        let dir = Scratch.dir("project-frecency-cap")
+        let repo = dir + "/repo"
+        let store = dir + "/frecency.json"
+        try FileManager.default.createDirectory(
+            atPath: repo + "/.git", withIntermediateDirectories: true)
+
+        let frecency = Frecency(historyPath: dir + "/missing-history", storePath: store)
+        frecency.load()
+        for n in 0...5_000 {
+            _ = frecency.record(cmd: "tool", param: "p\(n)", cwd: repo)
+        }
+        frecency.flush()
+
+        let count = frecency.scopedIndex(for: repo).values.reduce(0) { $0 + $1.count }
+        #expect(count == 5_000)
+    }
+}

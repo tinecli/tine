@@ -35,21 +35,40 @@ const frecencyIndex = (): Index => {
   return index && typeof index === "object" ? (index as Index) : {};
 };
 
+const projectFrecencyIndex = (): Index => {
+  const index = (globalThis as { __tineProjectFrecency?: unknown })
+    .__tineProjectFrecency;
+  return index && typeof index === "object" ? (index as Index) : {};
+};
+
 export const updatePriorities = (suggestions: Suggestion[], cmd: string) => {
   const cmdUses = frecencyIndex()[cmd];
+  const projectUses = projectFrecencyIndex()[cmd];
   const now = Date.now();
 
-  return suggestions.map((suggestion) => {
-    const name = makeArray(suggestion.name)[0] || "";
-    const boost = name === "../" ? 0 : frecencyBoost(cmdUses?.[name], now);
+  return suggestions
+    .map((suggestion) => {
+      const name = makeArray(suggestion.name)[0] || "";
+      const boost = name === "../" ? 0 : frecencyBoost(cmdUses?.[name], now);
+      const projectBoost =
+        name === "../" ? 0 : frecencyBoost(projectUses?.[name], now);
 
-    const raw = suggestion.priority || 50;
-    const priority =
-      suggestion.type === "auto-execute"
-        ? raw
-        : Math.max(Math.min(100, raw), 0);
+      const raw = suggestion.priority || 50;
+      const priority =
+        suggestion.type === "auto-execute"
+          ? raw
+          : Math.max(Math.min(100, raw), 0);
 
-    const banded = boost && priority >= 50 && priority <= 75 ? 75 : priority;
-    return { ...suggestion, priority: banded + boost };
-  });
+      const banded = boost && priority >= 50 && priority <= 75 ? 75 : priority;
+      return {
+        suggestion: { ...suggestion, priority: banded + boost },
+        projectBoost,
+      };
+    })
+    .sort(
+      (a, b) =>
+        (b.suggestion.priority ?? 0) - (a.suggestion.priority ?? 0) ||
+        b.projectBoost - a.projectBoost,
+    )
+    .map(({ suggestion }) => suggestion);
 };

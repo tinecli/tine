@@ -51,10 +51,14 @@ describe("frecencyBoost", () => {
 
 describe("updatePriorities", () => {
   const sub = (name: string): Suggestion => ({ name, type: "subcommand" });
-  const host = globalThis as { __tineFrecency?: unknown };
+  const host = globalThis as {
+    __tineFrecency?: unknown;
+    __tineProjectFrecency?: unknown;
+  };
 
   afterEach(() => {
     host.__tineFrecency = undefined;
+    host.__tineProjectFrecency = undefined;
   });
 
   it("orders the used band by frequency, not by timestamp alone", () => {
@@ -71,5 +75,43 @@ describe("updatePriorities", () => {
     expect(commit.priority).toBeGreaterThan(bisect.priority ?? 0);
     expect(bisect.priority).toBeGreaterThan(unused.priority ?? 0);
     expect(commit.priority).toBeLessThan(76);
+  });
+
+  it("uses project frecency to break an identical global-score tie", () => {
+    host.__tineFrecency = {
+      git: {
+        checkout: { count: 2, lastUsed: now },
+        bisect: { count: 2, lastUsed: now },
+      },
+    };
+    host.__tineProjectFrecency = {
+      git: { bisect: { count: 10, lastUsed: now } },
+    };
+
+    const [bisect, checkout] = updatePriorities(
+      [sub("checkout"), sub("bisect")],
+      "git",
+    );
+    expect(bisect.name).toBe("bisect");
+    expect(bisect.priority).toBe(checkout.priority);
+  });
+
+  it("never lets project frecency overtake a different global score", () => {
+    host.__tineFrecency = {
+      git: {
+        checkout: { count: 3, lastUsed: now },
+        bisect: { count: 2, lastUsed: now },
+      },
+    };
+    host.__tineProjectFrecency = {
+      git: { bisect: { count: 10_000, lastUsed: now } },
+    };
+
+    const [checkout, bisect] = updatePriorities(
+      [sub("bisect"), sub("checkout")],
+      "git",
+    );
+    expect(checkout.name).toBe("checkout");
+    expect(checkout.priority).toBeGreaterThan(bisect.priority ?? 0);
   });
 });
