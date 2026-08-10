@@ -104,6 +104,11 @@ const frecencyIndex = (): Record<string, Record<string, unknown>> => {
   return index;
 };
 
+// Mirrors SpecLearner.isCommandName (app-side): `tine learn` refuses anything
+// this doesn't match — notably a path, which always contains a "/".
+const isLearnableCommandName = (name: string): boolean =>
+  /^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(name);
+
 const learnItResult = (
   upToCursor: string,
   typedCommand: string,
@@ -114,6 +119,7 @@ const learnItResult = (
   if (
     !typedCommand ||
     missingCommand !== resolvedCommand ||
+    !isLearnableCommandName(resolvedCommand) ||
     !Object.prototype.hasOwnProperty.call(frecencyIndex(), typedCommand)
   ) {
     return { searchTerm: "", items: [] };
@@ -165,10 +171,10 @@ async function suggest(
   const parsed = await parseArguments(command as never, context as never).catch(
     rethrowUnlessUnavailableSpec,
   );
-  if (parsed instanceof LoadLocalSpecError) {
-    return historyOnlyResult(upToCursor);
-  }
-  if (parsed instanceof MissingSpecError) {
+  if (
+    parsed instanceof LoadLocalSpecError ||
+    parsed instanceof MissingSpecError
+  ) {
     const history = historyOnlyResult(upToCursor);
     if (history.items.length > 0) return history;
     return learnItResult(
