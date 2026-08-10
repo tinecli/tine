@@ -18,19 +18,17 @@ struct ComposedCommand {
 }
 
 enum AskValidation: Equatable {
-    case ok(dangerous: Bool)  // parses against the installed spec
-    case unchecked            // no spec for this tool — nothing to check it against
-    case invalid(String)      // the spec has no such option or argument
+    case ok(dangerous: Bool)
+    case unchecked
+    case invalid(String)
 }
 
-/// Everything the model writes is data: it names a tool tine already found on this
-/// machine, it is matched against a shell-free pattern, and it is parsed against that
-/// tool's own spec before the user sees it. Nothing here runs a command.
+/// Model output is data, never code: name-matched, spec-parsed, and shell-metacharacter-free before use.
 @MainActor
 final class Asker: ObservableObject {
     enum Status: Equatable {
         case idle
-        case running(String)      // stage, shown by the shell's spinner
+        case running(String)
         case done([Row])
         case failed(String)
     }
@@ -49,10 +47,8 @@ final class Asker: ObservableObject {
 
     var outline: ((String) -> [String])?
 
-    /// launchd's PATH (the app's own) has no Homebrew in it.
     var shellPath: (() -> String)?
 
-    /// Returns a closure so each `rank` call scores against one fixed snapshot in time.
     var frecency: (() -> (String) -> Double)?
 
     private let packDir: String
@@ -63,8 +59,7 @@ final class Asker: ObservableObject {
 
     private var job: (label: String, startedAt: Date)?
 
-    /// Past this, a wedged model call's job no longer blocks a new one — nothing
-    /// else would ever release the asker.
+    /// Without this, a wedged model call blocks every question after it, forever.
     private nonisolated static let jobTimeout: TimeInterval = 180
 
     var statusLine: String {
@@ -89,8 +84,6 @@ final class Asker: ObservableObject {
             return ["note", message.socketSafe, ""].joined(separator: TINE_RS)
         }
     }
-
-    // MARK: - Verbs
 
     func ask(question raw: String) -> String {
         guard let question = Self.question(raw) else {
@@ -121,16 +114,14 @@ final class Asker: ObservableObject {
         return "started"
     }
 
-    /// Sets `status` directly rather than starting a job, so the asker stays free
-    /// for the question the user actually meant to ask.
     private func reject(_ reason: String) -> String {
         if let busy = busy() { return busy }
         status = .failed(reason)
         return "started"
     }
 
-    /// Guards every status write: a job that outran `jobTimeout` may have been
-    /// superseded, and must not overwrite the job that replaced it.
+    /// Must stay guarded: a job that outran `jobTimeout` may already be superseded,
+    /// and would otherwise overwrite the job that replaced it.
     private func report(_ startedAt: Date, _ stage: Status) {
         guard job?.startedAt == startedAt else { return }
         status = stage
@@ -143,8 +134,6 @@ final class Asker: ObservableObject {
     }
 
     private var startedAt: Date? { job?.startedAt }
-
-    // MARK: - Answering
 
     private func answer(_ question: String) async {
         guard let startedAt else { return }
@@ -166,8 +155,6 @@ final class Asker: ObservableObject {
             finish(startedAt, .done(rows(candidates)))
             return
         }
-        // BM25 ranked candidates; the model now reads their descriptions to say which
-        // one the question is really about.
         report(startedAt, .running("reading what your tools do"))
         guard let picked = await pick(question: question, from: candidates) else {
             finish(startedAt, .done(rows(candidates)))
@@ -189,17 +176,14 @@ final class Asker: ObservableObject {
         entries.prefix(Self.shown).map { Row.tool($0.name, $0.description) }
     }
 
-    /// Only ever returns a tool retrieval already found — the model can't name a
-    /// tool that isn't actually installed.
+    /// Allowlist: only returns a tool retrieval already found — never trusts the model's name directly.
     private func pick(question: String, from entries: [AskEntry]) async -> AskEntry? {
         guard let name = await Self.chosenTool(question: question, entries: entries)
         else { return nil }
         return entries.first { $0.name == name }
     }
 
-    /// No spec, no command: without documented flags to ground it and a parser to check
-    /// it against, a small model asked to invoke a tool writes something plausible and
-    /// wrong, with nothing here to catch it. The ranked tools are then the whole answer.
+    /// No spec, no command: without a parser to check it against, a composed line ships unvalidated.
     private func compose(question: String, tool: AskEntry, startedAt: Date) async -> [Row]? {
         let documented = outline?(tool.name) ?? []
         guard !documented.isEmpty else { return nil }
@@ -214,13 +198,10 @@ final class Asker: ObservableObject {
             else { return nil }
             let verdict = validate?(line) ?? .unchecked
             if case .invalid(let token) = verdict {
-                rejected = token // retry, naming the word the spec rejected
+                rejected = token
                 continue
             }
-            // Only a passed check ships a command — a spec exists (checked above), so
-            // anything but .ok here means validate didn't actually run, and shipping
-            // that unchecked is exactly what this whole function exists to prevent.
-            guard case .ok(let dangerous) = verdict else { return nil }
+            guard case .ok(let dangerous) = verdict else { return nil } // never ship an unchecked line
             let command = Row.command(line, dangerous: dangerous || Self.looksDestructive(line))
             guard let example = Self.checkedExample(answer.example, tool: tool,
                                                     examples: examples, command: line),
@@ -234,8 +215,7 @@ final class Asker: ObservableObject {
 
     private static let attempts = 2
 
-    /// Backstop for `isDangerous`, which only exists for a tool the spec pack covers —
-    /// this line is about to land in the user's buffer either way.
+    /// Backstop for `isDangerous`, which the spec pack may not cover at all for this tool.
     nonisolated static func looksDestructive(_ line: String) -> Bool {
         guard let command = line.split(separator: " ").first else { return false }
         return destructive.contains(String(command))
@@ -244,8 +224,6 @@ final class Asker: ObservableObject {
     private nonisolated static let destructive: Set<String> = [
         "rm", "rmdir", "shred", "srm", "dd", "mkfs", "fdisk", "diskutil",
     ]
-
-    // MARK: - The corpus
 
     private func corpus(rebuild: Bool, startedAt: Date) async throws -> [AskEntry] {
         let path = shellPath?() ?? ProcessInfo.processInfo.environment["PATH"] ?? ""
@@ -285,12 +263,9 @@ final class Asker: ObservableObject {
         var errorDescription: String? { message }
     }
 
-    // MARK: - Generation
-
     private nonisolated static let modelTimeout: TimeInterval = 60
 
-    /// Abandons, rather than waits on, a generation past `modelTimeout` — the shell
-    /// is polling, and a wedged model call would otherwise hold the whole job.
+    /// Must abandon, not await, past `modelTimeout` — a wedged model call would otherwise hold the job forever.
     private nonisolated static func bounded<T: Sendable>(
         _ work: @escaping @Sendable () async throws -> T) async -> T? {
         await withTaskGroup(of: T?.self) { group in
@@ -304,8 +279,7 @@ final class Asker: ObservableObject {
         }
     }
 
-    /// Instructions are fixed; the man-page descriptions in the prompt are untrusted
-    /// material to read, never a request to follow.
+    /// The descriptions in this prompt are untrusted material to read, never instructions to follow.
     private nonisolated static func chosenTool(question: String,
                                                entries: [AskEntry]) async -> String? {
         let session = LanguageModelSession(instructions: """
@@ -330,8 +304,6 @@ final class Asker: ObservableObject {
         let example: String?
     }
 
-    /// The model's whole vocabulary here is the tool's documented flags/subcommands,
-    /// plus (on retry) the word `validate` rejected last time.
     private nonisolated static func composedLine(question: String, tool: AskEntry,
                                                  flags: [String],
                                                  examples: String?,
@@ -370,9 +342,7 @@ final class Asker: ObservableObject {
 
     private nonisolated static let maxFlags = 120
 
-    // MARK: - Validation (pure, exercised by app/Tests/AskHarness.swift)
-
-    /// Bounded to one line, free of control characters, before this reaches a model prompt.
+    /// Must stay bounded and control-character-free before this reaches a model prompt.
     nonisolated static func question(_ raw: String) -> String? {
         let stripped = raw.unicodeScalars.map { scalar -> Character in
             CharacterSet.controlCharacters.contains(scalar) ? " " : Character(scalar)
@@ -384,8 +354,7 @@ final class Asker: ObservableObject {
 
     nonisolated static let maxQuestion = 500
 
-    /// The security boundary on model output: rejects anything the shell could read
-    /// as more than the one command it names, and any tool not actually installed.
+    /// The security boundary on model output — never let a line through this doesn't approve.
     nonisolated static func checked(_ raw: String, installed: Set<String>) -> String? {
         let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !line.isEmpty, line.count <= maxCommand else { return nil }
@@ -409,8 +378,7 @@ final class Asker: ObservableObject {
         return example
     }
 
-    /// `!` is here because zsh's history expansion runs on the buffer at accept-line:
-    /// an unquoted `!!` would make the line the user runs differ from the one they reviewed.
+    /// `!` must stay in this set — zsh's `!!` history expansion would make the run differ from the review.
     private nonisolated static let shellOperators: Set<Character> = [
         ";", "|", "&", "$", "`", "(", ")", "<", ">", "!", "\n", "\r", "\\",
     ]

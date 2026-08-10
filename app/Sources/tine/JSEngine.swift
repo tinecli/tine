@@ -6,17 +6,16 @@ struct Suggestion {
     let description: String
     let insertValue: String
     let shouldAddSpace: Bool
-    let type: String      // subcommand | option | arg | folder | file | auto-execute | …
-    let queryTerm: String // chars before the cursor this replaces (basename for paths)
+    let type: String
+    let queryTerm: String
     let isDangerous: Bool
-    let matchIndices: [Int] // fuzzy-match positions in `name`, for highlighting
+    let matchIndices: [Int]
 
-    /// Fig's row for running the line as-is; its insertValue is "\n".
+    /// insertValue is "\n" for this row — treat as a name, not a literal, and it breaks execution.
     var isExecute: Bool { type == "auto-execute" }
 }
 
-/// Wraps the Fig autocomplete engine (tine-engine.js) in a JSContext, which is not
-/// thread-safe — call this only from the main thread.
+/// JSContext is not thread-safe — call every method here only from the main thread.
 final class JSEngine {
     private let ctx = JSContext()!
     private(set) var ready = false
@@ -39,7 +38,6 @@ final class JSEngine {
         ctx.setObject(runCommand, forKeyedSubscript: "__tineRun" as NSString)
         ctx.setObject(NSHomeDirectory() as NSString, forKeyedSubscript: "__tineHome" as NSString)
 
-        // tine-engine.js already has its shims baked in, so no other file is loaded here.
         let path = "\(resourcesDir)/tine-engine.js"
         guard let src = try? String(contentsOfFile: path, encoding: .utf8) else {
             tlog("engine: missing \(path)")
@@ -63,9 +61,7 @@ final class JSEngine {
         ctx.setObject(bridged as NSDictionary, forKeyedSubscript: "__tineFrecency" as NSString)
     }
 
-    /// Updates one command's key in `__tineFrecency` in place, leaving siblings untouched,
-    /// so the result matches what a full `setFrecency` reload would produce — without the
-    /// full walk that per-keystroke use here can't afford.
+    /// Must match the shape a full `setFrecency` reload would produce, or ranking silently drifts.
     func setFrecencyCommand(_ cmd: String, params: [String: Frecency.Use]) {
         guard ready, let index = ctx.objectForKeyedSubscript("__tineFrecency"), index.isObject
         else { return }
@@ -73,7 +69,6 @@ final class JSEngine {
         index.setObject(bridged as NSDictionary, forKeyedSubscript: cmd as NSString)
     }
 
-    /// Falls back to these values when the spec has nothing for the current arg.
     func setHistoryValues(_ index: [String: [String: [String: Frecency.Use]]]) {
         guard ready else { return }
         let bridged = index.mapValues {
@@ -82,7 +77,6 @@ final class JSEngine {
         ctx.setObject(bridged as NSDictionary, forKeyedSubscript: "__tineHistoryValues" as NSString)
     }
 
-    /// Lets a spec written after launch (`tine learn`) take effect on the next keystroke.
     func resetSpecCache() {
         guard ready else { return }
         ctx.evaluateScript("if (typeof tineResetSpecs === 'function') tineResetSpecs();")
@@ -93,8 +87,7 @@ final class JSEngine {
         ctx.setObject(NSNumber(value: on), forKeyedSubscript: "__tineFirstToken" as NSString)
     }
 
-    /// `tine ask` runs a model's answer through this same parser, so a flag the
-    /// tool's spec doesn't document never reaches the user — model output is untrusted data.
+    /// Model output must go through this same parser — never trust it via a shortcut path.
     func validate(line: String) -> AskValidation {
         guard ready else { return .unchecked }
         ctx.setObject(line as NSString, forKeyedSubscript: "__v_line" as NSString)
@@ -110,7 +103,7 @@ final class JSEngine {
         }
     }
 
-    /// The allowlist offered back to the model when its first answer failed `validate`.
+    /// Only what the spec documents — never widen this with convenience flags.
     func outline(command: String) -> [String] {
         let line = "\(command) "
         return suggest(line: line, cursor: line.count, cwd: NSHomeDirectory())
@@ -118,8 +111,8 @@ final class JSEngine {
             .map { $0.name }
     }
 
-    /// Callback-based but effectively synchronous: the spec read hook is synchronous, so
-    /// the engine's promise chain drains within JSC's microtask flush before this returns.
+    /// Looks callback-based but is synchronous in practice — JSC drains the promise
+    /// chain's microtasks before this returns. Don't wrap this in async expecting a real yield.
     func suggest(line: String, cursor: Int, cwd: String) -> [Suggestion] {
         guard ready else { return [] }
         ctx.setObject(line as NSString, forKeyedSubscript: "__q_line" as NSString)

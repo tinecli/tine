@@ -1,39 +1,26 @@
 import Foundation
 
-/// Runs the shell commands Fig generators request (git branch, ls, …), returning
-/// JSON to the JS engine that called `run`. Fig's stale-while-revalidate generator
-/// cache re-runs on every keystroke; running that subprocess used to block the
-/// keystroke synchronously. Now it runs on a background queue — a fresh hit
-/// returns immediately, a miss returns the stale value (or empty) and refreshes
-/// in the background — with in-flight dedup so rapid keystrokes don't spawn
-/// duplicate runs. `run` is called on the main thread; `cache`/`inflight` are
-/// lock-guarded because the background work mutates them too.
+/// `run` is called on the main thread; `cache`/`inflight` must stay lock-guarded — the background queue mutates them too.
 enum CommandRunner {
     private static var cache: [String: (output: String, at: Date)] = [:]
     private static var inflight: Set<String> = []
     private static let lock = NSLock()
     private static let queue = DispatchQueue(label: "dev.gustaf.tine.generator", attributes: .concurrent)
     private static let ttl: TimeInterval = 3
-    /// Grace window after SIGTERM before SIGKILL, then again before the reads give up.
-    /// Kept short — a wedged generator has nothing left to say, and the panel is waiting.
     private static let grace: TimeInterval = 0.5
 
-    /// Fires on the main thread when a background refresh produced new output, so late
-    /// generator results (e.g. a fresh `ls` after `cd`) can surface without another keystroke.
     static var onRefresh: (() -> Void)?
 
-    /// Sent by tine.zsh: a GUI-launched app only gets launchd's minimal PATH, so
-    /// generators shelling out to Homebrew/pyenv/npm tools would otherwise fail.
+    /// Without this, a GUI-launched app only sees launchd's minimal PATH and generators
+    /// shelling to Homebrew/pyenv/npm tools fail.
     private static var _shellPath: String?
     static func setShellPath(_ path: String) {
         lock.lock(); _shellPath = path.isEmpty ? nil : path; lock.unlock()
     }
-    /// Also what `tine ask` indexes as the tools this user can actually run.
     static func shellPath() -> String? {
         lock.lock(); defer { lock.unlock() }; return _shellPath
     }
 
-    /// Drives the panel's loading spinner.
     static var isLoading: Bool {
         lock.lock(); defer { lock.unlock() }; return !inflight.isEmpty
     }
@@ -69,8 +56,7 @@ enum CommandRunner {
 
         if !dup {
             queue.async {
-                // Must survive every path out of here: a leaked marker pins `isLoading`
-                // on and blocks this key from ever running again.
+                // Must run on every exit path, or the leaked marker blocks this key forever.
                 defer { lock.lock(); inflight.remove(key); lock.unlock() }
                 let output = execute(executable: executable, args: args, cwd: cwd,
                                      env: env, timeoutMs: timeoutMs)
@@ -91,8 +77,7 @@ enum CommandRunner {
         return hit?.output ?? encode(stdout: "", stderr: "", exitCode: 0)
     }
 
-    /// Bypasses the cache — `tine learn` needs this command's real output now,
-    /// not a stale-while-revalidate answer. Blocking; call off the main thread.
+    /// Blocking — call off the main thread, or this freezes the UI.
     static func runOnce(executable: String, args: [String], timeoutMs: Double) -> Output {
         execute(executable: executable, args: args, cwd: "", env: [:], timeoutMs: timeoutMs)
     }
@@ -102,7 +87,7 @@ enum CommandRunner {
     private static func execute(executable: String, args: [String], cwd: String,
                                 env: [String: String], timeoutMs: Double?) -> Output {
         var environment = ProcessInfo.processInfo.environment
-        // shellPath wins as the default; a generator's own env can still override PATH.
+        // Order matters: applying `env` after this lets a generator's own PATH override shellPath's.
         if let path = shellPath() { environment["PATH"] = path }
         for (k, v) in env { environment[k] = v }
 
@@ -114,21 +99,18 @@ enum CommandRunner {
             return ("", "\(error)", 127)
         }
 
-        // A spec's timeout is a request, not a cap: 20s is the longest any shipped spec
-        // asks for; 2s is the default when a spec asks for nothing.
+        // 20s caps a spec's own requested timeout — remove it and a bad spec can hang a generator indefinitely.
         let requested = timeoutMs.flatMap { $0.isFinite && $0 > 0 ? $0 / 1000.0 : nil }
         let timeout = min(requested ?? 2.0, 20.0)
         let start = DispatchTime.now()
-        // A child ignoring SIGTERM holds its stdout open and wedges the read;
-        // SIGKILL is the escalation it cannot ignore.
+        // SIGKILL escalation is required: a child can ignore SIGTERM and wedge the read forever.
         let term = DispatchWorkItem { child.signal(SIGTERM) }
         let kill9 = DispatchWorkItem { child.signal(SIGKILL) }
         DispatchQueue.global().asyncAfter(deadline: start + timeout, execute: term)
         DispatchQueue.global().asyncAfter(deadline: start + timeout + grace, execute: kill9)
 
-        // stdout and stderr drain concurrently, not in sequence: a child that fills the
-        // stderr pipe buffer blocks there without ever closing stdout, which would starve
-        // stderr for the whole deadline if stdout were drained first.
+        // Must drain stdout/stderr concurrently: sequential draining deadlocks if a
+        // child fills the stderr pipe buffer without closing stdout.
         let readDeadline = start + timeout + grace * 2
         var status: Int32 = 0
         let reaper = DispatchWorkItem { status = child.reap() }
@@ -145,8 +127,8 @@ enum CommandRunner {
         return (String(decoding: out, as: UTF8.self), String(decoding: err, as: UTF8.self), status)
     }
 
-    /// Runs in its own process group so signals reach work it backgrounded too — that
-    /// work would otherwise outlive the child and hold the pipe open.
+    /// Must run in its own process group — without it, work the child backgrounded
+    /// escapes our signals and holds the pipe open forever.
     private final class Child {
         let outFD: Int32
         let errFD: Int32
@@ -162,13 +144,11 @@ enum CommandRunner {
 
         func signal(_ sig: Int32) {
             lock.lock(); defer { lock.unlock() }
-            // Once reaped, the pid may already be recycled — never signal past that point.
-            if !reaped { kill(-pid, sig) }
+            if !reaped { kill(-pid, sig) } // once reaped, the pid may already be recycled
         }
 
-        /// Kills the child's process group before reaping, so the pipes reach EOF at once
-        /// instead of at the read deadline. `WNOWAIT` keeps the zombie in place until that
-        /// group kill lands, so the pid stays ours and can't be recycled out from under it.
+        /// waitid WNOWAIT, then kill(-pgid), then waitpid: the pid must not be reaped
+        /// before the group kill lands, or it may already be recycled by then.
         func reap() -> Int32 {
             var info = siginfo_t()
             while waitid(P_PID, id_t(pid), &info, WEXITED | WNOWAIT) < 0 && errno == EINTR {}
@@ -186,7 +166,7 @@ enum CommandRunner {
         var description: String { "tine: \(String(cString: strerror(code)))" }
     }
 
-    /// `posix_spawn` rather than `Process`: only it can put the child in its own process group.
+    /// Must stay `posix_spawn`, not `Process` — only it can put the child in its own process group.
     private static func spawn(argv: [String], env: [String], cwd: String) throws -> Child {
         var outFDs: [Int32] = [-1, -1]
         var errFDs: [Int32] = [-1, -1]
@@ -208,8 +188,7 @@ enum CommandRunner {
         var attrs: posix_spawnattr_t?
         posix_spawnattr_init(&attrs)
         defer { posix_spawnattr_destroy(&attrs) }
-        // CLOEXEC_DEFAULT: the generator queue is concurrent, so without this, another
-        // run's pipe fd would leak into this child and keep that run reading until its deadline.
+        // Without CLOEXEC_DEFAULT, another concurrent run's pipe fd leaks into this child.
         posix_spawnattr_setflags(&attrs, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT))
         posix_spawnattr_setpgroup(&attrs, 0)
 
@@ -228,8 +207,7 @@ enum CommandRunner {
         return Child(pid: pid, outFD: outFDs[0], errFD: errFDs[0])
     }
 
-    /// Dispatch I/O rather than `readDataToEndOfFile`: an abandoned read past `deadline`
-    /// releases its thread instead of blocking one for as long as the writer lives.
+    /// Must stay Dispatch I/O, not `readDataToEndOfFile` — that blocks its thread for as long as the writer lives.
     private static func drain(_ fd: Int32, until deadline: DispatchTime) -> Data {
         let reader = DispatchQueue(label: "dev.gustaf.tine.generator.read")
         let done = DispatchSemaphore(value: 0)

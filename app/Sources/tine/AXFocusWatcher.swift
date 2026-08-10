@@ -1,14 +1,12 @@
 import ApplicationServices
 import Foundation
 
-/// Observes both focused-window and focused-element notifications: tab-per-window terminals
-/// (Ghostty, Canario) fire the former, single-window terminals (Terminal.app, iTerm2) the latter.
+/// Both notifications are required: tab-per-window terminals only fire the window one, single-window terminals only the element one.
 final class AXFocusWatcher {
     let pid: pid_t
     private let observer: AXObserver
     private let onFocusChange: () -> Void
 
-    /// Returns nil (no throw, no prompt) when the app is gone or Accessibility is untrusted.
     init?(pid: pid_t, onFocusChange: @escaping () -> Void) {
         let callback: AXObserverCallback = { _, _, _, refcon in
             guard let refcon else { return }

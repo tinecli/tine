@@ -38,8 +38,6 @@ final class SuggestionPanel: NSPanel {
         if let vf = (NSScreen.screens.first { $0.frame.contains(origin) } ?? NSScreen.main)?.visibleFrame {
             o.x = min(max(o.x, vf.minX), max(vf.minX, vf.maxX - size.width))
             if o.y - size.height < vf.minY {
-                // Flips above the caret: caretTop = origin.y + gap + lineHeight, and the panel's
-                // bottom needs to land `gap` above that, i.e. at caretTop + gap.
                 o.y = origin.y + gap + lineHeight + gap + size.height
             }
             o.y = min(o.y, vf.maxY)

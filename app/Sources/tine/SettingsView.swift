@@ -6,8 +6,6 @@ struct SettingsView: View {
     @EnvironmentObject var installer: SpecInstaller
     @EnvironmentObject var updater: AppUpdater
 
-    // Read fresh each launch: the Accessibility grant and login-item state are
-    // owned by the system and can change without this app running.
     @State private var axTrusted = AXCaret.isTrusted
     @State private var selectedSpecDir: Int?
     @State private var startAtLogin = SMAppService.mainApp.status == .enabled
@@ -31,7 +29,6 @@ struct SettingsView: View {
         }
     }
 
-    // "" pairs with fontName's own "" = system-monospaced sentinel (see TineConfig).
     private let fonts = [("", "System Monospaced"), ("Menlo", "Menlo"),
                          ("Monaco", "Monaco"), ("SF Mono", "SF Mono"),
                          ("Courier New", "Courier New")]
@@ -256,8 +253,6 @@ struct SettingsView: View {
         }
     }
 
-    /// Reverts the toggle to the real system state on failure — e.g. the user still
-    /// needs to approve this app in System Settings › Login Items.
     private func setStartAtLogin(_ on: Bool) {
         do {
             if on { try SMAppService.mainApp.register() }

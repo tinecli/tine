@@ -1,6 +1,5 @@
 import Foundation
 
-/// Writes to /tmp/tine.log instead of the unified log so entries are readable without Console.app filters.
 enum TineLog {
     static let path = "/tmp/tine.log"
 

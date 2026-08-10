@@ -12,12 +12,8 @@ extension String {
     }
 }
 
-/// One request from the shell feed (shell/tine.zsh). Wire format (one line):
-/// `type US cursor US cwd US pos US buffer`, where `pos` is
-/// "anchorRow;anchorCol;cols;rows;cellW;cellH;session", captured once per prompt via
-/// idle-tty DSR. The cell geometry lets the app place the panel in canvas terminals
-/// (Ghostty) whose Accessibility can't report the caret. A shell that predates
-/// `session` (SessionOwnership) sends six fields and reads as session 0.
+/// Wire format (one line): `type US cursor US cwd US pos US buffer`; a shell predating
+/// `session` sends six `pos` fields and reads as session 0 — field order/count is load-bearing.
 struct Request {
     let type: String
     let cursor: Int
@@ -28,7 +24,7 @@ struct Request {
     let rows: Int
     let cellW: Int     // device pixels
     let cellH: Int     // device pixels
-    let session: pid_t // 0 when unknown
+    let session: pid_t
     let buffer: String
 }
 
@@ -38,8 +34,7 @@ struct FeedMessage {
     let buffer: String
 }
 
-/// Unix-domain-socket server, no pseudo-terminal (replaces figterm). `handler`
-/// runs on the main thread — it may touch UI/AppState state directly.
+/// `handler` runs on the main thread — it touches UI/AppState state directly.
 final class SocketServer {
     private let path: String
     private let handler: (Request) -> String

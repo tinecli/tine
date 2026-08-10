@@ -44,7 +44,6 @@ struct SuggestionListView: View {
         .frame(height: rowHeight * CGFloat(min(count == 0 ? 1 : count, maxRows)))
         .padding(.vertical, 4)
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        // Distinct from `loadingRow`: this is the still-loading state once rows already exist.
         .overlay(alignment: .topTrailing) {
             if state.isLoading && count > 0 {
                 ProgressView().controlSize(.small).scaleEffect(0.6).padding(4)
@@ -158,7 +157,6 @@ struct SuggestionListView: View {
         return Text(out)
     }
 
-    /// The panel is only ever presented with zero suggestions while `isLoading`.
     private var loadingRow: some View {
         HStack(spacing: 7) {
             ProgressView().controlSize(.small).scaleEffect(0.6).frame(width: 13)
@@ -173,9 +171,7 @@ struct SuggestionListView: View {
     @ViewBuilder
     private func row(index: Int, s: Suggestion) -> some View {
         let selected = index == state.selectedIndex
-        // "↪" as a name would look like a second icon next to `iconName` — show the
-        // description (e.g. "Immediately execute") for that row instead.
-        let isNameLabel = !(s.isExecute && s.name == "↪")
+        let isNameLabel = !(s.isExecute && s.name == "↪") // "↪" as a name would double up with the row's own icon
         let label = isNameLabel ? s.name : s.description
         let iconName = s.isDangerous ? "exclamationmark.triangle.fill" : icon(for: s)
         HStack(spacing: 7) {

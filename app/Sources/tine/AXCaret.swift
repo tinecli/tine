@@ -10,8 +10,7 @@ enum AXCaret {
 
     static var isTrusted: Bool { AXIsProcessTrusted() }
 
-    /// Returns Cocoa coords (bottom-left origin), paired with line height so SuggestionPanel
-    /// can flip above the caret near the screen bottom.
+    /// Returns Cocoa coords (bottom-left origin) — not screen coords (top-left), which `focusedElementRect` uses.
     static func caretTopLeftBelow(gap: CGFloat = 4) -> (point: NSPoint, lineHeight: CGFloat)? {
         let app = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
         let system = AXUIElementCreateSystemWide()
@@ -34,9 +33,7 @@ enum AXCaret {
         var caret = CFRange(location: 0, length: 0)
         AXValueGetValue(rangeVal as! AXValue, .cfRange, &caret)
 
-        // Three probes, in order: the caret range itself (iTerm2); if that's empty/zero-height
-        // (Terminal.app), the character before the caret, anchored to its right edge;
-        // otherwise the character after the caret.
+        // Don't collapse this to one probe: iTerm2 and Terminal.app need different ones.
         var anchorRight = false
         var rect = bounds(element, CFRange(location: caret.location, length: 0))
         if !valid(rect) && caret.location > 0 {
@@ -47,8 +44,7 @@ enum AXCaret {
             rect = bounds(element, CFRange(location: caret.location, length: 1))
             anchorRight = false
         }
-        // Canvas/Electron terminals (VSCode) refuse boundsForRange, but xterm.js's hidden
-        // IME field tracks the cursor cell-by-cell, so its own frame *is* the caret.
+        // Required for VSCode/xterm.js, which refuses boundsForRange entirely.
         if !valid(rect), let er = caretSizedElementRect(element) {
             rect = er
             anchorRight = false
@@ -68,8 +64,7 @@ enum AXCaret {
         return (point, r.height)
     }
 
-    // A caret-tracking field (VSCode/xterm.js) is a few points wide; a whole terminal
-    // canvas (Ghostty) is hundreds — the 100pt cap below tells them apart.
+    // The 100pt cap is load-bearing: widen it and a whole Ghostty canvas passes as a caret.
     private static func caretSizedElementRect(_ el: AXUIElement) -> CGRect? {
         var posRef: CFTypeRef?, szRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(el, kAXPositionAttribute as CFString, &posRef) == .success,
@@ -82,9 +77,7 @@ enum AXCaret {
         return CGRect(origin: pos, size: sz)
     }
 
-    /// Screen coords, top-left origin — unlike `caretTopLeftBelow`'s Cocoa coords. For a
-    /// canvas terminal (Ghostty) this is the whole text area, which the caller turns into
-    /// a per-cell pixel position using the grid it already has.
+    /// Screen coords, top-left origin — not Cocoa coords like `caretTopLeftBelow`.
     static func focusedElementRect() -> CGRect? {
         let system = AXUIElementCreateSystemWide()
         var focused: CFTypeRef?

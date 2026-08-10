@@ -40,9 +40,6 @@ final class AppState: ObservableObject {
         suggestions.indices.contains(selectedIndex) ? suggestions[selectedIndex].type : nil
     }
 
-    /// A redraw after a nav key re-sends the same buffer: the early-return below skips
-    /// resetting `selectedIndex`, which would otherwise snap the highlight back to the
-    /// top and jump the panel on every arrow press.
     @discardableResult
     func update(_ msg: FeedMessage) -> Bool {
         if msg.buffer == buffer && msg.cursor == cursor && msg.cwd == cwd { return false }
@@ -55,8 +52,6 @@ final class AppState: ObservableObject {
         return true
     }
 
-    /// Unlike `update`, runs even when the buffer hasn't changed — for when a
-    /// background generator finishes and its results need to appear regardless.
     @discardableResult
     func recompute() -> Bool {
         guard !buffer.isEmpty else { return false }
@@ -68,13 +63,7 @@ final class AppState: ObservableObject {
         return changed
     }
 
-    /// Fig's Tab behavior: the longest common prefix of the visible suggestions, if longer
-    /// than what's typed.
     func commonPrefix() -> (buffer: String, cursor: Int)? {
-        // An auto-execute row's name ("↪", or the bare exact match) would shrink the
-        // prefix and make Tab fall through to shell completion, so it's excluded.
-        // insertValue is used, not name, since it's already shell-escaped for paths
-        // (e.g. `Edge\ Apps.localized/`).
         let values = suggestions.filter { !$0.isExecute && $0.type != "learn-it" }.map { $0.insertValue }
         guard let first = values.first else { return nil }
         var lcp = Array(first)
@@ -86,8 +75,7 @@ final class AppState: ObservableObject {
             if lcp.isEmpty { break }
         }
         let prefix = String(lcp)
-        // qt (not the whole typed token) is what gets replaced below — otherwise
-        // `cd app/So` + `Sources/` would wrongly become `cd Sources/`.
+        // Replace only `qt`, not the whole typed token, below — or `cd app/So` corrupts to `cd Sources/`.
         guard let qt = suggestions.first(where: { !$0.isExecute && $0.type != "learn-it" })?.queryTerm else { return nil }
         guard prefix.count > qt.count, prefix.hasPrefix(qt) else { return nil }
 
@@ -110,13 +98,11 @@ final class AppState: ObservableObject {
             return (selected.insertValue, selected.insertValue.count)
         }
         let chars = Array(buffer)
-        // queryTerm may legitimately be empty right after a "/" — that means append
-        // at the cursor rather than replace anything.
         let start = max(0, cursor - selected.queryTerm.count)
         guard start <= chars.count, cursor <= chars.count else { return nil }
 
-        // Fig's insertion.ts rule: shouldAddSpace appends a space, and a {cursor}
-        // placeholder is resolved after that so the space still ends up last.
+        // Fig insertion.ts order: append the space, then resolve {cursor} — reversing
+        // this corrupts the inserted text.
         var insert = selected.insertValue
         if selected.shouldAddSpace { insert += " " }
 

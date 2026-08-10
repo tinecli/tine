@@ -43,10 +43,7 @@ struct LearnedOption {
     var isOptional: Bool
 }
 
-/// Both the `--help` input and the model's answer stay data: every name is matched
-/// against a pattern, every description is stripped of the spec loader's statement-
-/// boundary characters, and the result is serialized as `export default <JSON>` —
-/// no model-written text ever reaches code position.
+/// No model-written text may ever reach code position — name-matched, character-stripped, then JSON-serialized.
 @MainActor
 final class SpecLearner: ObservableObject {
     struct OptionCoverage: Equatable {
@@ -63,7 +60,7 @@ final class SpecLearner: ObservableObject {
 
     enum Status: Equatable {
         case idle
-        case running(String)                    // stage, shown by the shell's spinner
+        case running(String)
         case done(path: String, partial: Bool, coverage: OptionCoverage)
         case failed(String)
     }
@@ -84,15 +81,11 @@ final class SpecLearner: ObservableObject {
         }
     }
 
-    /// Fires on the main thread so the engine can drop its cached specs and pick the
-    /// new one up without a restart.
     var onLearned: (() -> Void)?
 
     private let configuredDirs: [String]?
     private let packDir: String
 
-    /// nil re-reads the user's config at learn time, unlike the engine's own copy
-    /// (fixed at launch) — this must always follow the live config.
     init(localSpecsDirs: [String]? = nil, packDir: String) {
         self.configuredDirs = localSpecsDirs
         self.packDir = packDir
@@ -102,15 +95,11 @@ final class SpecLearner: ObservableObject {
         configuredDirs ?? TineConfig.load().localSpecsDirsExpanded
     }
 
-    /// Named, so a second `tine learn` can be told it's the first one still running,
-    /// not have its result read as its own.
     private var job: (command: String, startedAt: Date)?
 
-    /// Past this, a wedged model call's job no longer blocks a new one.
+    /// Without this, a wedged model call blocks every `tine learn` after it, forever.
     private nonisolated static let jobTimeout: TimeInterval = 150
 
-    /// Always answers "started", even on rejection — the reason then is just the
-    /// status the shell polls for next.
     func learn(command: String, force: Bool) -> String {
         if let job, Date().timeIntervalSince(job.startedAt) < Self.jobTimeout {
             return "busy:\(job.command)"
@@ -174,7 +163,7 @@ final class SpecLearner: ObservableObject {
         return "started"
     }
 
-    /// A job that timed out may have been superseded — must not overwrite the job that replaced it.
+    /// Must stay guarded: a timed-out job may be superseded, and must not overwrite the one that replaced it.
     private func finish(_ startedAt: Date, _ result: Status) {
         guard job?.startedAt == startedAt else { return }
         job = nil
@@ -192,7 +181,6 @@ final class SpecLearner: ObservableObject {
         var errorDescription: String? { message }
     }
 
-    /// Apple Intelligence is a runtime capability, not implied by the OS version alone.
     nonisolated static func unavailableReason() -> String? {
         switch SystemLanguageModel.default.availability {
         case .available:
@@ -208,15 +196,12 @@ final class SpecLearner: ObservableObject {
         }
     }
 
-    /// Blocking — never call on the main thread. `-h` is only tried when `--help` says
-    /// little: a tool may print help to stderr or exit nonzero while printing it, so
-    /// the longer output wins over the exit code.
+    /// Blocking — never call on the main thread. Checking exit code alone for "-h" would
+    /// falsely report tools that print help then exit nonzero.
     private nonisolated static func help(for command: String) throws -> String {
         var best = ""
         for flag in ["--help", "-h"] {
             let result = CommandRunner.runOnce(executable: command, args: [flag], timeoutMs: 10_000)
-            // Only `env`'s own "env: " stderr means the command itself doesn't exist —
-            // a 127 from the command may still have printed help first.
             if result.exitCode == 127, result.stderr.hasPrefix("env: ") {
                 throw Failure("no such command: \(command)")
             }
@@ -230,7 +215,6 @@ final class SpecLearner: ObservableObject {
         return best
     }
 
-    /// A `--help` longer than this is truncated, which is what makes `partial` results possible.
     private nonisolated static let maxHelpCharacters = 6000
 
     private nonisolated static let modelTimeout: TimeInterval = 120
@@ -254,8 +238,7 @@ final class SpecLearner: ObservableObject {
 
     private nonisolated static func respond(command: String,
                                             help: String) async throws -> LearnedSpec {
-        // Instructions are fixed; the --help text in the prompt is untrusted material
-        // to read, never a request to follow.
+        // The --help text in this prompt is untrusted material to read, never a request to follow.
         let session = LanguageModelSession(instructions: """
             You read the --help output of a command-line tool and describe the \
             interface it documents. Report only subcommands, flags and arguments \
@@ -281,10 +264,7 @@ final class SpecLearner: ObservableObject {
         }
     }
 
-    // MARK: - Serialization (pure, exercised by app/Tests/LearnHarness.swift)
-
-    /// `extend/`, not `override/`: merges onto a spec the pack may ship for this
-    /// command later, rather than shadowing it.
+    /// Must stay `extend/`, not `override/` — the latter would shadow a pack spec shipped for this command later.
     nonisolated static func destination(command: String, in dir: String) -> String {
         "\(dir)/extend/\(command).js"
     }
@@ -313,13 +293,12 @@ final class SpecLearner: ObservableObject {
             """
     }
 
-    /// Lets `isLearnedFile` tell a spec tine wrote from one the user wrote.
+    /// Changing this breaks `isLearnedFile`'s check, which gates whether `--force` may overwrite the file.
     nonisolated static let header = "// Written by `tine learn"
 
     private nonisolated static let maxEntries = 60
 
-    /// The allowlist against model invention: only a name the help text itself
-    /// documents survives — a suggestion for a flag the tool doesn't have is worse than none.
+    /// The allowlist against model invention — only a name the help text itself documents survives.
     nonisolated static func figSpec(command: String, from spec: LearnedSpec,
                                     help: String) -> [String: Any]? {
         var taken = Set<String>()
@@ -460,9 +439,8 @@ final class SpecLearner: ObservableObject {
         return (isPath, isOptional)
     }
 
-    /// `;` `{` `}` are replaced outright, not just JSON-escaped: none of those needs
-    /// escaping inside a JSON string, but the spec loader's ESM→CJS rewrite scans the
-    /// raw file text for them as statement boundaries, oblivious to JSON string quoting.
+    /// Must replace `;` `{` `}` outright — JSON-escaping alone doesn't stop the spec
+    /// loader's ESM→CJS rewrite from reading them as statement boundaries in the raw file.
     nonisolated static func text(_ raw: String) -> String {
         let safe = String(String.UnicodeScalarView(raw.unicodeScalars.map { scalar -> Unicode.Scalar in
             switch scalar {
@@ -476,7 +454,7 @@ final class SpecLearner: ObservableObject {
         return String(safe.split(separator: " ").joined(separator: " ").prefix(120))
     }
 
-    /// The trust boundary is here, not the shell: any local process can reach the socket.
+    /// The trust boundary is here, not the shell — any local process can reach the socket.
     nonisolated static func isCommandName(_ name: String) -> Bool {
         matches(name, "^[A-Za-z0-9][A-Za-z0-9._+-]*$", max: 64)
     }
@@ -485,15 +463,13 @@ final class SpecLearner: ObservableObject {
         matches(name, "^[A-Za-z0-9][A-Za-z0-9._:+-]*$", max: 40)
     }
 
-    /// Word-boundary match, not substring: a plain `contains` would find the invented
-    /// `-v` inside a documented `--version`.
+    /// Must stay word-boundary, not substring — `contains` would let an invented `-v` pass as documented via `--version`.
     nonisolated static func documented(_ name: String, in help: String) -> Bool {
         let word = NSRegularExpression.escapedPattern(for: name)
         return help.range(of: "(?<![A-Za-z0-9_-])\(word)(?![A-Za-z0-9_-])",
                           options: .regularExpression) != nil
     }
 
-    /// Repairs a common model mistake: writing the short form of `-v, --verbose` back as `--v`.
     nonisolated static func shortFlag(_ raw: String) -> String {
         raw.hasPrefix("--") && raw.count == 3 ? String(raw.dropFirst()) : raw
     }

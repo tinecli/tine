@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// NSVisualEffectView blurs the content behind the window; SwiftUI's `.regularMaterial` does not.
 struct VisualEffectView: NSViewRepresentable {
     var material: NSVisualEffectView.Material = .hudWindow
 

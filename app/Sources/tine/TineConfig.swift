@@ -2,7 +2,7 @@ import Foundation
 
 struct TineConfig: Codable, Equatable {
     var maxVisibleRows: Int = 12
-    var glass: Bool = true          // Liquid Glass, vs. a solid panel
+    var glass: Bool = true
     var fontName: String = ""       // "" = system monospaced; else a named font
     var fontSize: Double = 12
     var firstTokenCompletion: Bool = true
@@ -10,10 +10,8 @@ struct TineConfig: Codable, Equatable {
     var showMenuBarIcon: Bool = true
     var openWindowAtStart: Bool = true
     var autoUpdateSpecs: Bool = true
-    /// false still surfaces a newer release (see AppUpdater); it only skips the automatic install.
     var autoUpdateApp: Bool = true
     var updateNotifications: Bool = true
-    /// Each dir holds override/<cmd>.js (replace) and extend/<cmd>.js (merge) subfolders.
     var localSpecsDirs: [String] = ["\(NSHomeDirectory())/.config/tine/specs"]
 
     var localSpecsDirsExpanded: [String] {
@@ -22,8 +20,7 @@ struct TineConfig: Codable, Equatable {
 
     init() {}
 
-    /// Decoded key by key so a config from an older tine (missing newer keys) falls back
-    /// to defaults per-key instead of the synthesized decoder throwing and losing the file.
+    /// Per-key, not synthesized: the synthesized decoder throws on a missing key and resets every setting.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T {

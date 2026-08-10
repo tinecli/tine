@@ -1,25 +1,19 @@
 import Foundation
 
-/// Downloads the completion spec pack (built + published by the tinecli/autocomplete
-/// fork) at runtime and installs it to ~/.local/share/tine/specs — so specs update
-/// without an app release.
 @MainActor
 final class SpecInstaller: ObservableObject {
     enum Status: Equatable {
         case idle, running, done(String), failed(String)
     }
     @Published var status: Status = .idle
-    /// Cached from a background HEAD check, surfaced by `tine doctor`. Fails closed:
-    /// stays false when GitHub is unreachable, so doctor never nags on a flaky network.
+    /// Fails closed on a network error — never flip this to fail-open, or doctor nags on flaky Wi-Fi.
     @Published var updateAvailable = false
 
-    /// Pinned HTTPS release asset, same trust root as the notarized app — never
-    /// make this a user-configurable host.
+    /// Never make this user-configurable — it's the trust root for what tine installs.
     nonisolated static let packURL = URL(string:
         "https://github.com/tinecli/autocomplete/releases/download/specs/specs.tar.gz")!
     nonisolated static let specsDir = "\(NSHomeDirectory())/.local/share/tine/specs"
-    /// Kept *beside*, not inside, specsDir: the install swap wipes specsDir, so a
-    /// marker in it wouldn't survive.
+    /// Must stay outside specsDir: the install swap wipes specsDir, and a marker inside it wouldn't survive.
     nonisolated static let markerPath = "\(NSHomeDirectory())/.local/share/tine/.pack-etag"
 
     var statusLine: String {
@@ -33,7 +27,6 @@ final class SpecInstaller: ObservableObject {
 
     private var timer: Timer?
 
-    /// Fires on the main thread after a successful install.
     var onInstalled: (() -> Void)?
 
     nonisolated static func isInstalled() -> Bool {
@@ -41,9 +34,7 @@ final class SpecInstaller: ObservableObject {
             .contains { $0.hasSuffix(".js") } ?? false
     }
 
-    /// Unique top-level entries (one `foo.js` or one `foo/` dir each) — NOT the same as
-    /// index.json's entry count, which lists one per spec *file* and fragments `aws`
-    /// alone into hundreds.
+    /// Not index.json's entry count — that's one per spec *file* and fragments `aws` into hundreds.
     nonisolated static func installedCount() -> Int { commandCount(in: specsDir) }
 
     nonisolated static func commandCount(in dir: String) -> Int {
@@ -62,13 +53,9 @@ final class SpecInstaller: ObservableObject {
         return clis.count
     }
 
-    /// The fork ships ~730 commands, so anything near zero means a truncated or empty
-    /// tarball — which would otherwise wipe the installed specs down to the app's own builtins.
     nonisolated static let minimumPackCommands = 100
 
-    /// Must run before the installed pack is touched or the ETag recorded: a bad
-    /// download this rejects should leave the user's specs untouched and get retried
-    /// on the next check.
+    /// Must run before the installed pack is touched or the ETag recorded, or a bad download wipes good specs.
     nonisolated static func validate(pack dir: String) throws {
         guard FileManager.default.fileExists(atPath: "\(dir)/index.json") else {
             throw NSError(domain: "tine", code: 3,
@@ -82,9 +69,6 @@ final class SpecInstaller: ObservableObject {
         }
     }
 
-    /// Skips the download when the installed pack's ETag already matches the fork's.
-    /// `announce` posts a notification once the swap lands — for installs the user
-    /// didn't ask for, so ~730 CLIs never change underneath them silently.
     func install(announce: Bool = false) {
         guard status != .running else { return }
         status = .running
@@ -113,17 +97,12 @@ final class SpecInstaller: ObservableObject {
 
     nonisolated static func updateAction(remote: String?, stored: String?,
                                          autoInstall: Bool) -> UpdateAction {
-        // Fails closed: no ETag means no network, which is never a reason to act.
         guard let remote else { return .none }
-        // No stored marker means this installed before ETag tracking existed — adopt
-        // the current pack as the baseline instead of flagging every such user once.
         guard let stored else { return .adoptBaseline }
         guard remote != stored else { return .none }
         return autoInstall ? .autoInstall : .flag
     }
 
-    /// Checks now, then daily — a launch-only check would leave a long-running
-    /// session (the agent stays up for days) on a stale pack forever.
     func startChecking() {
         checkForUpdate()
         timer = Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) { [weak self] _ in
@@ -149,8 +128,6 @@ final class SpecInstaller: ObservableObject {
         }
     }
 
-    /// Content-derived and stable, so it changes exactly when the fork republishes.
-    /// Nil on any non-200 or network failure.
     nonisolated private static func remoteETag() async throws -> String? {
         var req = URLRequest(url: packURL)
         req.httpMethod = "HEAD"
@@ -163,9 +140,7 @@ final class SpecInstaller: ObservableObject {
         try? String(contentsOfFile: markerPath, encoding: .utf8)
     }
 
-    /// The pack only re-merges builtin-specs/ on download, so without this an app
-    /// update that changes it (e.g. new `tine` subcommands) would never reach an
-    /// already-installed pack.
+    /// Skip this and an app update's builtin-spec changes never reach an already-installed pack.
     nonisolated static func refreshBuiltins() {
         guard isInstalled() else { return }
         mergeBuiltins(into: specsDir)
@@ -206,7 +181,7 @@ final class SpecInstaller: ObservableObject {
         return installedCount()
     }
 
-    /// Registers the copied specs in index.json too, so they resolve like pack specs.
+    /// Copying the .js files alone isn't enough — skip the index.json registration and they never resolve.
     nonisolated private static func mergeBuiltins(into dir: String) {
         let fm = FileManager.default
         guard let res = Bundle.main.resourcePath else { return }

@@ -1,15 +1,12 @@
 import AppKit
 
-/// A session (identified by its shell's `$$`) takes over the panel only by editing its own
-/// line while its terminal is frontmost — so a background shell's async prompt redraw
-/// (p10k-class plugins, a `TMOUT` clock) can never re-own, move, or dismiss the panel.
+/// A session takes over the panel only by editing its own line while its terminal is frontmost.
 final class SessionOwnership {
     struct Verdict {
         let changed: Bool
         let appPID: pid_t?
     }
 
-    /// Shells that predate the session id send 0, which `isOwner` always treats as owning.
     private(set) var owner: pid_t?
     private var lines: [pid_t: FeedMessage] = [:]
     private var apps: [pid_t: pid_t] = [:] // 0 = no application ancestor
@@ -36,14 +33,12 @@ final class SessionOwnership {
         lines[session] = msg
         prune()
         let app = frontmostTerminal(of: session)
-        // A non-owner can't take over on an empty line, or a background shell's first
-        // redraw would seize the panel and dismiss what the user has up.
         guard isOwner(session) || (changed && !msg.buffer.isEmpty && app != nil) else { return nil }
         if changed, app != nil { owner = session }
         return Verdict(changed: changed, appPID: app)
     }
 
-    /// Under tmux or ssh there's no application ancestor to compare, so any frontmost app qualifies.
+    /// tmux/ssh have no application ancestor: don't gate on a comparison that can't be made.
     private func frontmostTerminal(of session: pid_t) -> pid_t? {
         let front = frontmostPID()
         guard let app = terminalApp(of: session) else { return front }
@@ -53,9 +48,7 @@ final class SessionOwnership {
     private func terminalApp(of session: pid_t) -> pid_t? {
         if let cached = apps[session] {
             if cached == 0 { return nil }
-            // Re-resolve rather than trust a cached terminal that has quit: the OS may have
-            // reused its pid for something else, which would strand this shell without a panel.
-            if isRunningApp(cached) { return cached }
+            if isRunningApp(cached) { return cached } // re-check: the OS may have reused a quit pid
         }
         let found = terminalPID(session) ?? 0
         apps[session] = found

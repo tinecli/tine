@@ -12,8 +12,6 @@ struct AskEntry: Codable, Equatable {
     }
 }
 
-/// Per-machine by definition — it describes what *this* user has installed — so it
-/// is never shipped, only built into the runtime data dir.
 enum AskIndex {
     struct Stored: Codable {
         let signature: String
@@ -21,7 +19,7 @@ enum AskIndex {
         let entries: [AskEntry]
     }
 
-    /// `TINE_DATA_DIR` overrides this for the test harness.
+    /// Tests must set `TINE_DATA_DIR`, or they read/write the real ~/.local/share/tine.
     static var dir: String {
         ProcessInfo.processInfo.environment["TINE_DATA_DIR"]
             ?? "\(NSHomeDirectory())/.local/share/tine"
@@ -46,9 +44,7 @@ enum AskIndex {
         try encoder.encode(stored).write(to: URL(fileURLWithPath: path), options: .atomic)
     }
 
-    // MARK: - Build
-
-    /// Unchanged mtimes on the same PATH dirs mean the installed tools haven't changed either.
+    /// Weakening this (e.g. dropping mtimes) makes the index cache never invalidate.
     static func signature(pathDirs: [String]) -> String {
         let parts = pathDirs.map { dir -> String in
             let attrs = try? FileManager.default.attributesOfItem(atPath: dir)
@@ -58,12 +54,8 @@ enum AskIndex {
         return parts.joined(separator: ":")
     }
 
-    /// Already covers every binary on a full dev machine; stops a pathological PATH
-    /// from turning the build into a crawl.
     static let maxEntries = 8000
 
-    /// Fills in for a tool with no man page (autocomplete#11 added these to index.json);
-    /// an older pack simply has none.
     static func packDescriptions(in packDir: String) -> [String: String] {
         guard let data = FileManager.default.contents(atPath: "\(packDir)/index.json"),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -72,7 +64,7 @@ enum AskIndex {
         return raw.compactMapValues { $0 as? String }
     }
 
-    /// Blocking: reads a man page per binary. Call it off the main thread.
+    /// Blocking — call off the main thread, or a full index build freezes the UI.
     static func build(shellPath: String, packDescriptions: [String: String]) -> Stored {
         let dirs = pathDirs(shellPath)
         let pages = manPages(in: manDirs(pathDirs: dirs))
@@ -94,7 +86,7 @@ enum AskIndex {
         }
     }
 
-    /// First hit per name wins, matching shell PATH shadowing.
+    /// Keep first-hit-wins — matches shell PATH shadowing; last-hit-wins picks the wrong binary.
     static func binaries(in dirs: [String]) -> [String] {
         var seen = Set<String>()
         var names: [String] = []
@@ -118,8 +110,6 @@ enum AskIndex {
             && name.range(of: "^[A-Za-z0-9][A-Za-z0-9._+-]*$", options: .regularExpression) != nil
     }
 
-    /// `/opt/homebrew/bin` documents itself in `/opt/homebrew/share/man`, etc. Covers a Mac;
-    /// `manpath(1)` knows about a few more (Xcode's toolchain) the caller may add.
     static func manDirs(pathDirs: [String]) -> [String] {
         var seen = Set<String>()
         var dirs: [String] = []
@@ -135,11 +125,9 @@ enum AskIndex {
         return dirs
     }
 
-    /// `man3` and similar describe a C function, not a command-line tool.
     private static let sections = ["man1", "man6", "man8"]
 
-    /// A readdir per section dir, instead of spawning `man -w` per binary. Compressed
-    /// pages are skipped — tine has no gunzip, and macOS ships only a handful of them.
+    /// `.gz` pages must stay skipped — tine has no gunzip and would show garbled text.
     static func manPages(in manDirs: [String]) -> [String: String] {
         var paths: [String: String] = [:]
         for manDir in manDirs {
@@ -174,11 +162,7 @@ enum AskIndex {
         return String(decoding: data, as: UTF8.self)
     }
 
-    // MARK: - Man page parsing (pure, exercised by app/Tests/AskHarness.swift)
-
-    /// Handles both macOS man-page macro sets: man's plain "tool \- what it does" line
-    /// under `.SH NAME`, and mdoc's `.Nm`/`.Nd` pair. Result is unroffed below — tine
-    /// didn't write this file, so nothing displays it raw.
+    /// Must stay unroffed below — this is untrusted local content, never display it raw.
     static func nameLine(inManPage source: String) -> String? {
         guard let section = section(named: ["NAME"], in: source, maxLines: 12) else { return nil }
         var parts: [String] = []
@@ -238,8 +222,6 @@ enum AskIndex {
         return first.trimmingCharacters(in: CharacterSet(charactersIn: "\"")).uppercased()
     }
 
-    /// Reduces roff escapes to the text they stand for; anything a terminal would
-    /// still read as an escape afterward is dropped.
     static func unroff(_ raw: String, limit: Int = maxDescription) -> String {
         var out = ""
         var iterator = raw.startIndex
@@ -285,11 +267,7 @@ enum AskIndex {
 
     static let maxDescription = 180
 
-    /// A NAME line that only repeats the tool's own name ("csvlook — csvlook Documentation")
-    /// says nothing, so it's dropped in favor of ranking on the name alone.
     static func description(_ raw: String, of name: String) -> String {
-        // The heading goes either way, even for a family-shared page ("lzegrep" reading
-        // xzgrep's) whose name doesn't match `name` — the entry's key is `name` regardless.
         var text = raw
         if let dash = text.range(of: " - "), text[..<dash.lowerBound].count <= name.count + 24,
            !text[..<dash.lowerBound].contains(" ") || text.hasPrefix(name) {
@@ -302,16 +280,11 @@ enum AskIndex {
 
     private static let filler: Set<String> = ["documentation", "manual", "man", "page", "utility"]
 
-    // MARK: - Retrieval (pure, exercised by app/Tests/AskHarness.swift)
-
     struct Hit {
         let entry: AskEntry
         let score: Double
     }
 
-    /// BM25 over name and description, name weighted, plus a name-substring bonus
-    /// (finds `csvlook` for "csv"). Keyword, not embeddings: `NLContextualEmbedding` and
-    /// `NLEmbedding.sentenceEmbedding` both measured worse on this corpus (see PR #32).
     static func rank(_ query: String, in entries: [AskEntry], limit: Int,
                      frecency: (String) -> Double = { _ in 0 }) -> [Hit] {
         let queryTerms = weighted(terms(query).filter { !stopwords.contains($0) })
@@ -363,8 +336,6 @@ enum AskIndex {
     private static let frecencyWeight = 0.25
     private static let maxFrecencyBonus = 1.0
 
-    /// Adds each term's synonyms (a page says "remove", the user says "delete"),
-    /// weighted below the words the user actually wrote.
     static func weighted(_ queryTerms: [String]) -> [String: Double] {
         var weights: [String: Double] = [:]
         for term in queryTerms { weights[term] = 1 }
@@ -400,8 +371,6 @@ enum AskIndex {
         "csv": ["delimited", "comma"],
     ]
 
-    /// Drops a versioned duplicate (`json_xs5.34` alongside `json_xs`) and collapses a
-    /// family sharing one man page (`lzgrep`/`xzgrep`/`zipgrep`) to its best-scoring name.
     private static func prune(_ ranked: [Hit]) -> [Hit] {
         let names = Set(ranked.map { $0.entry.name })
         var shown = Set<String>()
@@ -435,7 +404,6 @@ enum AskIndex {
         return word
     }
 
-    /// "a cli that can format csv" is really a question about "format csv".
     private static let stopwords: Set<String> = [
         "the", "and", "for", "that", "with", "from", "into", "how", "can", "use", "using",
         "are", "cli", "tool", "command", "line", "get", "make", "run", "program", "some",
