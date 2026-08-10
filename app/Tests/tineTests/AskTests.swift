@@ -6,6 +6,7 @@ struct AskExampleTests {
         (".Dl Nm", "tool"),
         (".Dl Nm Fl x", "tool -x"),
         (".Dl Nm Fl a b", "tool -a -b"),
+        (".Dl Nm Fl a , Ar file", "tool -a , file"),
         (".Dl Nm Pa /tmp/archive", "tool /tmp/archive"),
         (".Dl Nm Ar source", "tool source"),
         (#".It Li "tool --literal value""#, "tool --literal value"),

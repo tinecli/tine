@@ -238,6 +238,9 @@ enum AskIndex {
     private static let mdocDroppedInlineMacros: Set<String> = [
         "Dc", "Do", "Oc", "Oo", "Op", "Qc", "Qo", "Sc", "So",
     ]
+    private static let mdocPunctuation: Set<String> = [
+        ",", ".", ";", ":", "(", ")", "[", "]",
+    ]
     private static let translatedMdocMacros = mdocArguments
         .union(mdocQuoteDelimiters.keys).union(mdocDroppedInlineMacros)
         .union(["Fl", "Nm", "Ns", "Pf", "Xr"])
@@ -299,7 +302,8 @@ enum AskIndex {
                 var flags: [String] = []
                 while index + 1 < tokens.count,
                       tokens[index + 1].quoted
-                        || !translatedMdocMacros.contains(tokens[index + 1].text) {
+                        || (!translatedMdocMacros.contains(tokens[index + 1].text)
+                            && !mdocPunctuation.contains(tokens[index + 1].text)) {
                     flags.append("-" + tokens[index + 1].text)
                     index += 1
                 }
