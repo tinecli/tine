@@ -42,7 +42,9 @@ final class Asker: ObservableObject {
         case note(String)
     }
 
-    @Published private(set) var status: Status = .idle
+    @Published private var jobState = JobState<Status>(.idle, timeout: 180)
+
+    var status: Status { jobState.status }
 
     /// Set by the app, which owns the JS context — called on the main thread.
     var validate: ((String) -> AskValidation)?
@@ -65,11 +67,6 @@ final class Asker: ObservableObject {
         self.queryExpansion = queryExpansion
         self.expansionTimeout = expansionTimeout
     }
-
-    private var job: (label: String, startedAt: Date)?
-
-    /// Without this, a wedged model call blocks every question after it, forever.
-    private nonisolated static let jobTimeout: TimeInterval = 180
 
     var statusLine: String {
         switch status {
@@ -98,59 +95,51 @@ final class Asker: ObservableObject {
         guard let question = Self.question(raw) else {
             return reject("ask what? — try: tine ask \"convert an image to jpeg\"")
         }
-        return start(question) { [weak self] in
-            Task { await self?.answer(question) }
+        return start(question) { [weak self] job in
+            Task { await self?.answer(question, job: job) }
         }
     }
 
     func index() -> String {
-        start("index") { [weak self] in
-            Task { await self?.reindex() }
+        start("index") { [weak self] job in
+            Task { await self?.reindex(job: job) }
         }
     }
 
     private func busy() -> String? {
-        guard let job, Date().timeIntervalSince(job.startedAt) < Self.jobTimeout else { return nil }
-        return "busy:\(job.label.socketSafe)"
+        jobState.busy().map { "busy:\($0.socketSafe)" }
     }
 
-    private func start(_ label: String, _ work: () -> Void) -> String {
-        if let busy = busy() { return busy }
-        let startedAt = Date()
-        job = (label, startedAt)
-        report(startedAt, .running("thinking"))
-        work()
-        return "started"
+    private func start(_ label: String, _ work: (JobState<Status>.Job) -> Void) -> String {
+        switch jobState.start(label, status: .running("thinking")) {
+        case .started(let job):
+            work(job)
+            return "started"
+        case .busy(let label):
+            return "busy:\(label.socketSafe)"
+        }
     }
 
     private func reject(_ reason: String) -> String {
         if let busy = busy() { return busy }
-        status = .failed(reason)
+        jobState.reset(to: .failed(reason))
         return "started"
     }
 
-    /// Must stay guarded: a job that outran `jobTimeout` may already be superseded,
-    /// and would otherwise overwrite the job that replaced it.
-    private func report(_ startedAt: Date, _ stage: Status) {
-        guard job?.startedAt == startedAt else { return }
-        status = stage
+    private func report(_ job: JobState<Status>.Job, _ stage: Status) {
+        jobState.report(stage, for: job)
     }
 
-    private func finish(_ startedAt: Date, _ result: Status) {
-        guard job?.startedAt == startedAt else { return }
-        job = nil
-        status = result
+    private func finish(_ job: JobState<Status>.Job, _ result: Status) {
+        jobState.finish(result, for: job)
     }
 
-    private var startedAt: Date? { job?.startedAt }
-
-    private func answer(_ question: String) async {
-        guard let startedAt else { return }
+    private func answer(_ question: String, job: JobState<Status>.Job) async {
         let entries: [AskEntry]
         do {
-            entries = try await corpus(rebuild: false, startedAt: startedAt)
+            entries = try await corpus(rebuild: false, job: job)
         } catch {
-            finish(startedAt, .failed(error.localizedDescription))
+            finish(job, .failed(error.localizedDescription))
             return
         }
         let score = frecency?() ?? { _ in 0 }
@@ -160,25 +149,25 @@ final class Asker: ObservableObject {
             expand: queryExpansion
         )
         guard !candidates.isEmpty else {
-            finish(startedAt, .failed("no tool on your PATH looks like a match for that"))
+            finish(job, .failed("no tool on your PATH looks like a match for that"))
             return
         }
         guard SpecLearner.unavailableReason() == nil else {
-            finish(startedAt, .done(rows(candidates)))
+            finish(job, .done(rows(candidates)))
             return
         }
-        report(startedAt, .running("reading what your tools do"))
+        report(job, .running("reading what your tools do"))
         guard let picked = await pick(question: question, from: candidates) else {
-            finish(startedAt, .done(rows(candidates)))
+            finish(job, .done(rows(candidates)))
             return
         }
         let reordered = candidates.filter { $0.name != picked.name }
         guard let composed = await compose(question: question, tool: picked,
-                                           startedAt: startedAt) else {
-            finish(startedAt, .done(rows([picked] + reordered)))
+                                           job: job) else {
+            finish(job, .done(rows([picked] + reordered)))
             return
         }
-        finish(startedAt, .done(composed + rows([picked] + reordered)))
+        finish(job, .done(composed + rows([picked] + reordered)))
     }
 
     private static let candidates = 10
@@ -196,11 +185,12 @@ final class Asker: ObservableObject {
     }
 
     /// No spec, no command: without a parser to check it against, a composed line ships unvalidated.
-    private func compose(question: String, tool: AskEntry, startedAt: Date) async -> [Row]? {
+    private func compose(question: String, tool: AskEntry,
+                         job: JobState<Status>.Job) async -> [Row]? {
         let documented = outline?(tool.name) ?? []
         guard !documented.isEmpty else { return nil }
         let examples = AskIndex.examples(inManPageAt: tool.manPagePath)
-        report(startedAt, .running("composing a \(tool.name) command"))
+        report(job, .running("composing a \(tool.name) command"))
         var rejected = ""
         for _ in 0..<Self.attempts {
             guard let answer = await Self.composedLine(question: question, tool: tool,
@@ -241,7 +231,7 @@ final class Asker: ObservableObject {
         return !dangerous && !looksDestructive(line)
     }
 
-    private func corpus(rebuild: Bool, startedAt: Date) async throws -> [AskEntry] {
+    private func corpus(rebuild: Bool, job: JobState<Status>.Job) async throws -> [AskEntry] {
         let path = shellPath?() ?? ProcessInfo.processInfo.environment["PATH"] ?? ""
         let packDir = self.packDir
         let dirs = AskIndex.pathDirs(path)
@@ -251,7 +241,7 @@ final class Asker: ObservableObject {
         if !rebuild, !AskIndex.needsRebuild(stored, signature: signature), let stored {
             return stored.entries
         }
-        report(startedAt, .running("indexing the tools on your PATH"))
+        report(job, .running("indexing the tools on your PATH"))
         let built = await Task.detached(priority: .utility) {
             AskIndex.build(shellPath: path,
                            packDescriptions: AskIndex.packDescriptions(in: packDir))
@@ -261,15 +251,14 @@ final class Asker: ObservableObject {
         return built.entries
     }
 
-    private func reindex() async {
-        guard let startedAt else { return }
+    private func reindex(job: JobState<Status>.Job) async {
         do {
-            let entries = try await corpus(rebuild: true, startedAt: startedAt)
+            let entries = try await corpus(rebuild: true, job: job)
             let described = entries.filter { !$0.description.isEmpty }.count
-            finish(startedAt, .done([.note("indexed \(entries.count) tools on your PATH, "
+            finish(job, .done([.note("indexed \(entries.count) tools on your PATH, "
                 + "\(described) with a description")]))
         } catch {
-            finish(startedAt, .failed(error.localizedDescription))
+            finish(job, .failed(error.localizedDescription))
         }
     }
 

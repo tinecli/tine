@@ -65,7 +65,9 @@ final class SpecLearner: ObservableObject {
         case failed(String)
     }
 
-    @Published private(set) var status: Status = .idle
+    @Published private var jobState = JobState<Status>(.idle, timeout: 150)
+
+    var status: Status { jobState.status }
 
     var statusLine: String {
         switch status {
@@ -95,55 +97,54 @@ final class SpecLearner: ObservableObject {
         configuredDirs ?? TineConfig.load().localSpecsDirsExpanded
     }
 
-    private var job: (command: String, startedAt: Date)?
-
-    /// Without this, a wedged model call blocks every `tine learn` after it, forever.
-    private nonisolated static let jobTimeout: TimeInterval = 150
-
     func learn(command: String, force: Bool) -> String {
-        if let job, Date().timeIntervalSince(job.startedAt) < Self.jobTimeout {
-            return "busy:\(job.command)"
+        if let label = jobState.busy() {
+            return "busy:\(label)"
         }
         guard Self.isCommandName(command) else {
-            status = .failed("not a command name: \(command.socketSafe)")
+            jobState.reset(to: .failed("not a command name: \(command.socketSafe)"))
             return "started"
         }
         guard let dir = specDirs.first else {
-            status = .failed("no spec location configured")
+            jobState.reset(to: .failed("no spec location configured"))
             return "started"
         }
         let path = Self.destination(command: command, in: dir)
         if FileManager.default.fileExists(atPath: path) {
             guard force else {
-                status = .failed("\(command) was learned already — see \(path), "
-                    + "or re-run with --force")
+                jobState.reset(to: .failed("\(command) was learned already — see \(path), "
+                    + "or re-run with --force"))
                 return "started"
             }
             // A spec the user wrote themselves sits at the same path and is never overwritten.
             guard Self.isLearnedFile(path) else {
-                status = .failed("\(path) is your own spec, not one tine wrote — "
-                    + "move it aside to learn this command again")
+                jobState.reset(to: .failed("\(path) is your own spec, not one tine wrote — "
+                    + "move it aside to learn this command again"))
                 return "started"
             }
         }
         if !force, Self.packHasSpec(command, in: packDir) {
-            status = .failed("\(command) already has a spec — write \(dir)/extend/\(command).js "
+            jobState.reset(to: .failed("\(command) already has a spec — write \(dir)/extend/\(command).js "
                 + "to add to it, \(dir)/override/\(command).js to replace it, "
-                + "or re-run with --force to merge in what its --help documents")
+                + "or re-run with --force to merge in what its --help documents"))
             return "started"
         }
         if let reason = Self.unavailableReason() {
-            status = .failed(reason)
+            jobState.reset(to: .failed(reason))
             return "started"
         }
 
-        let startedAt = Date()
-        job = (command, startedAt)
-        status = .running("reading \(command) --help")
+        let job: JobState<Status>.Job
+        switch jobState.start(command, status: .running("reading \(command) --help")) {
+        case .started(let admitted): job = admitted
+        case .busy(let label): return "busy:\(label)"
+        }
         Task.detached {
             do {
                 let help = try Self.help(for: command)
-                await MainActor.run { self.status = .running("learning \(command)") }
+                await MainActor.run {
+                    _ = self.jobState.report(.running("learning \(command)"), for: job)
+                }
                 let spec = try await Self.generate(command: command, help: help)
                 guard let module = Self.specModule(command: command, from: spec, help: help) else {
                     throw Failure("nothing the help of \(command) documents came back — "
@@ -151,23 +152,20 @@ final class SpecLearner: ObservableObject {
                 }
                 try Self.write(module, to: path)
                 await MainActor.run {
-                    self.finish(startedAt, .done(path: path,
-                                                 partial: help.count > Self.maxHelpCharacters,
-                                                 coverage: Self.optionCoverage(from: spec,
-                                                                               help: help)))
+                    self.finish(job, .done(path: path,
+                                           partial: help.count > Self.maxHelpCharacters,
+                                           coverage: Self.optionCoverage(from: spec,
+                                                                         help: help)))
                 }
             } catch {
-                await MainActor.run { self.finish(startedAt, .failed(error.localizedDescription)) }
+                await MainActor.run { self.finish(job, .failed(error.localizedDescription)) }
             }
         }
         return "started"
     }
 
-    /// Must stay guarded: a timed-out job may be superseded, and must not overwrite the one that replaced it.
-    private func finish(_ startedAt: Date, _ result: Status) {
-        guard job?.startedAt == startedAt else { return }
-        job = nil
-        status = result
+    private func finish(_ job: JobState<Status>.Job, _ result: Status) {
+        guard jobState.finish(result, for: job) else { return }
         if case .done = result { onLearned?() }
     }
 
