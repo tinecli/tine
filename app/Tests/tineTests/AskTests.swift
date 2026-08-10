@@ -12,8 +12,12 @@ struct AskExampleTests {
         (".Dl Nm Ic status", "tool status"),
         (".Dl Nm Sy keyword", "tool keyword"),
         (".Dl Nm No text", "tool text"),
-        (".Dl Nm Qq Li value", "tool value"),
-        (".Dl Nm Pq Fl x", "tool -x"),
+        (".Dl Nm replacement", "replacement"),
+        (".Dl Nm Qq Li value", "tool \"value\""),
+        (".Dl Nm Pq Fl x", "tool (-x)"),
+        (".Dl Dq multi word arg", "\"multi word arg\""),
+        (#".Dl csreq -r="identifier com.foo.test" -b output.csreq"#,
+         #"csreq -r="identifier com.foo.test" -b output.csreq"#),
         (#".It Li "tool --list" \" trailing comment"#, "tool --list"),
         (".Dl Nm Ns Pa suffix", "toolsuffix"),
     ]
@@ -52,6 +56,19 @@ struct AskExampleTests {
         let page = ".SH NAME\ntool \\- a tool\n.SH EXAMPLES\n"
             + ".SS First form\n.B tool --first\n.SH SEE ALSO\n"
         #expect(AskIndex.examples(inManPage: page) == "First form tool --first")
+    }
+
+    @Test func mdocExamplesContinueThroughSubsectionHeadings() {
+        let page = ".Sh NAME\n.Nm tool\n.Sh EXAMPLES\n"
+            + ".Ss First form\n.Dl Nm Fl first\n.Sh SEE ALSO\n"
+        #expect(AskIndex.examples(inManPage: page) == "First form tool -first")
+    }
+
+    @Test func nameStopsAtRoffSubsectionHeadings() {
+        let page = ".SH NAME\nnpm-access \\- Set access level on published packages\n"
+            + ".SS Synopsis\nnpm access list packages [<user>]\n.SH DESCRIPTION\n"
+        #expect(AskIndex.nameLine(inManPage: page)
+            == "npm-access - Set access level on published packages")
     }
 
     @Test func examplesPastTheHardCeilingStayUnread() throws {
