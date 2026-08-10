@@ -10,7 +10,11 @@ import { getCustomSuggestions } from "./src/generators/customSuggestionsGenerato
 import { getScriptSuggestions } from "./src/generators/scriptSuggestionsGenerator.js";
 import { getTemplateSuggestions } from "./src/generators/templateSuggestionsGenerator.js";
 import { resetCaches } from "./src/parser/caches.js";
-import { MissingSpecError, parseArguments } from "./src/parser/index.js";
+import {
+  LoadLocalSpecError,
+  MissingSpecError,
+  parseArguments,
+} from "./src/parser/index.js";
 import type { Suggestion } from "./src/shared/internal.js";
 import { SuggestionFlag } from "./src/shared/utils.js";
 import { getCommand } from "./src/shell-parser/index.js";
@@ -68,9 +72,20 @@ const shellContext = (cwd: string) => ({
 
 // Shell aliases (set by the app from the user's `alias` output) so `pc ` →
 // `plug-cli ` expands to the aliased command's spec.
-const shellAliases = (): Record<string, string> =>
-  (globalThis as { __tineAliases?: Record<string, string> }).__tineAliases ??
-  {};
+const shellAliases = (): Record<string, string> => {
+  const value = (
+    globalThis as {
+      __tineAliases?: Record<string, string>;
+    }
+  ).__tineAliases;
+  const aliases: Record<string, string> = Object.create(null);
+  if (!value) return aliases;
+
+  for (const [name, command] of Object.entries(value)) {
+    aliases[name] = command;
+  }
+  return aliases;
+};
 
 const frecencyIndex = (): Record<string, Record<string, unknown>> => {
   const value = (globalThis as { __tineFrecency?: unknown }).__tineFrecency;
@@ -148,8 +163,11 @@ async function suggest(
   if (!command) return { searchTerm: "", items: [] };
   const context = shellContext(cwd);
   const parsed = await parseArguments(command as never, context as never).catch(
-    rethrowUnlessMissingSpec,
+    rethrowUnlessUnavailableSpec,
   );
+  if (parsed instanceof LoadLocalSpecError) {
+    return historyOnlyResult(upToCursor);
+  }
   if (parsed instanceof MissingSpecError) {
     const history = historyOnlyResult(upToCursor);
     if (history.items.length > 0) return history;
@@ -257,8 +275,10 @@ function historyValues(
   return getHistoryValueSuggestions(cmd, historyFlagKey(upToCursor));
 }
 
-const rethrowUnlessMissingSpec = (err: unknown): MissingSpecError => {
-  if (err instanceof MissingSpecError) return err;
+const rethrowUnlessUnavailableSpec = (err: unknown) => {
+  if (err instanceof MissingSpecError || err instanceof LoadLocalSpecError) {
+    return err;
+  }
   throw err;
 };
 
