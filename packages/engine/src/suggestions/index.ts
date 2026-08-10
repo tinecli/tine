@@ -221,6 +221,8 @@ export const getAllSuggestions = (
   }
 
   const lastAnnotation = annotations[annotations.length - 1];
+  if (!lastAnnotation) return suggestions;
+
   const isInOptionChain =
     lastAnnotation.type === TokenType.Composite &&
     lastAnnotation.subtokens[lastAnnotation.subtokens.length - 1]?.type ===

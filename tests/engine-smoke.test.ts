@@ -144,6 +144,9 @@ beforeAll(async () => {
           ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789: use(99),
         },
       },
+      "./mytool": {
+        "": { "path.example.com": use(5) },
+      },
       both: {
         "": { "remembered.example.com": use(5) },
       },
@@ -218,6 +221,26 @@ test("a malformed descriptions map leaves them blank", async () => {
 
 test("the bundle exposes tineSuggest", () => {
   expect(tineSuggest).toBeFunction();
+});
+
+test("a whitespace-only buffer suggests nothing without an error", async () => {
+  expect(await names("   ")).toEqual([]);
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+});
+
+test("a leading semicolon suggests nothing without an error", async () => {
+  expect(await names("; pc ")).toEqual([]);
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+});
+
+test("toString is not inherited as an alias", async () => {
+  expect(await names("toString ")).toEqual([]);
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+});
+
+test("__proto__ is not inherited as an alias", async () => {
+  expect(await names("__proto__ ")).toEqual([]);
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
 });
 
 test("suggests subcommands", async () => {
@@ -299,6 +322,13 @@ test("a command with no spec at all still offers its history values", async () =
   // The old path threw MissingSpecError on every keystroke here.
   expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
   expect(await names("mytool w")).toEqual(["web.example.com"]);
+});
+
+test("a path command with no local spec still offers history values", async () => {
+  const { items } = await suggest("./mytool ");
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+  expect(items.map((item) => item.name)).toEqual(["path.example.com"]);
+  expect(items[0].type).toBe("history");
 });
 
 test("a no-spec command keys its history values by the flag in front", async () => {
