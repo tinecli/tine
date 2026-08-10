@@ -554,9 +554,9 @@ struct TineApp: App {
             get: { delegate.state.config.showMenuBarIcon },
             set: { delegate.state.config.showMenuBarIcon = $0 }
         )) {
-            DashboardMenu()
+            DashboardMenu(updater: delegate.appUpdater)
         } label: {
-            MenuBarLabel()
+            MenuBarLabel(updater: delegate.appUpdater)
         }
     }
 }
@@ -565,9 +565,18 @@ struct TineApp: App {
 /// `openWindow` can service open requests from the socket / launch / reopen.
 private struct MenuBarLabel: View {
     @Environment(\.openWindow) private var openWindow
+    @ObservedObject var updater: AppUpdater
     private var isDev: Bool { Bundle.main.bundleIdentifier?.hasSuffix(".dev") ?? false }
     var body: some View {
         Image(systemName: isDev ? "hammer.fill" : "chevron.forward.2")
+            .overlay(alignment: .topTrailing) {
+                if updater.newerVersion != nil || updater.readyVersion != nil {
+                    Circle()
+                        .fill(.red)
+                        .frame(width: 5, height: 5)
+                        .offset(x: 2, y: -2)
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .tineOpenDashboard)) { _ in
                 openWindow(id: TineApp.dashboardID)
                 NSApp.activate(ignoringOtherApps: true)
@@ -577,10 +586,20 @@ private struct MenuBarLabel: View {
 
 private struct DashboardMenu: View {
     @Environment(\.openWindow) private var openWindow
+    @ObservedObject var updater: AppUpdater
     var body: some View {
         Button("Open Dashboard") {
             openWindow(id: TineApp.dashboardID)
             NSApp.activate(ignoringOtherApps: true)
+        }
+        if let readyVersion = updater.readyVersion {
+            Button("Update to \(readyVersion) and Relaunch") {
+                updater.applyAndRelaunch()
+            }
+        } else if updater.newerVersion != nil {
+            Button("Download update…") {
+                updater.check(manual: true)
+            }
         }
         Divider()
         Button("Quit tine") { NSApp.terminate(nil) }

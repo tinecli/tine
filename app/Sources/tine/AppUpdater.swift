@@ -34,6 +34,7 @@ final class AppUpdater: ObservableObject {
 
     private var staged: (version: String, app: URL)?
     private var timer: Timer?
+    private var wakeObserver: NSObjectProtocol?
     private var swapping = false
 
     /// The verified version waiting to replace this one on quit.
@@ -73,6 +74,11 @@ final class AppUpdater: ObservableObject {
         Self.clearStaging()
         check()
         timer = Timer.scheduledTimer(withTimeInterval: Self.checkInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.check() }
+        }
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
             Task { @MainActor in self?.check() }
         }
     }
@@ -374,11 +380,13 @@ enum UpdateNotice {
         if let key {
             let seen = "tine.notified.\(key)"
             guard !UserDefaults.standard.bool(forKey: seen) else { return }
-            UserDefaults.standard.set(true, forKey: seen)
         }
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert]) { granted, _ in
             guard granted else { return }
+            if let key {
+                UserDefaults.standard.set(true, forKey: "tine.notified.\(key)")
+            }
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
