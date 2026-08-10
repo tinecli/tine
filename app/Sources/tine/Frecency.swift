@@ -40,7 +40,12 @@ final class Frecency {
 
     private enum CachedProjectRoot {
         case root(String)
-        case missing
+        case missing(expiresAt: TimeInterval)
+    }
+
+    private enum ProjectRootCacheLookup {
+        case hit(String?)
+        case miss(String)
     }
 
     static let storePath = "\(NSHomeDirectory())/.local/share/tine/frecency.json"
@@ -51,6 +56,7 @@ final class Frecency {
     private static let maxLiveEntries = 5000
     private static let maxValuesPerKey = 20
     private static let writeDelay = 1.0
+    private static let projectRootMissTTL: TimeInterval = 30
     private static let halfLifeMs = 7.0 * 24 * 60 * 60 * 1000
 
     private let queue = DispatchQueue(label: "tine.frecency", qos: .utility)
@@ -58,6 +64,7 @@ final class Frecency {
     private var live: Index = [:]
     private var scoped: [String: Index] = [:]
     private var projectRoots: [String: CachedProjectRoot] = [:]
+    private var projectRootCallbacks: [String: [(Index) -> Void]] = [:]
     private var aliases: [String: String] = [:]
     /// Must never be persisted — a value is more likely than a flag to be a secret.
     private var values: [String: [String: [String: Use]]] = [:]
@@ -67,13 +74,16 @@ final class Frecency {
     private let historyPath: String
     private let storePath: String
     private let logPath: String
+    private let projectRootMissTTL: TimeInterval
 
     init(historyPath: String = Frecency.defaultHistoryPath,
          storePath: String = Frecency.storePath,
-         logPath: String = TineLog.path) {
+         logPath: String = TineLog.path,
+         projectRootMissTTL: TimeInterval = Frecency.projectRootMissTTL) {
         self.historyPath = historyPath
         self.storePath = storePath
         self.logPath = logPath
+        self.projectRootMissTTL = projectRootMissTTL
     }
 
     var index: Index { queue.sync { merged } }
@@ -81,13 +91,40 @@ final class Frecency {
 
     func scopedIndex(for cwd: String) -> Index {
         queue.sync {
-            guard let root = cachedProjectRoot(for: cwd) else { return [:] }
+            guard case let .hit(root?) = cachedProjectRoot(for: cwd) else { return [:] }
             return scoped[root] ?? [:]
         }
     }
 
     func projectRoot(for cwd: String) -> String? {
-        queue.sync { cachedProjectRoot(for: cwd) }
+        queue.sync {
+            guard case let .hit(root) = cachedProjectRoot(for: cwd) else { return nil }
+            return root
+        }
+    }
+
+    func resolveProjectRoot(for cwd: String, completion: @escaping (Index) -> Void) {
+        let start = queue.sync { () -> String? in
+            guard case let .miss(standardized) = cachedProjectRoot(for: cwd) else {
+                return nil
+            }
+            projectRootCallbacks[standardized, default: []].append(completion)
+            return projectRootCallbacks[standardized]?.count == 1 ? standardized : nil
+        }
+        guard let start else { return }
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let root = Self.findProjectRoot(startingAt: start)
+            self?.queue.async { [weak self] in
+                guard let self else { return }
+                self.projectRoots[start] = root.map(CachedProjectRoot.root)
+                    ?? .missing(expiresAt: Date().timeIntervalSince1970
+                        + self.projectRootMissTTL)
+                let index = root.flatMap { self.scoped[$0] } ?? [:]
+                let callbacks = self.projectRootCallbacks.removeValue(forKey: start) ?? []
+                callbacks.forEach { $0(index) }
+            }
+        }
     }
 
     func setAliases(_ aliases: [String: String]) {
@@ -134,7 +171,12 @@ final class Frecency {
         return queue.sync {
             Self.bump(&live, cmd, param, now)
             Self.bump(&merged, cmd, param, now)
-            let root = cachedProjectRoot(for: cwd)
+            let root: String?
+            if case let .hit(cached) = cachedProjectRoot(for: cwd) {
+                root = cached
+            } else {
+                root = nil
+            }
             if let root {
                 var project = scoped[root] ?? [:]
                 Self.bump(&project, cmd, param, now)
@@ -146,27 +188,30 @@ final class Frecency {
         }
     }
 
-    private func cachedProjectRoot(for cwd: String) -> String? {
-        if let cached = projectRoots[cwd] {
-            if case let .root(root) = cached { return root }
-            return nil
+    private func cachedProjectRoot(for cwd: String) -> ProjectRootCacheLookup {
+        guard cwd.hasPrefix("/") else { return .hit(nil) }
+        let standardized = URL(fileURLWithPath: cwd, isDirectory: true).standardized.path
+        guard let cached = projectRoots[standardized] else { return .miss(standardized) }
+        switch cached {
+        case let .root(root):
+            return .hit(root)
+        case let .missing(expiresAt):
+            guard Date().timeIntervalSince1970 >= expiresAt else { return .hit(nil) }
+            projectRoots[standardized] = nil
+            return .miss(standardized)
         }
-        guard cwd.hasPrefix("/") else {
-            projectRoots[cwd] = .missing
-            return nil
-        }
+    }
 
-        var directory = URL(fileURLWithPath: cwd, isDirectory: true).standardized.path
+    private static func findProjectRoot(startingAt cwd: String) -> String? {
+        var directory = cwd
         while true {
             if FileManager.default.fileExists(atPath: directory + "/.git") {
-                projectRoots[cwd] = .root(directory)
                 return directory
             }
             let parent = (directory as NSString).deletingLastPathComponent
             if parent == directory { break }
             directory = parent
         }
-        projectRoots[cwd] = .missing
         return nil
     }
 

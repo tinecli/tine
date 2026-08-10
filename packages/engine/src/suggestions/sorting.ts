@@ -8,6 +8,7 @@ export type Use = { count: number; lastUsed: number };
 type Index = Record<string, Record<string, unknown>>;
 
 const HALF_LIFE_MS = 7 * 24 * 60 * 60 * 1000;
+const PROJECT_FRECENCY_WEIGHT = 2;
 
 // Foreign data (an edited store, a stale bridge) must never turn into a NaN or
 // -Infinity priority, so the shape check also bounds the numbers.
@@ -30,6 +31,24 @@ export const frecencyBoost = (use: unknown, now: number): number => {
   return score / (score + 1);
 };
 
+const blendedUse = (
+  globalUse: unknown,
+  projectUse: unknown,
+): Use | undefined => {
+  const global = isUse(globalUse) ? globalUse : undefined;
+  const project = isUse(projectUse) ? projectUse : undefined;
+  if (!global && !project) return undefined;
+
+  return {
+    count:
+      (global?.count ?? 0) + PROJECT_FRECENCY_WEIGHT * (project?.count ?? 0),
+    lastUsed: Math.max(
+      global?.lastUsed ?? Number.NEGATIVE_INFINITY,
+      project?.lastUsed ?? Number.NEGATIVE_INFINITY,
+    ),
+  };
+};
+
 const frecencyIndex = (): Index => {
   const index = (globalThis as { __tineFrecency?: unknown }).__tineFrecency;
   return index && typeof index === "object" ? (index as Index) : {};
@@ -46,29 +65,18 @@ export const updatePriorities = (suggestions: Suggestion[], cmd: string) => {
   const projectUses = projectFrecencyIndex()[cmd];
   const now = Date.now();
 
-  return suggestions
-    .map((suggestion) => {
-      const name = makeArray(suggestion.name)[0] || "";
-      const boost = name === "../" ? 0 : frecencyBoost(cmdUses?.[name], now);
-      const projectBoost =
-        name === "../" ? 0 : frecencyBoost(projectUses?.[name], now);
+  return suggestions.map((suggestion) => {
+    const name = makeArray(suggestion.name)[0] || "";
+    const use = blendedUse(cmdUses?.[name], projectUses?.[name]);
+    const boost = name === "../" ? 0 : frecencyBoost(use, now);
 
-      const raw = suggestion.priority || 50;
-      const priority =
-        suggestion.type === "auto-execute"
-          ? raw
-          : Math.max(Math.min(100, raw), 0);
+    const raw = suggestion.priority || 50;
+    const priority =
+      suggestion.type === "auto-execute"
+        ? raw
+        : Math.max(Math.min(100, raw), 0);
 
-      const banded = boost && priority >= 50 && priority <= 75 ? 75 : priority;
-      return {
-        suggestion: { ...suggestion, priority: banded + boost },
-        projectBoost,
-      };
-    })
-    .sort(
-      (a, b) =>
-        (b.suggestion.priority ?? 0) - (a.suggestion.priority ?? 0) ||
-        b.projectBoost - a.projectBoost,
-    )
-    .map(({ suggestion }) => suggestion);
+    const banded = boost && priority >= 50 && priority <= 75 ? 75 : priority;
+    return { ...suggestion, priority: banded + boost };
+  });
 };

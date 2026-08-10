@@ -83,12 +83,15 @@ const files: Record<string, string> = {
   export default completionSpec;`,
   [`${specsDir}/tie.js`]: `var completionSpec = {
     name: "tie",
-    subcommands: [{ name: "global-first" }, { name: "project-first" }],
+    subcommands: [{ name: "checkout" }, { name: "bisect" }],
   };
   export default completionSpec;`,
   [`${specsDir}/different.js`]: `var completionSpec = {
     name: "different",
-    subcommands: [{ name: "global-first" }, { name: "project-first" }],
+    subcommands: [
+      { name: "lower", priority: 75 },
+      { name: "higher", priority: 76 },
+    ],
   };
   export default completionSpec;`,
 };
@@ -101,7 +104,6 @@ const listings: Record<string, string> = {
 };
 
 const use = (count: number) => ({ count, lastUsed: Date.now() });
-const tiedUse = { count: 2, lastUsed: Date.now() };
 
 // isCommandName's own cap (SpecLearner.swift): 64 chars is learnable, 65 is not.
 const name64 = `a${"b".repeat(63)}`;
@@ -141,12 +143,15 @@ beforeAll(async () => {
       "+": { run: use(3) },
       [name64]: { run: use(3) },
       [name65]: { run: use(3) },
-      tie: { "global-first": tiedUse, "project-first": tiedUse },
-      different: { "global-first": use(3), "project-first": use(2) },
+      tie: {
+        checkout: use(20),
+        bisect: { count: 1, lastUsed: Date.now() - 60 * 60 * 1000 },
+      },
+      different: { lower: use(1) },
     },
     __tineProjectFrecency: {
-      tie: { "project-first": use(10) },
-      different: { "project-first": use(10_000) },
+      tie: { bisect: use(15) },
+      different: { lower: use(10_000) },
     },
     __tineRun: (json: string) => {
       const input = JSON.parse(json) as {
@@ -364,12 +369,12 @@ test("a folder with a space is escaped on insert", async () => {
   expect(items[0].insertValue).toBe("my\\ dir/");
 });
 
-test("project frecency breaks an identical global-score tie", async () => {
-  expect(await names("tie ")).toEqual(["project-first", "global-first"]);
+test("project frecency reorders the realistic same-band case", async () => {
+  expect(await names("tie ")).toEqual(["bisect", "checkout"]);
 });
 
-test("project frecency never overtakes a different global score", async () => {
-  expect(await names("different ")).toEqual(["global-first", "project-first"]);
+test("project frecency never crosses a priority band", async () => {
+  expect(await names("different ")).toEqual(["higher", "lower"]);
 });
 
 test("an arg the spec says nothing about falls back to history values", async () => {

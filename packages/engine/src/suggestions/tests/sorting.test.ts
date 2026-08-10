@@ -77,41 +77,50 @@ describe("updatePriorities", () => {
     expect(commit.priority).toBeLessThan(76);
   });
 
-  it("uses project frecency to break an identical global-score tie", () => {
+  it("blends project frecency strongly enough to rank the local Terraform command first", () => {
+    const usedAt = Date.now();
     host.__tineFrecency = {
       git: {
-        checkout: { count: 2, lastUsed: now },
-        bisect: { count: 2, lastUsed: now },
+        checkout: { count: 20, lastUsed: usedAt },
+        bisect: { count: 1, lastUsed: usedAt - 60 * 60 * 1000 },
       },
     };
     host.__tineProjectFrecency = {
-      git: { bisect: { count: 10, lastUsed: now } },
-    };
-
-    const [bisect, checkout] = updatePriorities(
-      [sub("checkout"), sub("bisect")],
-      "git",
-    );
-    expect(bisect.name).toBe("bisect");
-    expect(bisect.priority).toBe(checkout.priority);
-  });
-
-  it("never lets project frecency overtake a different global score", () => {
-    host.__tineFrecency = {
-      git: {
-        checkout: { count: 3, lastUsed: now },
-        bisect: { count: 2, lastUsed: now },
-      },
-    };
-    host.__tineProjectFrecency = {
-      git: { bisect: { count: 10_000, lastUsed: now } },
+      git: { bisect: { count: 15, lastUsed: usedAt } },
     };
 
     const [checkout, bisect] = updatePriorities(
-      [sub("bisect"), sub("checkout")],
+      [sub("checkout"), sub("bisect")],
       "git",
     );
     expect(checkout.name).toBe("checkout");
-    expect(checkout.priority).toBeGreaterThan(bisect.priority ?? 0);
+    expect(bisect.name).toBe("bisect");
+    expect(bisect.priority).toBeGreaterThan(checkout.priority ?? 0);
+
+    const ranked = [checkout, bisect].sort(
+      (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
+    );
+    expect(ranked[0]?.name).toBe("bisect");
+  });
+
+  it("never lets project frecency cross a priority band", () => {
+    host.__tineFrecency = {
+      git: {
+        lower: { count: 1, lastUsed: now },
+      },
+    };
+    host.__tineProjectFrecency = {
+      git: { lower: { count: 10_000, lastUsed: now } },
+    };
+
+    const [lower, higher] = updatePriorities(
+      [
+        { ...sub("lower"), priority: 75 },
+        { ...sub("higher"), priority: 76 },
+      ],
+      "git",
+    );
+    expect(lower.priority).toBeLessThan(76);
+    expect(higher.priority).toBe(76);
   });
 });

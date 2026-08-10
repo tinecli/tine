@@ -72,8 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.frecency.load()
             DispatchQueue.main.async {
                 self.state.engine?.setFrecency(self.frecency.index)
-                self.state.engine?.setProjectFrecency(
-                    self.frecency.scopedIndex(for: self.state.cwd))
+                self.selectProjectFrecency(for: self.state.cwd)
                 self.state.engine?.setHistoryValues(self.frecency.valueIndex)
             }
         }
@@ -92,6 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.state.engine?.setProjectFrecency(
                         self.frecency.scopedIndex(for: req.cwd))
                 }
+                self.resolveProjectFrecency(for: req.cwd)
                 self.state.update(feed)
                 if verdict.changed, let app = verdict.appPID {
                     // Must only update here — an async redraw from a background terminal
@@ -231,6 +231,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tlog("listening on \(sockPath) (AX trusted: \(AXCaret.isTrusted))")
 
         CommandRunner.onRefresh = { [weak self] in self?.scheduleRefresh() }
+    }
+
+    private func selectProjectFrecency(for cwd: String) {
+        state.engine?.setProjectFrecency(frecency.scopedIndex(for: cwd))
+        resolveProjectFrecency(for: cwd)
+    }
+
+    private func resolveProjectFrecency(for cwd: String) {
+        frecency.resolveProjectRoot(for: cwd) { [weak self] index in
+            DispatchQueue.main.async {
+                guard let self, self.state.cwd == cwd else { return }
+                self.state.engine?.setProjectFrecency(index)
+            }
+        }
     }
 
     private func applyAliases(_ dump: String) -> Int {

@@ -196,7 +196,13 @@ struct FrecencyPoolTests {
 }
 
 struct ProjectFrecencyTests {
-    @Test func recordsAndReloadsTheProjectPool() throws {
+    static func resolve(_ frecency: Frecency, cwd: String) async {
+        await withCheckedContinuation { continuation in
+            frecency.resolveProjectRoot(for: cwd) { _ in continuation.resume() }
+        }
+    }
+
+    @Test func recordsAndReloadsTheProjectPool() async throws {
         let dir = Scratch.dir("project-frecency")
         let repo = dir + "/repo"
         let cwd = repo + "/Sources/Feature"
@@ -207,6 +213,7 @@ struct ProjectFrecencyTests {
 
         let frecency = Frecency(historyPath: dir + "/missing-history", storePath: store)
         frecency.load()
+        await Self.resolve(frecency, cwd: cwd)
         let result = frecency.record(cmd: "git", param: "rebase", cwd: cwd)
         #expect(result?.global["rebase"]?.count == 1)
         #expect(result?.scoped?["rebase"]?.count == 1)
@@ -215,11 +222,32 @@ struct ProjectFrecencyTests {
 
         let reloaded = Frecency(historyPath: dir + "/missing-history", storePath: store)
         reloaded.load()
+        await Self.resolve(reloaded, cwd: cwd)
         #expect(reloaded.index["git"]?["rebase"]?.count == 1)
         #expect(reloaded.scopedIndex(for: cwd)["git"]?["rebase"]?.count == 1)
     }
 
-    @Test func cachesEachCwdProjectRootLookup() throws {
+    @Test func recordOnlyUsesAnAlreadyCachedProjectRoot() async throws {
+        let dir = Scratch.dir("project-record-cache-only")
+        let repo = dir + "/repo"
+        try FileManager.default.createDirectory(
+            atPath: repo + "/.git", withIntermediateDirectories: true)
+
+        let frecency = Frecency(
+            historyPath: dir + "/missing-history",
+            storePath: dir + "/frecency.json")
+        frecency.load()
+        let beforeResolution = frecency.record(cmd: "git", param: "rebase", cwd: repo)
+        #expect(beforeResolution?.global["rebase"]?.count == 1)
+        #expect(beforeResolution?.scoped == nil)
+
+        await Self.resolve(frecency, cwd: repo)
+        let afterResolution = frecency.record(cmd: "git", param: "rebase", cwd: repo)
+        #expect(afterResolution?.global["rebase"]?.count == 2)
+        #expect(afterResolution?.scoped?["rebase"]?.count == 1)
+    }
+
+    @Test func standardizesCacheKeysAndRefreshesMissingRootsAfterTTL() async throws {
         let dir = Scratch.dir("project-root-cache")
         let repo = dir + "/repo"
         let cwd = repo + "/Sources/Feature"
@@ -230,35 +258,42 @@ struct ProjectFrecencyTests {
         let frecency = Frecency(
             historyPath: dir + "/missing-history",
             storePath: dir + "/frecency.json")
+        await Self.resolve(frecency, cwd: cwd)
         #expect(frecency.projectRoot(for: cwd) == repo)
-        try FileManager.default.createDirectory(
-            atPath: repo + "/Sources/.git", withIntermediateDirectories: true)
-        #expect(frecency.projectRoot(for: cwd) == repo)
-        #expect(frecency.projectRoot(for: cwd + "/Nested") == repo + "/Sources")
+        try FileManager.default.removeItem(atPath: repo + "/.git")
+        #expect(frecency.projectRoot(for: cwd + "/") == repo,
+                "equivalent standardized paths share one positive cache entry")
 
         let outside = dir + "/outside"
         try FileManager.default.createDirectory(atPath: outside, withIntermediateDirectories: true)
-        #expect(frecency.projectRoot(for: outside) == nil)
+        let expiring = Frecency(
+            historyPath: dir + "/missing-history",
+            storePath: dir + "/expiring-frecency.json",
+            projectRootMissTTL: 0)
+        await Self.resolve(expiring, cwd: outside)
+        #expect(expiring.projectRoot(for: outside) == nil)
         try FileManager.default.createDirectory(
             atPath: outside + "/.git", withIntermediateDirectories: true)
-        #expect(frecency.projectRoot(for: outside) == nil)
+        await Self.resolve(expiring, cwd: outside)
+        #expect(expiring.projectRoot(for: outside) == outside,
+                "an expired negative entry must notice git init")
     }
 
     @Test func loadsTheFlatStoreFormatWithoutChangingItsScores() throws {
         let dir = Scratch.dir("old-frecency-store")
         let store = dir + "/frecency.json"
-        let oldStore = #"{"git":{"checkout":1700000000000}}"#
+        let oldStore = #"{"git":{"checkout":{"count":4,"lastUsed":1700000000000}}}"#
         try oldStore.write(toFile: store, atomically: true, encoding: .utf8)
 
         let frecency = Frecency(historyPath: dir + "/missing-history", storePath: store)
         frecency.load()
-        #expect(frecency.index["git"]?["checkout"]?.count == 1)
+        #expect(frecency.index["git"]?["checkout"]?.count == 4)
         #expect(frecency.index["git"]?["checkout"]?.lastUsed == 1_700_000_000_000)
         #expect(frecency.scopedIndex(for: dir).isEmpty)
         #expect(!FileManager.default.fileExists(atPath: store + ".bak"))
     }
 
-    @Test func capsEveryProjectPool() throws {
+    @Test func capsEveryProjectPool() async throws {
         let dir = Scratch.dir("project-frecency-cap")
         let repo = dir + "/repo"
         let store = dir + "/frecency.json"
@@ -267,6 +302,7 @@ struct ProjectFrecencyTests {
 
         let frecency = Frecency(historyPath: dir + "/missing-history", storePath: store)
         frecency.load()
+        await Self.resolve(frecency, cwd: repo)
         for n in 0...5_000 {
             _ = frecency.record(cmd: "tool", param: "p\(n)", cwd: repo)
         }
