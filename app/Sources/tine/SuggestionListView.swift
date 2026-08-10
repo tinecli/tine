@@ -147,6 +147,7 @@ struct SuggestionListView: View {
         case "arg":          return "character.cursor.ibeam"
         case "shortcut":     return "bolt"
         case "history":      return "clock.arrow.circlepath"
+        case "learn-it":     return "graduationcap"
         default:             return "circle.dotted"
         }
     }

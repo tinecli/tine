@@ -149,7 +149,7 @@ export const importSpecFromLocation = async (
   }
 
   if (!specFile) {
-    throw new MissingSpecError("No spec found");
+    throw new MissingSpecError("No spec found", specLocation.name);
   }
 
   return { specFile, resolvedLocation };
@@ -227,7 +227,7 @@ export const loadSubcommandCached = async (
     }
   }
 
-  if (!merged) throw new MissingSpecError("No spec found");
+  if (!merged) throw new MissingSpecError("No spec found", name);
   specCache.set(key, merged);
   return merged;
 };
