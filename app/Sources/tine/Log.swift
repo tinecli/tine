@@ -49,6 +49,15 @@ struct DoctorReport: Equatable {
 enum TineLog {
     static let path = NSHomeDirectory() + "/.local/share/tine/tine.log"
 
+    static func removeLegacyTemporaryLog(at path: String = "/tmp/tine.log") {
+        var metadata = stat()
+        guard lstat(path, &metadata) == 0,
+              (metadata.st_mode & S_IFMT) == S_IFREG,
+              metadata.st_uid == getuid()
+        else { return }
+        _ = Darwin.unlink(path)
+    }
+
     static func reset(to path: String = TineLog.path) {
         guard let descriptor = descriptor(at: path, flags: O_WRONLY, create: true) else { return }
         defer { Darwin.close(descriptor) }
@@ -117,22 +126,40 @@ enum TineLog {
     }
 
     private static func isOwnedRegularFile(_ metadata: stat) -> Bool {
-        (metadata.st_mode & S_IFMT) == S_IFREG && metadata.st_uid == getuid()
+        (metadata.st_mode & S_IFMT) == S_IFREG
+            && metadata.st_uid == getuid()
+            && metadata.st_nlink == 1
     }
 
     private static func createParentDirectory(for path: String) -> Bool {
         let parent = URL(fileURLWithPath: path).deletingLastPathComponent().path
-        if FileManager.default.fileExists(atPath: parent) { return true }
+        var metadata = stat()
+        if lstat(parent, &metadata) == 0 {
+            return isSafeParentDirectory(metadata)
+        }
+        guard errno == ENOENT else { return false }
+
+        let intermediate = URL(fileURLWithPath: parent).deletingLastPathComponent().path
         do {
             try FileManager.default.createDirectory(
+                atPath: intermediate,
+                withIntermediateDirectories: true
+            )
+            try FileManager.default.createDirectory(
                 atPath: parent,
-                withIntermediateDirectories: true,
+                withIntermediateDirectories: false,
                 attributes: [.posixPermissions: NSNumber(value: 0o700)]
             )
-            return true
         } catch {
-            return false
+            // Another process may have created the final directory first. It is
+            // usable only if the same fail-closed validation still succeeds.
         }
+        guard lstat(parent, &metadata) == 0 else { return false }
+        return isSafeParentDirectory(metadata)
+    }
+
+    private static func isSafeParentDirectory(_ metadata: stat) -> Bool {
+        (metadata.st_mode & S_IFMT) == S_IFDIR && metadata.st_mode & mode_t(0o022) == 0
     }
 }
 
