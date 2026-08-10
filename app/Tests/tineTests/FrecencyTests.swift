@@ -202,6 +202,10 @@ struct ProjectFrecencyTests {
         }
     }
 
+    static func canonical(_ path: String) -> String {
+        URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+    }
+
     static func makeRepo(_ root: String) throws {
         try FileManager.default.createDirectory(
             atPath: root + "/.git", withIntermediateDirectories: true)
@@ -264,9 +268,9 @@ struct ProjectFrecencyTests {
             historyPath: dir + "/missing-history",
             storePath: dir + "/frecency.json")
         await Self.resolve(frecency, cwd: cwd)
-        #expect(frecency.projectRoot(for: cwd) == repo)
+        #expect(frecency.projectRoot(for: cwd) == Self.canonical(repo))
         try FileManager.default.removeItem(atPath: repo + "/.git")
-        #expect(frecency.projectRoot(for: cwd + "/") == repo,
+        #expect(frecency.projectRoot(for: cwd + "/") == Self.canonical(repo),
                 "equivalent standardized paths share one positive cache entry")
 
         let outside = dir + "/outside"
@@ -280,7 +284,7 @@ struct ProjectFrecencyTests {
         try FileManager.default.createDirectory(
             atPath: outside + "/.git", withIntermediateDirectories: true)
         await Self.resolve(expiring, cwd: outside)
-        #expect(expiring.projectRoot(for: outside) == outside,
+        #expect(expiring.projectRoot(for: outside) == Self.canonical(outside),
                 "an expired negative entry must notice git init")
     }
 
@@ -327,13 +331,13 @@ struct ProjectFrecencyTests {
         for root in [active, recent, older, stale] { try Self.makeRepo(root) }
 
         let scoped: [String: Any] = [
-            active: ["tool": [
+            Self.canonical(active): ["tool": [
                 "ancient": ["count": 1, "lastUsed": 1.0],
                 "newest": ["count": 1, "lastUsed": 999_000.0]
             ]],
-            recent: ["tool": ["pick": ["count": 1, "lastUsed": 998_000.0]]],
-            older: ["tool": ["pick": ["count": 1, "lastUsed": 997_000.0]]],
-            stale: ["tool": ["pick": ["count": 1, "lastUsed": 800_000.0]]]
+            Self.canonical(recent): ["tool": ["pick": ["count": 1, "lastUsed": 998_000.0]]],
+            Self.canonical(older): ["tool": ["pick": ["count": 1, "lastUsed": 997_000.0]]],
+            Self.canonical(stale): ["tool": ["pick": ["count": 1, "lastUsed": 800_000.0]]]
         ]
         let data = try JSONSerialization.data(withJSONObject: ["global": [:], "scoped": scoped])
         try data.write(to: URL(fileURLWithPath: store))
@@ -373,7 +377,7 @@ struct ProjectFrecencyTests {
         let result = frecency.record(cmd: "git", param: "status", cwd: cwd)
 
         #expect(result?.scoped?["status"]?.count == 2)
-        #expect(frecency.projectRoot(for: link + "/Sources") == repo)
+        #expect(frecency.projectRoot(for: link + "/Sources") == Self.canonical(repo))
     }
 
     @Test func positiveRootTTLNoticesRemovedGitDirectory() async throws {
@@ -388,7 +392,7 @@ struct ProjectFrecencyTests {
             now: { clock })
 
         await Self.resolve(frecency, cwd: repo)
-        #expect(frecency.projectRoot(for: repo) == repo)
+        #expect(frecency.projectRoot(for: repo) == Self.canonical(repo))
         try FileManager.default.removeItem(atPath: repo + "/.git")
         clock += 11
         guard frecency.projectRoot(for: repo) == nil else {
@@ -412,12 +416,12 @@ struct ProjectFrecencyTests {
 
         await Self.resolve(frecency, cwd: first)
         await Self.resolve(frecency, cwd: second)
-        #expect(frecency.projectRoot(for: first) == first)
+        #expect(frecency.projectRoot(for: first) == Self.canonical(first))
         await Self.resolve(frecency, cwd: third)
 
-        #expect(frecency.projectRoot(for: first) == first)
+        #expect(frecency.projectRoot(for: first) == Self.canonical(first))
         #expect(frecency.projectRoot(for: second) == nil)
-        #expect(frecency.projectRoot(for: third) == third)
+        #expect(frecency.projectRoot(for: third) == Self.canonical(third))
     }
 
     @Test func projectRootLookupNeverBlocksItsCallerAndRefreshesCurrentCWDOnce() throws {
