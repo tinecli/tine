@@ -85,7 +85,7 @@ final class AppState: ObservableObject {
         // would shrink the prefix and make Tab fall through to shell completion.
         // Use insertValue (already shell-escaped for paths) so Tab inserts e.g.
         // `Edge\ Apps.localized/`, not an unescaped space.
-        let values = suggestions.filter { !$0.isExecute }.map { $0.insertValue }
+        let values = suggestions.filter { !$0.isExecute && $0.type != "learn-it" }.map { $0.insertValue }
         guard let first = values.first else { return nil }
         var lcp = Array(first)
         for name in values.dropFirst() {
@@ -98,7 +98,7 @@ final class AppState: ObservableObject {
         let prefix = String(lcp)
         // Replace the per-suggestion query term (basename for paths), not the whole
         // token — otherwise `cd app/So` + Sources/ becomes `cd Sources/`.
-        guard let qt = suggestions.first(where: { !$0.isExecute })?.queryTerm else { return nil }
+        guard let qt = suggestions.first(where: { !$0.isExecute && $0.type != "learn-it" })?.queryTerm else { return nil }
         guard prefix.count > qt.count, prefix.hasPrefix(qt) else { return nil }
 
         let chars = Array(buffer)

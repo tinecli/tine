@@ -91,10 +91,11 @@ const frecencyIndex = (): Record<string, Record<string, unknown>> => {
 
 const learnItResult = (
   upToCursor: string,
+  typedCommand: string,
   missingCommand: string,
   resolvedCommand: string,
 ): TineResult => {
-  const typedCommand = upToCursor.trimStart().split(/\s+/)[0];
+  // Wrapper chains do not earn the row; only the resolved root does.
   if (
     !typedCommand ||
     missingCommand !== resolvedCommand ||
@@ -152,7 +153,12 @@ async function suggest(
   if (parsed instanceof MissingSpecError) {
     const history = historyOnlyResult(upToCursor);
     if (history.items.length > 0) return history;
-    return learnItResult(upToCursor, parsed.command, command.tokens[0].text);
+    return learnItResult(
+      upToCursor,
+      command.tokens[0].originalNode.text,
+      parsed.command,
+      command.tokens[0].text,
+    );
   }
 
   // Run the current arg's generators (git branches, folder/file listings, …)

@@ -104,7 +104,9 @@ beforeAll(async () => {
     __tineHome: home,
     __tineAliases: { aliaspc: "plug-cli run" },
     __tineFrecency: {
+      git: { checkout: use(5) },
       pc: { "--force": use(4) },
+      both: { value: use(4) },
       aliaspc: { run: use(3) },
       wrapper: { nested: use(2) },
     },
@@ -141,6 +143,9 @@ beforeAll(async () => {
           "cache.example.com": use(30),
           ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789: use(99),
         },
+      },
+      both: {
+        "": { "remembered.example.com": use(5) },
       },
     },
   });
@@ -320,6 +325,12 @@ test("a used command with no spec offers to learn it", async () => {
   });
 });
 
+test("history values take precedence over the learn-it row", async () => {
+  const { items } = await suggest("both ");
+  expect(items.map((item) => item.name)).toEqual(["remembered.example.com"]);
+  expect(items[0].type).toBe("history");
+});
+
 test("only an exact frecency key offers to learn a missing command", async () => {
   expect(await names("p ")).toEqual([]);
   expect(await names("pcx ")).toEqual([]);
@@ -327,6 +338,20 @@ test("only an exact frecency key offers to learn a missing command", async () =>
 
 test("a wrapper whose command argument lacks a spec offers no row", async () => {
   expect(await names("wrapper nested ")).toEqual([]);
+});
+
+test("a chained missing command does not inherit the first command's frecency", async () => {
+  expect(await names("git checkout && nope ")).toEqual([]);
+});
+
+test("an env-prefixed command uses the resolved command's typed frecency key", async () => {
+  const { items } = await suggest("FOO=1 pc ");
+  expect(items).toHaveLength(1);
+  expect(items[0]).toMatchObject({
+    name: "no spec for `pc` — learn it",
+    insertValue: "tine learn pc",
+    type: "learn-it",
+  });
 });
 
 test("an alias offers to learn its resolved missing command", async () => {
