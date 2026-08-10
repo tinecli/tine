@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 struct DoctorReportTests {
@@ -49,13 +50,18 @@ struct DoctorReportTests {
         #expect(quiet.socketValue == "ax=0;specs=0;version=?;update=0;appLatest=;appStaged=")
     }
 
-    @Test func diagnosticsContainReportValuesAndOnlyTheSuppliedLogTail() {
-        let diagnostics = report.diagnostics(logTail: "second-last\nlast\n")
+    @Test func diagnosticsReadTailFromInjectedLogLocation() throws {
+        let dir = Scratch.dir("diagnostics-log") + "/.local/share/tine"
+        let logPath = dir + "/tine.log"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try "second-last\nlast\n".write(toFile: logPath, atomically: true, encoding: .utf8)
+        let diagnostics = report.diagnostics(logPath: logPath)
 
         #expect(diagnostics.contains("Accessibility: granted"))
         #expect(diagnostics.contains("Shell integration: not installed"))
         #expect(diagnostics.contains("Completion specs: 417"))
         #expect(diagnostics.contains("Socket path: /tmp/tine-test.sock"))
+        #expect(diagnostics.contains("Log tail (\(logPath))"))
         #expect(diagnostics.hasSuffix("second-last\nlast\n"))
         #expect(!diagnostics.contains(DoctorReport.shellSourceLine))
     }

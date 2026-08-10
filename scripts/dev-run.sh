@@ -61,6 +61,6 @@ echo "› stopping any running dev build (leaves the production app alone)"
 pkill -x tine-dev 2>/dev/null || true
 
 echo "› socket: $SOCK"
-echo "› launching (logs: /tmp/tine.log)"
+echo "› launching (logs: ~/.local/share/tine/tine.log)"
 open -n "$BUNDLE"
 echo "done. In your terminal, reload the integration: source ~/.local/share/tine/tine.zsh"

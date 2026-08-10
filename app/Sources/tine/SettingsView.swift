@@ -126,7 +126,7 @@ struct SettingsView: View {
             }
             Section {
                 Button("Copy diagnostics") {
-                    copy(report.diagnostics(logTail: TineLog.tail()))
+                    copy(report.diagnostics())
                 }
             } footer: {
                 Text("Copies these values and up to the last 4 KB of the tine log.")

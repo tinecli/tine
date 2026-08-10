@@ -150,7 +150,7 @@ final class Frecency {
         queue.sync {
             guard pattern != ignore.source else { return false }
             ignore = HistoryIgnore(pattern)
-            TineLog.write("history ignore: \(pattern.count) chars, compiled: \(ignore.isCompiled)", // length only — the log is world-readable
+            TineLog.write("history ignore: \(pattern.count) chars, compiled: \(ignore.isCompiled)",
                           to: logPath)
             rebuild()
             return true
