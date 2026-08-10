@@ -1,26 +1,16 @@
 import Foundation
 
-/// One installed tool with bounded man-page context.
+/// One installed tool, the one line that says what it does, and where its man
+/// page can be read if this tool is picked for composition.
 struct AskEntry: Codable, Equatable {
     let name: String
     let description: String
-    let documentation: String
+    let manPagePath: String
 
-    init(name: String, description: String, documentation: String = "") {
+    init(name: String, description: String, manPagePath: String = "") {
         self.name = name
         self.description = description
-        self.documentation = documentation
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case name, description, documentation
-    }
-
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        name = try values.decode(String.self, forKey: .name)
-        description = try values.decode(String.self, forKey: .description)
-        documentation = try values.decodeIfPresent(String.self, forKey: .documentation) ?? ""
+        self.manPagePath = manPagePath
     }
 }
 
@@ -52,6 +42,11 @@ enum AskIndex {
         return try? JSONDecoder().decode(Stored.self, from: data)
     }
 
+    static func needsRebuild(_ stored: Stored?, signature: String) -> Bool {
+        guard let stored else { return true }
+        return stored.signature != signature || stored.entries.isEmpty
+    }
+
     static func save(_ stored: Stored) throws {
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         let encoder = JSONEncoder()
@@ -69,7 +64,7 @@ enum AskIndex {
             let modified = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
             return "\(dir)@\(Int(modified))"
         }
-        return "2:" + parts.joined(separator: ":")
+        return parts.joined(separator: ":")
     }
 
     /// A corpus this size already covers every binary on a full dev machine; the
@@ -93,11 +88,11 @@ enum AskIndex {
         let pages = manPages(in: manDirs(pathDirs: dirs))
         var entries: [AskEntry] = []
         for name in binaries(in: dirs).prefix(maxEntries) {
-            let page = pages[name].flatMap(manPage(at:))
-            let described = page.flatMap(nameLine(inManPage:)) ?? packDescriptions[name] ?? ""
+            let manPagePath = pages[name] ?? ""
+            let described = nameLine(inManPageAt: manPagePath) ?? packDescriptions[name] ?? ""
             entries.append(AskEntry(name: name,
                                     description: description(described, of: name),
-                                    documentation: page.map(documentation(inManPage:)) ?? ""))
+                                    manPagePath: manPagePath))
         }
         return Stored(signature: signature(pathDirs: dirs), builtAt: Date(), entries: entries)
     }
@@ -174,11 +169,17 @@ enum AskIndex {
         return paths
     }
 
-    /// Enough of a bounded page to reach nearby DESCRIPTION or EXAMPLES sections.
+    /// Enough of a bounded page to reach nearby EXAMPLES sections.
     private static let maxPageBytes = 128 * 1024
 
     static func nameLine(inManPageAt path: String) -> String? {
-        manPage(at: path).flatMap(nameLine(inManPage:))
+        guard !path.isEmpty else { return nil }
+        return manPage(at: path).flatMap(nameLine(inManPage:))
+    }
+
+    static func examples(inManPageAt path: String) -> String? {
+        guard !path.isEmpty else { return nil }
+        return manPage(at: path).flatMap(examples(inManPage:))
     }
 
     private static func manPage(at path: String) -> String? {
@@ -211,34 +212,35 @@ enum AskIndex {
         String(line.dropFirst(macro.count)).trimmingCharacters(in: .whitespaces)
     }
 
-    static func documentation(inManPage source: String) -> String {
-        for names: Set<String> in [["EXAMPLE", "EXAMPLES"], ["DESCRIPTION"]] {
-            guard let lines = section(named: names, in: source, maxLines: 80) else { continue }
-            let text = lines.compactMap { line -> String? in
-                if line.hasPrefix(".\\\"") || line.hasPrefix(".\"") { return nil }
-                guard line.hasPrefix(".") || line.hasPrefix("'") else { return String(line) }
-                let fields = line.split(maxSplits: 1, whereSeparator: \.isWhitespace)
-                return fields.count == 2 ? String(fields[1]) : nil
-            }.joined(separator: " ")
-            let cleaned = unroff(text, limit: maxDocumentation)
-            if !cleaned.isEmpty { return cleaned }
-        }
-        return ""
+    static func examples(inManPage source: String) -> String? {
+        guard let lines = section(named: ["EXAMPLE", "EXAMPLES"], in: source, maxLines: 80)
+        else { return nil }
+        let text = lines.compactMap { line -> String? in
+            if line.hasPrefix(".\\\"") || line.hasPrefix(".\"") { return nil }
+            guard line.hasPrefix(".") || line.hasPrefix("'") else { return String(line) }
+            let fields = line.split(maxSplits: 1, whereSeparator: \.isWhitespace)
+            return fields.count == 2 ? String(fields[1]) : nil
+        }.joined(separator: " ")
+        let cleaned = unroff(text, limit: maxExamples)
+        return cleaned.isEmpty ? nil : cleaned
     }
 
-    private static let maxDocumentation = 1200
+    private static let maxExamples = 1200
 
     private static func section(named names: Set<String>, in source: String,
                                 maxLines: Int) -> [Substring]? {
-        let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
-        guard let start = lines.firstIndex(where: { names.contains(headingName($0)) }) else { return nil }
+        var found = false
         var section: [Substring] = []
-        for line in lines[lines.index(after: start)...] {
-            if isHeading(line) { break }
+        for line in source.split(separator: "\n", omittingEmptySubsequences: false) {
+            if !found {
+                found = names.contains(headingName(line))
+                continue
+            }
+            if isHeading(line) { return section }
             section.append(line)
-            if section.count >= maxLines { break }
+            if section.count >= maxLines { return section }
         }
-        return section
+        return found ? section : nil
     }
 
     private static func isHeading(_ line: Substring) -> Bool {
@@ -248,7 +250,8 @@ enum AskIndex {
     private static func headingName(_ line: Substring) -> String {
         guard isHeading(line) else { return "" }
         let raw = line.drop(while: { !$0.isWhitespace }).trimmingCharacters(in: .whitespaces)
-        return raw.trimmingCharacters(in: CharacterSet(charactersIn: "\"")).uppercased()
+        let first = raw.split(whereSeparator: \.isWhitespace).first ?? ""
+        return first.trimmingCharacters(in: CharacterSet(charactersIn: "\"")).uppercased()
     }
 
     /// Roff escapes, reduced to the text they stand for. Everything left that a
@@ -332,7 +335,7 @@ enum AskIndex {
     /// `NLEmbedding.sentenceEmbedding` were both measured against this corpus and
     /// ranked *worse* than this does (see the PR for #32).
     static func rank(_ query: String, in entries: [AskEntry], limit: Int,
-                     frecency: [String: [String: Frecency.Use]] = [:]) -> [Hit] {
+                     frecency: (String) -> Double = { _ in 0 }) -> [Hit] {
         let queryTerms = weighted(terms(query).filter { !stopwords.contains($0) })
         guard !queryTerms.isEmpty else { return [] }
 
@@ -367,8 +370,8 @@ enum AskIndex {
                 }
             }
             if score > 0 {
-                let used = Frecency.commandScore(frecency[entry.name] ?? [:])
-                score *= 1 + min(log1p(used) * frecencyWeight, maxFrecencyBoost)
+                let used = frecency(entry.name)
+                score *= 1 + min(log1p(used) * frecencyWeight, maxFrecencyBonus)
                 hits.append(Hit(entry: entry, score: score))
             }
         }
@@ -382,7 +385,7 @@ enum AskIndex {
     private static let partialNameWeight = 1.2
     private static let synonymWeight = 0.6
     private static let frecencyWeight = 0.25
-    private static let maxFrecencyBoost = 1.0
+    private static let maxFrecencyBonus = 1.0
 
     /// The question's own words, plus the words a man page would have used
     /// instead — a page says "remove", the user says "delete". Weighted below the

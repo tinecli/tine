@@ -551,6 +551,7 @@ _tine_show_answer() {
       tool) if [[ -n "$text" ]]; then printf '  %-16s %s\n' "$name" "$text"
             else printf '  %s\n' "$name"; fi ;;
       note) print -- "tine: $name" ;;
+      *) ;;
     esac
   done
   [[ -n "$command" ]] && print -z -- "$command"

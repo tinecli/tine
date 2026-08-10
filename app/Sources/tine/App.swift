@@ -98,7 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         asker.outline = { [weak self] tool in self?.state.engine?.outline(command: tool) ?? [] }
         asker.shellPath = { CommandRunner.shellPath() ?? "" }
-        asker.frecency = { [weak self] in self?.frecency.index ?? [:] }
+        asker.frecency = { [weak self] in self?.frecency.commandScorer() ?? { _ in 0 } }
 
         // Frecency: bootstrap from ~/.zsh_history off the main thread, then feed
         // the index to the engine so most-used subcommands/flags rank first.
@@ -305,6 +305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !name.isEmpty { map[name] = value }
         }
         state.engine?.setAliases(map)
+        frecency.setAliases(map)
         return map.count
     }
 

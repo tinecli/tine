@@ -52,6 +52,9 @@ final class Frecency {
     private var merged: [String: [String: Use]] = [:]
     /// Only the live picks (persisted); merged over history on load.
     private var live: [String: [String: Use]] = [:]
+    /// Shell aliases are resolved only for command-name scoring. The engine keeps
+    /// the raw keys because its argument ranking runs in the alias's own context.
+    private var aliases: [String: String] = [:]
     /// Argument values from history, keyed [cmd: [precedingFlag: [value: Use]]],
     /// where "" is the positional pool. Never persisted: the shell logs the same
     /// lines again, and a value is likelier than a flag to carry something private.
@@ -69,6 +72,10 @@ final class Frecency {
 
     var index: [String: [String: Use]] { queue.sync { merged } }
     var valueIndex: [String: [String: [String: Use]]] { queue.sync { values } }
+
+    func setAliases(_ aliases: [String: String]) {
+        queue.sync { self.aliases = aliases }
+    }
 
     func load() {
         let stored = Self.readStore()
@@ -390,9 +397,76 @@ final class Frecency {
         Double(use.count) * pow(2, -max(0, now - use.lastUsed) / halfLifeMs)
     }
 
-    static func commandScore(_ uses: [String: Use], now: Double = Date().timeIntervalSince1970 * 1000)
-        -> Double {
+    /// A rank call gets one immutable history view and one clock reading. Joining
+    /// lives here because only history knows that `/usr/bin/python3`, an alias,
+    /// or the command after `sudo`/an environment assignment names a PATH entry.
+    func commandScorer() -> (String) -> Double {
+        let snapshot = queue.sync { (merged, aliases) }
+        let now = Date().timeIntervalSince1970 * 1000
+        return { name in
+            Self.commandScore(for: name, in: snapshot.0, aliases: snapshot.1, now: now)
+        }
+    }
+
+    static func commandScore(for name: String, in index: [String: [String: Use]],
+                             aliases: [String: String] = [:], now: Double) -> Double {
+        var best = 0.0
+        for (rawCommand, uses) in index {
+            if resolvedCommandName(rawCommand, aliases: aliases) == name {
+                best = max(best, commandScore(uses, now: now))
+                continue
+            }
+            guard isCommandPrefix(rawCommand) else { continue }
+            for (token, use) in uses
+                where resolvedCommandName(token, aliases: aliases) == name {
+                best = max(best, score(use, now))
+            }
+        }
+        return best
+    }
+
+    private static func commandScore(_ uses: [String: Use], now: Double) -> Double {
         uses.values.map { score($0, now) }.max() ?? 0
+    }
+
+    private static func resolvedCommandName(_ raw: String, aliases: [String: String],
+                                            depth: Int = 0) -> String {
+        let name = (raw as NSString).lastPathComponent
+        guard depth < 4, let value = aliases[name] else { return name }
+        let unquoted: String
+        if value.count >= 2, value.first == value.last,
+           value.first == "'" || value.first == "\"" {
+            unquoted = String(value.dropFirst().dropLast())
+        } else {
+            unquoted = value
+        }
+        let tokens = unquoted.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard let command = firstCommand(in: tokens) else { return name }
+        return resolvedCommandName(command, aliases: aliases, depth: depth + 1)
+    }
+
+    private static func firstCommand(in tokens: [String]) -> String? {
+        for token in tokens {
+            let name = (token as NSString).lastPathComponent
+            if isEnvironmentAssignment(token) || name == "sudo" || name == "env" { continue }
+            if token.hasPrefix("-") { continue }
+            return token
+        }
+        return nil
+    }
+
+    private static func isCommandPrefix(_ raw: String) -> Bool {
+        let name = (raw as NSString).lastPathComponent
+        return name == "sudo" || name == "env" || isEnvironmentAssignment(raw)
+    }
+
+    private static func isEnvironmentAssignment(_ token: String) -> Bool {
+        guard let equals = token.firstIndex(of: "="), equals != token.startIndex else { return false }
+        let name = token[..<equals]
+        guard let first = name.first, first == "_" || first.isASCII && first.isLetter else {
+            return false
+        }
+        return name.allSatisfy { $0 == "_" || $0.isASCII && ($0.isLetter || $0.isNumber) }
     }
 
     /// Bound the pool: the most frecent values per (command, flag), the rest go.
