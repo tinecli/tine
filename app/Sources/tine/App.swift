@@ -237,10 +237,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func resolveProjectFrecency(for cwd: String) {
         frecency.resolveProjectRoot(for: cwd) { [weak self] index in
             DispatchQueue.main.async {
-                guard let self,
-                      Frecency.shouldApplyProjectIndex(resolvedFor: cwd,
-                                                       currentCWD: self.state.cwd) else { return }
-                self.state.engine?.setProjectFrecency(index)
+                guard let self else { return }
+                Frecency.applyProjectIndex(
+                    index,
+                    resolvedFor: cwd,
+                    currentCWD: self.state.cwd,
+                    apply: { self.state.engine?.setProjectFrecency($0) },
+                    recompute: { self.scheduleRefresh() })
             }
         }
     }

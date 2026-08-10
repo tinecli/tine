@@ -420,7 +420,7 @@ struct ProjectFrecencyTests {
         #expect(frecency.projectRoot(for: third) == third)
     }
 
-    @Test func projectRootLookupNeverBlocksItsCallerAndCompletesOnce() throws {
+    @Test func projectRootLookupNeverBlocksItsCallerAndRefreshesCurrentCWDOnce() throws {
         let dir = Scratch.dir("project-root-async-lookup")
         let repo = dir + "/repo"
         try Self.makeRepo(repo)
@@ -440,14 +440,19 @@ struct ProjectFrecencyTests {
         let lock = NSLock()
         var deliveries = 0
         var applied = 0
+        var recomputes = 0
         let started = Date()
-        frecency.resolveProjectRoot(for: repo) { _ in
+        frecency.resolveProjectRoot(for: repo) { index in
             lock.lock()
             deliveries += 1
-            if Frecency.shouldApplyProjectIndex(
-                resolvedFor: repo, currentCWD: dir + "/new-cwd") {
-                applied += 1
-            }
+            Frecency.applyProjectIndex(
+                index,
+                resolvedFor: repo,
+                currentCWD: dir + "/new-cwd",
+                apply: { _ in
+                    applied += 1
+                },
+                recompute: { recomputes += 1 })
             lock.unlock()
             completed.signal()
         }
@@ -458,17 +463,31 @@ struct ProjectFrecencyTests {
         lock.lock()
         let deliveryCount = deliveries
         let appliedCount = applied
+        let staleRecomputeCount = recomputes
         lock.unlock()
         #expect(deliveryCount == 1)
         #expect(appliedCount == 0, "a result for an old cwd must not replace the current pool")
+        #expect(staleRecomputeCount == 0, "a result for an old cwd must not recompute suggestions")
+
+        let record = frecency.record(cmd: "git", param: "rebase", cwd: repo)
+        #expect(record?.scoped?["rebase"]?.count == 1)
 
         let cachedCompleted = DispatchSemaphore(value: 0)
-        frecency.resolveProjectRoot(for: repo) { _ in
+        frecency.resolveProjectRoot(for: repo) { index in
             lock.lock()
             deliveries += 1
-            if Frecency.shouldApplyProjectIndex(resolvedFor: repo, currentCWD: repo) {
-                applied += 1
-            }
+            Frecency.applyProjectIndex(
+                index,
+                resolvedFor: repo,
+                currentCWD: repo,
+                apply: { appliedIndex in
+                    applied += 1
+                    #expect(appliedIndex["git"]?["rebase"]?.count == 1)
+                },
+                recompute: {
+                    #expect(applied == 1, "the scoped index must be installed before recomputing")
+                    recomputes += 1
+                })
             lock.unlock()
             cachedCompleted.signal()
         }
@@ -478,8 +497,10 @@ struct ProjectFrecencyTests {
         lock.lock()
         let finalDeliveryCount = deliveries
         let finalAppliedCount = applied
+        let finalRecomputeCount = recomputes
         lock.unlock()
         #expect(finalDeliveryCount == 2, "each lookup must deliver exactly once")
         #expect(finalAppliedCount == 1, "only the current cwd may apply its delivery")
+        #expect(finalRecomputeCount == 1, "the current cwd must recompute exactly once")
     }
 }

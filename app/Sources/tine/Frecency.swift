@@ -117,6 +117,16 @@ final class Frecency {
         cwd == currentCWD
     }
 
+    static func applyProjectIndex(_ index: Index,
+                                  resolvedFor cwd: String,
+                                  currentCWD: String,
+                                  apply: (Index) -> Void,
+                                  recompute: () -> Void) {
+        guard shouldApplyProjectIndex(resolvedFor: cwd, currentCWD: currentCWD) else { return }
+        apply(index)
+        recompute()
+    }
+
     func scopedIndex(for cwd: String) -> Index {
         queue.sync {
             guard case let .hit(root?) = cachedProjectRoot(for: cwd) else { return [:] }
