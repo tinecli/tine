@@ -1,9 +1,10 @@
-// `tine learn` harness. There is no Swift test target yet, so build it against
-// the sources and run it with a scratch root:
+// `tine learn` harness. Build it against the sources and run it with a scratch
+// root:
 //
 //   swiftc -swift-version 5 -o /private/tmp/tine-harness/learn app/Tests/LearnHarness.swift \
 //       app/Sources/tine/SpecLearner.swift app/Sources/tine/CommandRunner.swift \
-//       app/Sources/tine/SocketServer.swift app/Sources/tine/TineConfig.swift
+//       app/Sources/tine/SocketServer.swift app/Sources/tine/SocketSafe.swift \
+//       app/Sources/tine/TineConfig.swift
 //   LEARN_HOME=/private/tmp/tine-harness /private/tmp/tine-harness/learn
 //
 // The validation/serialization cases run everywhere. The last case is a real

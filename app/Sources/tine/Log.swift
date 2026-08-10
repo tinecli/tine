@@ -7,7 +7,7 @@ enum TineLog {
         try? "".write(toFile: path, atomically: true, encoding: .utf8)
     }
 
-    static func write(_ msg: String) {
+    static func write(_ msg: String, to path: String = TineLog.path) {
         let line = "\(Date()) \(msg)\n"
         guard let data = line.data(using: .utf8) else { return }
         if let fh = FileHandle(forWritingAtPath: path) {

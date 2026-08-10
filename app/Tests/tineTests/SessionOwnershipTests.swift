@@ -59,6 +59,18 @@ struct SessionOwnershipTests {
         #expect(s.sessions.owner == a)
     }
 
+    @Test func firstEmptyRedrawFromAFrontmostTerminalDoesNotTakeOwnership() {
+        let s = Stubs()
+        s.terminals = [a: 100, b: 200]
+        s.frontmost = 100
+        _ = s.sessions.admit(session: a, s.feed("gi", cursor: 2))
+
+        s.frontmost = 200
+        let verdict = s.sessions.admit(session: b, s.feed(""))
+        #expect(verdict == nil)
+        #expect(s.sessions.owner == a)
+    }
+
     @Test func repeatingAnUnchangedEmptyLineIsNotAnEditEvenWithItsOwnTerminalFrontmost() {
         let s = Stubs()
         s.terminals = [a: 100, b: 200]

@@ -25,8 +25,6 @@ struct AppUpdaterTests {
     }
 
     @Test func versionFromLocationRejectsNonAsciiDigits() {
-        // isNumber alone also accepts other scripts' digits, which Int() would
-        // reject later, after the URL had been built from them.
         #expect(AppUpdater.version(fromLocation: "https://github.com/x/y/releases/tag/v1.٢.3") == nil)
     }
 

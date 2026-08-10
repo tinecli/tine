@@ -1,8 +1,9 @@
-// Session-ownership harness. There is no Swift test target yet, so build it
-// against the sources and run it with a scratch root:
+// Session-ownership harness. Build it against the sources and run it with a
+// scratch root:
 //
 //   swiftc -o /private/tmp/tine-harness/session app/Tests/SessionHarness.swift \
-//       app/Sources/tine/SessionOwnership.swift app/Sources/tine/SocketServer.swift
+//       app/Sources/tine/SessionOwnership.swift app/Sources/tine/SocketServer.swift \
+//       app/Sources/tine/FeedMessage.swift app/Sources/tine/SocketSafe.swift
 //   TINE_TEST_ROOT=/private/tmp/tine-harness /private/tmp/tine-harness/session
 //
 // It runs the real SocketServer over a real unix socket and the real
