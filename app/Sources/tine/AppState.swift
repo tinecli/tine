@@ -12,9 +12,18 @@ final class AppState: ObservableObject {
     @Published var isLoading = false
     @Published var config = TineConfig.load() {
         didSet {
+            guard persists else { return }
             config.save()
             engine?.setFirstTokenEnabled(config.firstTokenCompletion)
         }
+    }
+
+    /// False for the Appearance preview's throwaway state: it mirrors the live
+    /// config to draw the panel, and must never write it back.
+    private let persists: Bool
+
+    init(persists: Bool = true) {
+        self.persists = persists
     }
 
     var engine: JSEngine?
