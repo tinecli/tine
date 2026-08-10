@@ -207,8 +207,31 @@ const rethrowUnlessMissingSpec = (err: unknown): null => {
 // parser has nothing to say, so the user's own values are the whole answer, run
 // through the same pools, grammar filter and frecency as the specced path.
 function historyOnlyResult(upToCursor: string): TineResult {
-  const empty = { searchTerm: "", items: [] };
   const tokens = upToCursor.trimStart().split(/\s+/);
+  const command = tokens[0] ?? "";
+  const frecency = (globalThis as { __tineFrecency?: unknown }).__tineFrecency;
+  const commandWasUsed =
+    command.length > 0 &&
+    typeof frecency === "object" &&
+    frecency !== null &&
+    Object.prototype.hasOwnProperty.call(frecency, command);
+  const empty: TineResult = {
+    searchTerm: "",
+    items: commandWasUsed
+      ? [
+          {
+            name: `no spec for \`${command}\` — learn it`,
+            description: "",
+            insertValue: `tine learn ${command}`,
+            shouldAddSpace: false,
+            type: "learn-it",
+            queryTerm: upToCursor,
+            isDangerous: false,
+            matchIndices: [],
+          },
+        ]
+      : [],
+  };
   // Still on the command name: first-token completion handles that, not this.
   if (tokens.length < 2) return empty;
 
@@ -224,6 +247,7 @@ function historyOnlyResult(upToCursor: string): TineResult {
     historyFlagKey(upToCursor),
   ).sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
   const filtered = filterSuggestions(ranked, searchTerm, true, false);
+  if (filtered.length === 0) return empty;
   return { searchTerm, items: toItems(filtered, searchTerm) };
 }
 

@@ -168,10 +168,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return "EXEC"
                 }
                 if let (b, c) = self.state.accept() {
-                    // Learn: record (rawCommand, pickedName) for frecency ranking.
-                    // A history value is skipped: it came from ~/.zsh_history, the
-                    // shell logs it again, and the store must stay free of values.
-                    if let name = self.state.selectedName, self.state.selectedType != "history" {
+                    // History and learn-it rows are not usage picks.
+                    if let name = self.state.selectedName,
+                       self.state.selectedType != "history",
+                       self.state.selectedType != "learn-it" {
                         let cmd = req.buffer.split(whereSeparator: { $0 == " " || $0 == "\t" })
                             .first.map(String.init) ?? ""
                         if let params = self.frecency.record(cmd: cmd, param: name) {

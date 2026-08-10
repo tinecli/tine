@@ -97,6 +97,10 @@ beforeAll(async () => {
     __tineReadFile: (path: string) => files[path] ?? "",
     __tineSpecsDir: specsDir,
     __tineHome: home,
+    __tineFrecency: {
+      pc: {},
+      deploy: {},
+    },
     __tineRun: (json: string) => {
       const input = JSON.parse(json) as {
         executable: string;
@@ -296,6 +300,33 @@ test("a no-spec command with no history values suggests nothing", async () => {
   expect(await names("unseeded ")).toEqual([]);
   expect(await names("unseeded arg ")).toEqual([]);
   expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+});
+
+test("a used command with no spec offers to learn it", async () => {
+  const { items } = await suggest("pc ");
+  expect(items).toHaveLength(1);
+  expect(items[0]).toMatchObject({
+    name: "no spec for `pc` — learn it",
+    insertValue: "tine learn pc",
+    type: "learn-it",
+  });
+});
+
+test("a typo with no frecency key does not offer to learn it", async () => {
+  expect(await names("px ")).toEqual([]);
+});
+
+test("a command with a spec does not offer to learn it", async () => {
+  const { items } = await suggest("deploy ");
+  expect(items.every((item) => item.type !== "learn-it")).toBe(true);
+});
+
+test("the learn-it row replaces the whole line", async () => {
+  const line = "pc --unknown";
+  const { items } = await suggest(line);
+  expect(items).toHaveLength(1);
+  expect(items[0].insertValue).toBe("tine learn pc");
+  expect(items[0].queryTerm).toBe(line);
 });
 
 test("a generator or a spec suggestion keeps history values out", async () => {
