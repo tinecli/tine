@@ -104,6 +104,7 @@ beforeAll(async () => {
     __tineReadFile: (path: string) => files[path] ?? "",
     __tineSpecsDir: specsDir,
     __tineHome: home,
+    __tineLocalSpecsDirs: ["/tine-smoke-local"],
     __tineAliases: { aliaspc: "plug-cli run" },
     __tineFrecency: {
       git: { checkout: use(5) },
@@ -117,9 +118,18 @@ beforeAll(async () => {
         executable: string;
         workingDirectory?: string;
       };
-      // Stands in for the real $PATH scan the `learn` arg's generator runs.
+      // Stands in for the real $PATH + local-specs-dir scan the `learn` arg's
+      // generator runs, tagged "P" (PATH candidate) / "L" (has a local spec)
+      // the way the real shell script does.
       if (input.executable === "/bin/sh") {
-        const stdout = ["git", "cat", "mytool", "newtool"].join("\n");
+        const stdout = [
+          "Pgit",
+          "Pcat",
+          "Pmytool",
+          "Pnewtool",
+          "Plocaltool",
+          "Llocaltool",
+        ].join("\n");
         return JSON.stringify({ stdout, stderr: "", exitCode: 0 });
       }
       const stdout =
@@ -418,12 +428,18 @@ test("tine learn completes PATH commands that have no spec yet", async () => {
   expect(learnNames).not.toContain("cat");
 });
 
+test("a command with a local override/extend spec is filtered like a pack one", async () => {
+  const learnNames = await names("tine learn ");
+  expect(learnNames).not.toContain("localtool");
+});
+
 test("--force already on the line drops the no-spec filter", async () => {
   const forced = await names("tine learn --force ");
   expect(forced).toContain("git");
   expect(forced).toContain("cat");
   expect(forced).toContain("mytool");
   expect(forced).toContain("newtool");
+  expect(forced).toContain("localtool");
 });
 
 test("a typo prefix narrows the learn candidates", async () => {
