@@ -351,17 +351,28 @@ final class SpecLearner: ObservableObject {
         var options: [[String: Any]] = []
         for option in spec.options.prefix(maxEntries) {
             var names: [String] = []
-            let namesFromHelp = option.name.split { $0 == "," || $0.isWhitespace }.map(String.init)
-            for name in namesFromHelp + [shortFlag(option.short)] {
-                guard isFlag(name), documented(name, in: help),
-                      flags.insert(name).inserted else { continue }
+            var hasShort = false
+            var hasLong = false
+            let nameCandidates = option.name.split { $0 == "," || $0.isWhitespace }.map(String.init)
+            for name in nameCandidates + [shortFlag(option.short)] {
+                guard isFlag(name), documented(name, in: help), !flags.contains(name) else { continue }
+                if name.hasPrefix("--") {
+                    guard !hasLong else { continue }
+                    hasLong = true
+                } else {
+                    guard !hasShort else { continue }
+                    hasShort = true
+                }
+                flags.insert(name)
                 names.append(name)
             }
             guard !names.isEmpty else { continue }
+            let evidence = argumentEvidence(option.argument,
+                                            in: optionHelp(names: names, help: help))
             options.append(entry(names: names, description: option.description,
                                  argument: option.argument,
-                                 takesFilePath: option.takesFilePath,
-                                 isOptional: option.isOptional))
+                                 takesFilePath: option.takesFilePath && evidence.isPath,
+                                 isOptional: option.isOptional && evidence.isOptional))
         }
         guard !subcommands.isEmpty || !options.isEmpty else { return nil }
 
@@ -371,9 +382,10 @@ final class SpecLearner: ObservableObject {
         if !subcommands.isEmpty { figSpec["subcommands"] = subcommands }
         if !options.isEmpty { figSpec["options"] = options }
         if let argument = argumentName(spec.argument) {
+            let evidence = argumentEvidence(argument, in: usageText(in: help))
             figSpec["args"] = argumentSpec(name: argument,
-                                            takesFilePath: spec.takesFilePath,
-                                            isOptional: spec.isOptional)
+                                            takesFilePath: spec.takesFilePath && evidence.isPath,
+                                            isOptional: spec.isOptional && evidence.isOptional)
         }
         return figSpec
     }
@@ -402,12 +414,68 @@ final class SpecLearner: ObservableObject {
 
     nonisolated static func optionCoverage(from spec: LearnedSpec,
                                            help: String) -> OptionCoverage {
-        let pattern = try? NSRegularExpression(pattern: "(?m)^\\s+-{1,2}\\S")
-        let documentedCount = pattern?.numberOfMatches(
-            in: help, range: NSRange(help.startIndex..., in: help)) ?? 0
-        let survivingCount = figSpec(command: "coverage", from: spec, help: help)?["options"]
-            .flatMap { $0 as? [[String: Any]] }?.count ?? 0
-        return OptionCoverage(surviving: survivingCount, documented: documentedCount)
+        let documentedCount = documentedFlags(in: help).count
+        let options = figSpec(command: "coverage", from: spec, help: help)?["options"]
+            as? [[String: Any]] ?? []
+        let surviving = Set(options.flatMap { option -> [String] in
+            if let name = option["name"] as? String { return [name] }
+            return option["name"] as? [String] ?? []
+        })
+        return OptionCoverage(surviving: surviving.count, documented: documentedCount)
+    }
+
+    private nonisolated static func documentedFlags(in help: String) -> Set<String> {
+        guard let pattern = try? NSRegularExpression(
+            pattern: "(?<![A-Za-z0-9_-])-{1,2}[A-Za-z][A-Za-z0-9-]*(?![A-Za-z0-9_-])"
+        ) else { return [] }
+        return Set(pattern.matches(in: help, range: NSRange(help.startIndex..., in: help))
+            .compactMap { match in
+                Range(match.range, in: help).map { String(help[$0]) }
+            })
+    }
+
+    private nonisolated static func optionHelp(names: [String], help: String) -> String {
+        help.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { line in names.contains { documented($0, in: String(line)) } }
+            .joined(separator: "\n")
+    }
+
+    private nonisolated static func usageText(in help: String) -> String {
+        var lines: [String] = []
+        var collecting = false
+        for line in help.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+            if line.range(of: "^\\s*(usage|synopsis)\\s*:",
+                          options: [.regularExpression, .caseInsensitive]) != nil {
+                collecting = true
+                lines.append(line)
+                continue
+            }
+            guard collecting else { continue }
+            if line.range(of: "^\\s*[A-Za-z][A-Za-z ]+\\s*:\\s*$",
+                          options: .regularExpression) != nil {
+                break
+            }
+            lines.append(line)
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private nonisolated static func argumentEvidence(_ raw: String,
+                                                      in help: String) -> (isPath: Bool,
+                                                                          isOptional: Bool) {
+        guard let name = argumentName(raw) else { return (false, false) }
+        let escaped = NSRegularExpression.escapedPattern(for: name)
+        let placeholder = "(?<![A-Za-z0-9_-])\(escaped)(?![A-Za-z0-9_-])"
+        let appears = help.range(of: placeholder,
+                                 options: [.regularExpression, .caseInsensitive]) != nil
+        let bracketed = "\\[\\s*<?\(escaped)>?\\s*\\]"
+        let isOptional = help.range(of: bracketed,
+                                    options: [.regularExpression, .caseInsensitive]) != nil
+        let pathWord = "(^|[^A-Za-z0-9])(FILES?|PATHS?|DIRS?|DIRECTOR(Y|IES)|FOLDERS?|"
+            + "SRCS?|SOURCES?|DESTS?|DESTINATIONS?|INPUTS?|OUTPUTS?)([^A-Za-z0-9]|$)"
+        let isPath = appears && name.range(of: pathWord,
+                                           options: [.regularExpression, .caseInsensitive]) != nil
+        return (isPath, isOptional)
     }
 
     /// A description is model text derived from untrusted `--help`, so it is

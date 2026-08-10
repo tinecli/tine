@@ -190,6 +190,24 @@ enum LearnHarness {
             .flatMap(json)?["options"] as? [[String: Any]]
         check("split flag still requires help containment",
               kept?.first?["name"] as? String == "-d")
+
+        let conflated = LearnedSpec(
+            description: "CSV cleaner",
+            subcommands: [],
+            options: [
+                LearnedOption(name: "-d, -q, --delimiter, --quiet", short: "",
+                              description: "Set delimiter", argument: "DELIMITER",
+                              takesFilePath: false, isOptional: false),
+            ],
+            argument: "",
+            takesFilePath: false,
+            isOptional: false)
+        let capped = SpecLearner.specModule(
+            command: "csvclean", from: conflated,
+            help: "  -d, --delimiter DELIMITER  Set delimiter\n  -q, --quiet  Be quiet"
+        ).flatMap(json)?["options"] as? [[String: Any]]
+        check("conflated flags keep one short and one long form",
+              capped?.first?["name"] as? [String] == ["-d", "--delimiter"])
     }
 
     static func argumentShape() {
@@ -205,10 +223,51 @@ enum LearnHarness {
             takesFilePath: true,
             isOptional: true)
         let module = SpecLearner.specModule(command: "csvclean", from: learned,
-                                            help: "  --help  Show help")
+                                            help: "USAGE: csvclean [FILE]\n  --help  Show help")
         let args = module.flatMap(json)?["args"] as? [String: Any]
         check("positional file argument gets filepaths template", args?["template"] as? String == "filepaths")
         check("positional optional argument is optional", args?["isOptional"] as? Bool == true)
+
+        var required = learned
+        required.argument = "INPUT"
+        let requiredArgs = SpecLearner.specModule(
+            command: "csvclean", from: required,
+            help: "USAGE: csvclean INPUT\n  --help  Show help"
+        ).flatMap(json)?["args"] as? [String: Any]
+        check("unbracketed positional is not optional", requiredArgs?["isOptional"] == nil)
+
+        let count = LearnedSpec(
+            description: "Counter",
+            subcommands: [],
+            options: [
+                LearnedOption(name: "--count", short: "", description: "Set count",
+                              argument: "COUNT", takesFilePath: true, isOptional: false),
+            ],
+            argument: "",
+            takesFilePath: false,
+            isOptional: false)
+        let countArgs = SpecLearner.specModule(
+            command: "counter", from: count, help: "  --count COUNT  Set count"
+        ).flatMap(json)?["options"] as? [[String: Any]]
+        check("hallucinated file path on COUNT is dropped",
+              (countArgs?.first?["args"] as? [String: Any])?["template"] == nil)
+
+        let output = LearnedSpec(
+            description: "Writer",
+            subcommands: [],
+            options: [
+                LearnedOption(name: "--output", short: "", description: "Write output",
+                              argument: "OUTPUT_FILE", takesFilePath: true, isOptional: false),
+            ],
+            argument: "",
+            takesFilePath: false,
+            isOptional: false)
+        let outputArgs = SpecLearner.specModule(
+            command: "writer", from: output,
+            help: "  --output <OUTPUT_FILE>  Write output"
+        ).flatMap(json)?["options"] as? [[String: Any]]
+        check("corroborated option file path is kept",
+              (outputArgs?.first?["args"] as? [String: Any])?["template"] as? String == "filepaths")
     }
 
     static func coverage() {
@@ -227,6 +286,20 @@ enum LearnHarness {
         let coverage = SpecLearner.optionCoverage(from: learned, help: help)
         check("under-covered help has incomplete coverage",
               coverage.ratio == 0.5 && coverage.isIncomplete)
+
+        let ffmpegHelp = """
+              -h      show help
+              -h long show more help
+              -h full show all help
+              -h type show help for a type
+            """
+        var ffmpeg = learned
+        ffmpeg.options[0].name = "-h"
+        let ffmpegCoverage = SpecLearner.optionCoverage(from: ffmpeg, help: ffmpegHelp)
+        check("repeated argument variants count as one documented flag",
+              ffmpegCoverage.surviving == 1
+                  && ffmpegCoverage.documented == 1
+                  && !ffmpegCoverage.isIncomplete)
     }
 
     /// A help text that documents `--version` alone contains the characters of an
