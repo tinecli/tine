@@ -567,16 +567,12 @@ private struct MenuBarLabel: View {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject var updater: AppUpdater
     private var isDev: Bool { Bundle.main.bundleIdentifier?.hasSuffix(".dev") ?? false }
+    private var symbol: String {
+        if updater.updateActionable { return "arrow.down.circle.fill" }
+        return isDev ? "hammer.fill" : "chevron.forward.2"
+    }
     var body: some View {
-        Image(systemName: isDev ? "hammer.fill" : "chevron.forward.2")
-            .overlay(alignment: .topTrailing) {
-                if updater.newerVersion != nil || updater.readyVersion != nil {
-                    Circle()
-                        .fill(.red)
-                        .frame(width: 5, height: 5)
-                        .offset(x: 2, y: -2)
-                }
-            }
+        Image(systemName: symbol)
             .onReceive(NotificationCenter.default.publisher(for: .tineOpenDashboard)) { _ in
                 openWindow(id: TineApp.dashboardID)
                 NSApp.activate(ignoringOtherApps: true)
@@ -592,13 +588,16 @@ private struct DashboardMenu: View {
             openWindow(id: TineApp.dashboardID)
             NSApp.activate(ignoringOtherApps: true)
         }
-        if let readyVersion = updater.readyVersion {
-            Button("Update to \(readyVersion) and Relaunch") {
-                updater.applyAndRelaunch()
-            }
-        } else if updater.newerVersion != nil {
-            Button("Download update…") {
-                updater.check(manual: true)
+        if updater.updateActionable {
+            if case .ready(let version) = updater.status {
+                Button("Update to \(version) and Relaunch") {
+                    updater.applyAndRelaunch()
+                }
+            } else {
+                Button("Download update…") {
+                    updater.check(manual: true)
+                }
+                .disabled(updater.status == .checking || updater.status == .downloading)
             }
         }
         Divider()
