@@ -22,6 +22,17 @@ describe("getCommand", () => {
     ]);
   });
 
+  it("treats a leading separator like a mid-line one", () => {
+    expectText(getCommand("; make ", {})).toEqual(["make", ""]);
+    expectText(getCommand("&& make ", {})).toEqual(["make", ""]);
+    expectText(getCommand(";", {})).toEqual([]);
+  });
+
+  it("does not treat a quoted semicolon as a separator", () => {
+    expectText(getCommand('echo ";" ', {})).toEqual(["echo", ";", ""]);
+    expectText(getCommand('; echo ";" ', {})).toEqual(["echo", ";", ""]);
+  });
+
   it("works with regular aliases", () => {
     // Don't change a single token.
     expectText(getCommand("woman", aliases)).toEqual(["woman"]);

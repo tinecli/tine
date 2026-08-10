@@ -228,8 +228,35 @@ test("a whitespace-only buffer suggests nothing without an error", async () => {
   expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
 });
 
-test("a leading semicolon suggests nothing without an error", async () => {
-  expect(await names("; pc ")).toEqual([]);
+test("a leading separator suggests on the trailing segment", async () => {
+  const { items, searchTerm } = await suggest("; git ch");
+  expect(items.map((item) => item.name)).toEqual(["checkout", "cherry-pick"]);
+  expect(searchTerm).toBe("ch");
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+});
+
+test("a leading && suggests on the trailing segment with no spec", async () => {
+  const { items } = await suggest("&& pc ");
+  expect(items).toHaveLength(1);
+  expect(items[0]).toMatchObject({
+    name: "no spec for `pc` — learn it",
+    insertValue: "tine learn pc",
+    type: "learn-it",
+  });
+});
+
+test("a bare semicolon suggests nothing without an error", async () => {
+  expect(await names(";")).toEqual([]);
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+});
+
+test("a bare && suggests nothing without an error", async () => {
+  expect(await names("&&")).toEqual([]);
+  expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
+});
+
+test("a quoted semicolon is not treated as a separator", async () => {
+  expect(await names('echo ";" ')).toEqual([]);
   expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
 });
 
@@ -346,6 +373,17 @@ test("a no-spec command with no history values suggests nothing", async () => {
 
 test("a used command with no spec offers to learn it", async () => {
   const { items } = await suggest("pc ");
+  expect(items).toHaveLength(1);
+  expect(items[0]).toMatchObject({
+    name: "no spec for `pc` — learn it",
+    description: "writes a spec from `pc --help`",
+    insertValue: "tine learn pc",
+    type: "learn-it",
+  });
+});
+
+test("a leading separator still resolves the trailing segment's learn-it row", async () => {
+  const { items } = await suggest("; pc ");
   expect(items).toHaveLength(1);
   expect(items[0]).toMatchObject({
     name: "no spec for `pc` — learn it",

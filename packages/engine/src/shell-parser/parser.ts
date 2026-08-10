@@ -492,8 +492,7 @@ function parseCommand(
     startIndex,
     type: NodeType.Command,
     complete: children.length > 0,
-    // Extend command up to separator.
-    endIndex: children.length > 0 ? endIndex : str.length,
+    endIndex,
     children,
   });
 }
