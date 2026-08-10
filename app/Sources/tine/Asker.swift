@@ -100,7 +100,7 @@ final class Asker: ObservableObject {
     /// another question is being answered.
     func ask(question raw: String) -> String {
         guard let question = Self.question(raw) else {
-            return start("ask") { self.status = .failed("ask what? — try: tine ask \"convert an image to jpeg\"") }
+            return reject("ask what? — try: tine ask \"convert an image to jpeg\"")
         }
         return start(question) { [weak self] in
             Task { await self?.answer(question) }
@@ -114,20 +114,40 @@ final class Asker: ObservableObject {
         }
     }
 
-    /// One job at a time, and a job that has run past its deadline no longer holds
-    /// the asker — nothing else would ever release it.
+    /// "busy:<what>" while a job holds the asker. A job that has run past its
+    /// deadline holds nothing — nothing else would ever release it.
+    private func busy() -> String? {
+        guard let job, Date().timeIntervalSince(job.startedAt) < Self.jobTimeout else { return nil }
+        return "busy:\(job.label.socketSafe)"
+    }
+
+    /// One job at a time.
     private func start(_ label: String, _ work: () -> Void) -> String {
-        if let job, Date().timeIntervalSince(job.startedAt) < Self.jobTimeout {
-            return "busy:\(job.label.socketSafe)"
-        }
-        job = (label, Date())
-        status = .running("thinking")
+        if let busy = busy() { return busy }
+        let startedAt = Date()
+        job = (label, startedAt)
+        report(startedAt, .running("thinking"))
         work()
         return "started"
     }
 
-    /// Only the job still in flight may report: one that timed out has been
-    /// superseded, and must not write over the job that replaced it.
+    /// A request that never becomes a job: its reason is the status the shell polls
+    /// for next, and the asker stays free for the question the user meant to ask.
+    private func reject(_ reason: String) -> String {
+        if let busy = busy() { return busy }
+        status = .failed(reason)
+        return "started"
+    }
+
+    /// Every status write goes through here. Only the job still in flight may
+    /// report: one that outran its deadline has been superseded, and must not
+    /// write over the job that replaced it — not with its result, and not with a
+    /// stage the shell would show for it.
+    private func report(_ startedAt: Date, _ stage: Status) {
+        guard job?.startedAt == startedAt else { return }
+        status = stage
+    }
+
     private func finish(_ startedAt: Date, _ result: Status) {
         guard job?.startedAt == startedAt else { return }
         job = nil
@@ -142,7 +162,7 @@ final class Asker: ObservableObject {
         guard let startedAt else { return }
         let entries: [AskEntry]
         do {
-            entries = try await corpus(rebuild: false)
+            entries = try await corpus(rebuild: false, startedAt: startedAt)
         } catch {
             finish(startedAt, .failed(error.localizedDescription))
             return
@@ -159,13 +179,14 @@ final class Asker: ObservableObject {
         }
         // The model reads the descriptions and says which tool the question is
         // really about — the one thing it is better at than the ranking is.
-        status = .running("reading what your tools do")
+        report(startedAt, .running("reading what your tools do"))
         guard let picked = await pick(question: question, from: candidates) else {
             finish(startedAt, .done(rows(candidates)))
             return
         }
         let reordered = candidates.filter { $0.name != picked.name }
-        guard let composed = await compose(question: question, tool: picked) else {
+        guard let composed = await compose(question: question, tool: picked,
+                                           startedAt: startedAt) else {
             finish(startedAt, .done(rows([picked] + reordered)))
             return
         }
@@ -195,10 +216,10 @@ final class Asker: ObservableObject {
     /// No spec, no command: a 3B model asked to invoke a tool it has never been
     /// shown the flags of writes something plausible and wrong, and tine would
     /// have nothing to catch it with.
-    private func compose(question: String, tool: AskEntry) async -> Row? {
+    private func compose(question: String, tool: AskEntry, startedAt: Date) async -> Row? {
         let documented = outline?(tool.name) ?? []
         guard !documented.isEmpty else { return nil }
-        status = .running("composing a \(tool.name) command")
+        report(startedAt, .running("composing a \(tool.name) command"))
         var rejected = ""
         for _ in 0..<Self.attempts {
             guard let answer = await Self.composedLine(question: question, tool: tool,
@@ -211,8 +232,11 @@ final class Asker: ObservableObject {
                 rejected = token
                 continue
             }
-            return .command(line, dangerous: verdict == .ok(dangerous: true)
-                || Self.looksDestructive(line))
+            // Nothing but a passed check ships a command. Composing already proved
+            // a spec exists, so anything else here means the check itself did not
+            // run — and an unchecked line is what this whole path exists to avoid.
+            guard case .ok(let dangerous) = verdict else { return nil }
+            return .command(line, dangerous: dangerous || Self.looksDestructive(line))
         }
         return nil
     }
@@ -235,7 +259,7 @@ final class Asker: ObservableObject {
 
     /// The index for this machine, rebuilt when PATH has changed under it — or
     /// when asked to. Blocking; runs on the job's detached task.
-    private func corpus(rebuild: Bool) async throws -> [AskEntry] {
+    private func corpus(rebuild: Bool, startedAt: Date) async throws -> [AskEntry] {
         let path = shellPath?() ?? ProcessInfo.processInfo.environment["PATH"] ?? ""
         let packDir = self.packDir
         let dirs = AskIndex.pathDirs(path)
@@ -245,7 +269,7 @@ final class Asker: ObservableObject {
            !stored.entries.isEmpty {
             return stored.entries
         }
-        status = .running("indexing the tools on your PATH")
+        report(startedAt, .running("indexing the tools on your PATH"))
         let built = await Task.detached(priority: .utility) {
             AskIndex.build(shellPath: path,
                            packDescriptions: AskIndex.packDescriptions(in: packDir))
@@ -258,7 +282,7 @@ final class Asker: ObservableObject {
     private func reindex() async {
         guard let startedAt else { return }
         do {
-            let entries = try await corpus(rebuild: true)
+            let entries = try await corpus(rebuild: true, startedAt: startedAt)
             let described = entries.filter { !$0.description.isEmpty }.count
             finish(startedAt, .done([.note("indexed \(entries.count) tools on your PATH, "
                 + "\(described) with a description")]))
@@ -381,8 +405,11 @@ final class Asker: ObservableObject {
 
     nonisolated static let maxCommand = 300
 
-    /// Every character zsh would read as more than one word of one command.
+    /// Every character zsh would read as more than one word of one command — `!`
+    /// included: history expansion runs on the buffer at accept-line, so an
+    /// unquoted `!!` is the one character that makes the line the user runs differ
+    /// from the line they reviewed.
     private nonisolated static let shellOperators: Set<Character> = [
-        ";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r", "\\",
+        ";", "|", "&", "$", "`", "(", ")", "<", ">", "!", "\n", "\r", "\\",
     ]
 }

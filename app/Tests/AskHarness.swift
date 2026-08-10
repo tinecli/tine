@@ -46,6 +46,7 @@ enum AskHarness {
         ranking()
         answers()
         store()
+        MainActor.assumeIsolated { jobs() }
         if CommandLine.arguments.contains("--live") { live() }
         if CommandLine.arguments.contains("--answer") { MainActor.assumeIsolated { answering() } }
         print("\n\(pass) passed, \(fail) failed")
@@ -198,6 +199,11 @@ enum AskHarness {
         check("backtick rejected", Asker.checked("ls `whoami`", installed: installed) == nil)
         check("redirect rejected", Asker.checked("ls > /etc/passwd", installed: installed) == nil)
         check("newline rejected", Asker.checked("ls\nrm -rf /", installed: installed) == nil)
+        // History expansion happens at accept-line, on the buffer `print -z` filled:
+        // `!!` would run something other than the line the user read.
+        check("history expansion rejected", Asker.checked("ls !!", installed: installed) == nil)
+        check("history reference rejected", Asker.checked("jq !$", installed: installed) == nil)
+        check("bang word rejected", Asker.checked("ls !jq", installed: installed) == nil)
         check("empty rejected", Asker.checked("", installed: installed) == nil)
         check("prose rejected", Asker.checked("You can use ls", installed: installed) == nil)
         check("an over-long line rejected",
@@ -249,6 +255,26 @@ enum AskHarness {
         let t0 = Date()
         for _ in 0..<20 { _ = AskIndex.rank(query, in: built.entries, limit: 5) }
         print(String(format: "  rank: %.1f ms", Date().timeIntervalSince(t0) * 1000 / 20))
+    }
+
+    // MARK: - The job gate
+
+    /// A rejected question is not a job, so it must not hold the asker: before
+    /// this, one `tine ask` with no question answered "busy" to every ask for the
+    /// next three minutes.
+    @MainActor
+    static func jobs() {
+        let asker = Asker(packDir: "/private/tmp/tine-harness/no-pack")
+        asker.shellPath = { "" }   // no PATH: a real job fails fast, and writes nothing
+        check("a question with nothing in it is rejected", asker.ask(question: "  ") == "started")
+        check("the rejection is the status", asker.statusLine.hasPrefix("failed:"))
+        check("the asker is free straight after a rejection",
+              asker.ask(question: "   \u{1f}  ") == "started")
+        check("a real question starts after a rejection",
+              asker.ask(question: "convert an image") == "started")
+        check("a second question waits for the first",
+              asker.ask(question: "format csv").hasPrefix("busy:"))
+        check("the running job is named", asker.statusLine.hasPrefix("running:"))
     }
 
     // MARK: - A real answer (opt-in)
