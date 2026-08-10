@@ -273,15 +273,20 @@ final class Asker: ObservableObject {
     /// Must abandon past the deadline — a wedged model call would otherwise hold the job forever.
     private nonisolated static func bounded<T: Sendable>(timeout: TimeInterval = modelTimeout,
         _ work: @escaping @Sendable () async throws -> T) async -> T? {
-        await withTaskGroup(of: T?.self) { group in
-            group.addTask { try? await work() }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                return nil
-            }
-            defer { group.cancelAll() }
-            return await group.next() ?? nil
+        let (results, continuation) = AsyncStream.makeStream(of: T?.self)
+        let model = Task { continuation.yield(try? await work()) }
+        let deadline = Task {
+            do {
+                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                continuation.yield(nil)
+            } catch {}
         }
+        var iterator = results.makeAsyncIterator()
+        let result = await iterator.next() ?? nil
+        continuation.finish()
+        model.cancel()
+        deadline.cancel()
+        return result
     }
 
     static func retrievalCandidates(
