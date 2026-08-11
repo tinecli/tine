@@ -340,7 +340,7 @@ final class Frecency {
         let backup = storePath + ".bak"
         try? FileManager.default.removeItem(atPath: backup)
         try? FileManager.default.moveItem(atPath: storePath, toPath: backup)
-        tlog("frecency: unreadable store moved to \(backup)")
+        tlog("frecency: unreadable store moved to \(backup)", to: logPath)
         return Store(global: [:], scoped: [:])
     }
 

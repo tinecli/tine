@@ -66,6 +66,7 @@ enum TineLog {
         _ = ftruncate(descriptor, 0)
     }
 
+    // Log tails are user-shippable to public issues; log lengths/counts, never values.
     static func write(_ msg: String, to path: String = TineLog.path) {
         let line = "\(Date()) \(msg)\n"
         guard let data = line.data(using: .utf8),
@@ -90,7 +91,10 @@ enum TineLog {
         var bytes = [UInt8](repeating: 0, count: count)
         let bytesRead = Darwin.read(descriptor, &bytes, count)
         guard bytesRead > 0 else { return "" }
-        return String(decoding: bytes.prefix(bytesRead), as: UTF8.self)
+        let completeCharacters = bytes.prefix(bytesRead).drop {
+            $0 & 0b1100_0000 == 0b1000_0000
+        }
+        return String(decoding: completeCharacters, as: UTF8.self)
     }
 
     private static func descriptor(at path: String, flags: Int32, create: Bool) -> Int32? {
@@ -165,4 +169,16 @@ enum TineLog {
     }
 }
 
-func tlog(_ msg: String) { TineLog.write(msg) }
+final class TineLogChangeGate<Value: Equatable> {
+    private var lastValue: Value?
+
+    func changed(to value: Value) -> Bool {
+        guard lastValue != value else { return false }
+        lastValue = value
+        return true
+    }
+}
+
+func tlog(_ msg: String, to path: String = TineLog.path) {
+    TineLog.write(msg, to: path)
+}
