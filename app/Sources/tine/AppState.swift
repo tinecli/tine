@@ -88,8 +88,7 @@ final class AppState: ObservableObject {
     }
 
     @discardableResult
-    func update(_ msg: FeedMessage, frecencySnapshot: Frecency.Index) -> Bool {
-        self.frecencySnapshot = frecencySnapshot
+    func update(_ msg: FeedMessage) -> Bool {
         if msg.buffer == buffer && msg.cursor == cursor && msg.cwd == cwd { return false }
         buffer = msg.buffer
         cursor = msg.cursor

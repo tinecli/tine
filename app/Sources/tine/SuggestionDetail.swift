@@ -1,22 +1,45 @@
-import Foundation
+import AppKit
+import SwiftUI
 
 enum SuggestionDetail {
-    private static let detailContentLineCount =
-        1 // title
-        + 1 // type / danger
-        + 1 // usage
-        + 1 // man NAME
-        + 1 // description
-        + 1 // inserted value
-        + 1 // spec-report action
-        + 1 // keyboard footer
+    static let width: CGFloat = 260
 
-    static func panelHeight(rows: Int, config: TineConfig) -> CGFloat {
+    struct Content {
+        let title: String?
+        let type: String
+        let isDangerous: Bool
+        let isExecute: Bool
+        let description: String
+        let insertValue: String
+        let usageLine: String?
+        let manName: String?
+        let issueURL: URL?
+
+        static let empty = Content(
+            title: nil, type: "", isDangerous: false, isExecute: false,
+            description: "", insertValue: "", usageLine: nil, manName: nil,
+            issueURL: nil)
+    }
+
+    @MainActor
+    static func panelHeight(rows: Int, config: TineConfig,
+                            content: Content = .empty) -> CGFloat {
         let visible = min(max(rows, 1), max(1, config.maxVisibleRows))
         let lineHeight = CGFloat(config.fontSize) + 12
         let rowsHeight = lineHeight * CGFloat(visible) + 8
         guard config.showDetail else { return rowsHeight }
-        let detailHeight = lineHeight * CGFloat(detailContentLineCount) + 8
+
+        let detail = SuggestionDetailView(
+            content: content, fontSize: CGFloat(config.fontSize)
+        )
+        .frame(width: width)
+        .fixedSize(horizontal: false, vertical: true)
+        let renderer = ImageRenderer(content: detail)
+        renderer.proposedSize = ProposedViewSize(
+            width: width, height: nil)
+        renderer.scale = 1
+        guard let image = renderer.cgImage else { return rowsHeight }
+        let detailHeight = CGFloat(image.height)
         return max(rowsHeight, detailHeight)
     }
 
@@ -81,6 +104,88 @@ enum SuggestionDetail {
                 value: "Spec: \(specName)\nRendered suggestion: \(renderedSuggestion)\nTine version: \(version)"
             ),
         ]
+        components.percentEncodedQuery = components.percentEncodedQuery?
+            .replacingOccurrences(of: "+", with: "%2B")
         return components.url
+    }
+}
+
+struct SuggestionDetailView: View {
+    let content: SuggestionDetail.Content
+    let fontSize: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let title = content.title {
+                Text(content.isExecute ? "Run" : title)
+                    .font(.system(
+                        size: fontSize + 1, weight: .semibold, design: .monospaced))
+                    .lineLimit(2)
+                    .foregroundStyle(content.isDangerous ? .red : .primary)
+                HStack(spacing: 6) {
+                    if !content.type.isEmpty {
+                        Text(content.type)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    if content.isDangerous {
+                        Label("dangerous", systemImage: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.red)
+                    }
+                }
+                if let usageLine = content.usageLine {
+                    Text(usageLine)
+                        .font(.system(size: max(9, fontSize - 2)))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                if let manName = content.manName {
+                    Text("man  \(manName)")
+                        .font(.system(size: max(9, fontSize - 2)))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                if !content.description.isEmpty {
+                    Text(content.description)
+                        .font(.system(size: max(10, fontSize - 1)))
+                        .foregroundStyle(.primary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !content.isExecute && !content.insertValue.isEmpty {
+                    Text("inserts  \(content.insertValue)")
+                        .font(.system(
+                            size: max(9, fontSize - 2), design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+                if let issueURL = content.issueURL {
+                    Button {
+                        NSWorkspace.shared.open(issueURL)
+                    } label: {
+                        Label("Spec wrong?", systemImage: "exclamationmark.bubble")
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: max(9, fontSize - 2)))
+                    .foregroundStyle(.tint)
+                }
+            } else {
+                Text("No selection")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Text("↑↓ move · ↩ accept · ⇥ prefix · esc close · ⌃K hide")
+                .font(.system(size: 9))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }

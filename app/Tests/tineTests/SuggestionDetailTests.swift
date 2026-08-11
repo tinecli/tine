@@ -66,6 +66,8 @@ struct SuggestionDetailTests {
         #expect(url.absoluteString.contains("%26"))
         #expect(url.absoluteString.contains("%23"))
         #expect(url.absoluteString.contains("%0A"))
+        #expect(url.absoluteString.contains("%2B"))
+        #expect(!(components.percentEncodedQuery ?? "").contains("+"))
         #expect(!url.absoluteString.contains("雪"))
     }
 

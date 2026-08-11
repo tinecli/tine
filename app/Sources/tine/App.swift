@@ -115,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.pendingProjectFrecencyApply = true
                 }
                 self.resolveProjectFrecency(for: req.cwd)
-                self.state.update(feed, frecencySnapshot: self.frecency.index)
+                self.state.update(feed)
                 if verdict.changed, let app = verdict.appPID {
                     // Must only update here — an async redraw from a background terminal
                     // reaches this handler too, but doesn't prove ownership.
@@ -134,12 +134,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return "PASS" // must fire at the top row too, or Up can never reach zsh history
                 }
                 self.state.moveSelection(-1)
+                self.panel?.relayout()
                 return "\(self.state.suggestions.count)"
             case "down":
                 if self.panel?.isVisible != true || !self.sessions.isOwner(req.session) {
                     return "PASS"
                 }
                 self.state.moveSelection(1)
+                self.panel?.relayout()
                 return "\(self.state.suggestions.count)"
             case "accept":
                 // "" here falls through to a normal accept-line — this shell's _TINE_ACTIVE
@@ -159,6 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         let cmd = req.buffer.split(whereSeparator: { $0 == " " || $0 == "\t" })
                             .first.map(String.init) ?? ""
                         if let result = self.frecency.record(cmd: cmd, param: name, cwd: req.cwd) {
+                            self.state.installFrecencySnapshot(self.frecency.index)
                             self.state.engine?.setFrecencyCommand(cmd, params: result.global)
                             if let scoped = result.scoped {
                                 self.state.engine?.setProjectFrecencyCommand(cmd, params: scoped)
@@ -312,6 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, self.frecency.setHistoryIgnore(pattern) else { return }
             let (index, values) = (self.frecency.index, self.frecency.valueIndex)
             DispatchQueue.main.async {
+                self.state.installFrecencySnapshot(index)
                 self.state.engine?.setFrecency(index)
                 self.state.engine?.setHistoryValues(values)
             }

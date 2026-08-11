@@ -404,9 +404,12 @@ function specIndex(): SpecIndex {
 
 function packSpecName(annotations: readonly unknown[]): string {
   for (const annotation of annotations) {
-    const specLocation = (
-      annotation as { specLocation?: { name?: unknown; type?: unknown } }
-    ).specLocation;
+    const candidate = annotation as {
+      spec?: { tineLocalOverride?: unknown };
+      specLocation?: { name?: unknown; type?: unknown };
+    };
+    if (candidate.spec?.tineLocalOverride === true) return "";
+    const specLocation = candidate.specLocation;
     if (
       specLocation?.type === "global" &&
       typeof specLocation.name === "string" &&
