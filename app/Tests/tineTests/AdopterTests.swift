@@ -37,7 +37,7 @@ private actor ControlledCorpus {
     private var startWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
     private var releaseWaiters: [String: CheckedContinuation<Void, Never>] = [:]
 
-    func build(shellPath: String, packDescriptions: [String: String]) async -> AskIndex.Stored {
+    func build(shellPath: String, packDir: String) async -> AskIndex.Stored {
         started.insert(shellPath)
         startWaiters.removeValue(forKey: shellPath)?.forEach { $0.resume() }
         await withCheckedContinuation { continuation in
@@ -161,7 +161,7 @@ struct AskerAdmissionTests {
             packDir: root + "/pack",
             queryExpansion: { _ in throw ControlledFailure(label: "unexpected expansion") },
             dataDir: { root + "/data" },
-            corpusBuilder: { await corpus.build(shellPath: $0, packDescriptions: $1) },
+            corpusBuilder: { await corpus.build(shellPath: $0, packDir: $1) },
             jobTimeout: 0
         )
         asker.shellPath = { path }

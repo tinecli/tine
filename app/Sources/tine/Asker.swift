@@ -4,7 +4,7 @@ import FoundationModels
 
 typealias AskQueryExpansion = @Sendable (String) async throws -> ExpandedSearchTerms
 typealias AskDataDirectory = @Sendable () -> String
-typealias AskCorpusBuilder = @Sendable (String, [String: String]) async -> AskIndex.Stored
+typealias AskCorpusBuilder = @Sendable (String, String) async -> AskIndex.Stored
 
 @Generable
 struct ExpandedSearchTerms: Sendable {
@@ -78,9 +78,12 @@ final class Asker: ObservableObject {
          },
          expansionTimeout: TimeInterval = 2,
          dataDir: @escaping AskDataDirectory = { Asker.defaultDataDirectory() },
-         corpusBuilder: @escaping AskCorpusBuilder = { path, descriptions in
+         corpusBuilder: @escaping AskCorpusBuilder = { path, packDir in
              await Task.detached(priority: .utility) {
-                 AskIndex.build(shellPath: path, packDescriptions: descriptions)
+                 AskIndex.build(
+                     shellPath: path,
+                     packDescriptions: AskIndex.packDescriptions(in: packDir)
+                 )
              }.value
          },
          jobTimeout: TimeInterval = 180) {
@@ -266,7 +269,7 @@ final class Asker: ObservableObject {
             return stored.entries
         }
         report(job, .running("indexing the tools on your PATH"))
-        let built = await corpusBuilder(path, AskIndex.packDescriptions(in: packDir))
+        let built = await corpusBuilder(path, packDir)
         guard !built.entries.isEmpty else { throw Failure("found no tools on your PATH") }
         try AskIndex.save(built, to: dataDir())
         return built.entries
