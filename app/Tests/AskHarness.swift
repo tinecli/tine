@@ -449,7 +449,9 @@ enum AskHarness {
             if expansion != nil { successes += 1 }
             if firstPools[question] == nil {
                 firstPools[question] = Asker.candidatePool(
-                    question: question, expansion: expansion, in: entries, limit: 10
+                    question: question,
+                    expansion: expansion.map { $0.terms.joined(separator: " ") },
+                    in: entries, limit: 10
                 ).map(\.name)
             }
         }

@@ -2,7 +2,14 @@ import Combine
 import Foundation
 import FoundationModels
 
-typealias AskQueryExpansion = @Sendable (String) async throws -> String
+typealias AskQueryExpansion = @Sendable (String) async throws -> ExpandedSearchTerms
+
+@Generable
+struct ExpandedSearchTerms: Sendable {
+    @Guide(description: "Lowercase search terms for the task, input and output types, and equivalents",
+           .maximumCount(12))
+    var terms: [String]
+}
 
 /// Guided generation: the model produces a *value*, never source, a file, or a shell.
 @Generable
@@ -296,13 +303,15 @@ final class Asker: ObservableObject {
     ) async -> [AskEntry] {
         let expansion = await boundedExpansion(question: question, timeout: expansionTimeout,
                                                expand: expand)
-        return candidatePool(question: question, expansion: expansion, in: entries,
+        return candidatePool(question: question,
+                             expansion: expansion.map { $0.terms.joined(separator: " ") },
+                             in: entries,
                              limit: limit, frecency: frecency)
     }
 
     nonisolated static func boundedExpansion(
         question: String, timeout: TimeInterval, expand: @escaping AskQueryExpansion
-    ) async -> String? {
+    ) async -> ExpandedSearchTerms? {
         await bounded(timeout: timeout) { try await expand(question) }
     }
 
@@ -324,15 +333,17 @@ final class Asker: ObservableObject {
     private nonisolated static let maxExpansionCharacters = 2048
     private nonisolated static let maxExpansionTerms = 12
 
-    nonisolated static func expandedSearchTerms(_ question: String) async throws -> String {
+    nonisolated static func expandedSearchTerms(_ question: String) async throws
+        -> ExpandedSearchTerms {
         if let reason = SpecLearner.unavailableReason() { throw Failure(reason) }
         let session = LanguageModelSession(instructions: """
-            Return only lowercase search keywords for finding a command-line tool. Include the task, \
-            input and output types, and common equivalent words. No explanation.
+            Generate search keywords for finding a command-line tool. Include the task, input and \
+            output types, and common equivalent words. Prefer distinct, single-word lowercase terms \
+            over multi-word phrases.
             """)
         return try await session.respond(
-            to: question,
-            options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 24)
+            to: question, generating: ExpandedSearchTerms.self,
+            options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 160)
         ).content
     }
 
