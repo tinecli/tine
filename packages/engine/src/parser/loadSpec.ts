@@ -212,7 +212,7 @@ export const loadSubcommandCached = async (
         (await loadUserSpec(specLocation, `${dir}/override`, localLogger)) ??
         (await loadUserSpec(specLocation, dir, localLogger));
       if (override) {
-        merged = override;
+        merged = { ...override, tineLocalOverride: true };
         break;
       }
     }

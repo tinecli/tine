@@ -49,6 +49,7 @@ export type SubcommandMeta = Omit<
   "subcommands" | "options" | "loadSpec" | "persistentOptions" | "args" | "name"
 > & {
   loadSpec?: LoadSpec;
+  tineLocalOverride?: boolean;
 };
 
 export type Subcommand = SubcommandMeta & {

@@ -62,6 +62,9 @@ final class Asker: ObservableObject {
 
     var frecency: (() -> (String) -> Double)?
 
+    /// Set by the app to publish a freshly persisted index to UI snapshots.
+    var onIndexSaved: (([AskEntry]) -> Void)?
+
     private let packDir: String
     private let queryExpansion: AskQueryExpansion
     private let expansionTimeout: TimeInterval
@@ -254,7 +257,7 @@ final class Asker: ObservableObject {
                            packDescriptions: AskIndex.packDescriptions(in: packDir))
         }.value
         guard !built.entries.isEmpty else { throw Failure("found no tools on your PATH") }
-        try AskIndex.save(built)
+        try AskIndex.save(built, didSave: onIndexSaved)
         return built.entries
     }
 

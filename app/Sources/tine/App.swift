@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appliedProjectRoot: String?
     private var pendingProjectFrecencyApply = false
     private var idleHide: DispatchWorkItem?
+    private let manNameSnapshotQueue = DispatchQueue(
+        label: "dev.gustaf.tine.man-name-snapshot", qos: .utility)
     private var sockPath = ""
     private var socketListening = false
     private var ownerPID: pid_t?
@@ -26,6 +28,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastPanelPlacement: DoctorReport.PanelPlacement = .awaitingInput
     private var lastFeed: (anchorRow: Int, anchorCol: Int, cols: Int, rows: Int,
                            cellW: Int, cellH: Int, cursor: Int, buffer: String)?
+
+    private func refreshManNameSnapshot(with savedEntries: [AskEntry]? = nil) {
+        manNameSnapshotQueue.async { [weak self] in
+            let entries = savedEntries ?? AskIndex.load()?.entries ?? []
+            let snapshot = SuggestionDetail.manNames(from: entries)
+            DispatchQueue.main.async { self?.state.installManNameSnapshot(snapshot) }
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -71,14 +81,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         asker.outline = { [weak self] tool in self?.state.engine?.outline(command: tool) ?? [] }
         asker.shellPath = { CommandRunner.shellPath() ?? "" }
         asker.frecency = { [weak self] in self?.frecency.commandScorer() ?? { _ in 0 } }
+        asker.onIndexSaved = { [weak self] entries in
+            self?.refreshManNameSnapshot(with: entries)
+        }
+
+        refreshManNameSnapshot()
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
             self.frecency.load()
+            let index = self.frecency.index
+            let values = self.frecency.valueIndex
             DispatchQueue.main.async {
-                self.state.engine?.setFrecency(self.frecency.index)
+                self.state.installFrecencySnapshot(index)
+                self.state.engine?.setFrecency(index)
                 self.selectProjectFrecency(for: self.state.cwd)
-                self.state.engine?.setHistoryValues(self.frecency.valueIndex)
+                self.state.engine?.setHistoryValues(values)
             }
         }
 
@@ -116,12 +134,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return "PASS" // must fire at the top row too, or Up can never reach zsh history
                 }
                 self.state.moveSelection(-1)
+                self.panel?.relayout()
                 return "\(self.state.suggestions.count)"
             case "down":
                 if self.panel?.isVisible != true || !self.sessions.isOwner(req.session) {
                     return "PASS"
                 }
                 self.state.moveSelection(1)
+                self.panel?.relayout()
                 return "\(self.state.suggestions.count)"
             case "accept":
                 // "" here falls through to a normal accept-line — this shell's _TINE_ACTIVE
@@ -141,6 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         let cmd = req.buffer.split(whereSeparator: { $0 == " " || $0 == "\t" })
                             .first.map(String.init) ?? ""
                         if let result = self.frecency.record(cmd: cmd, param: name, cwd: req.cwd) {
+                            self.state.installFrecencySnapshot(self.frecency.index)
                             self.state.engine?.setFrecencyCommand(cmd, params: result.global)
                             if let scoped = result.scoped {
                                 self.state.engine?.setProjectFrecencyCommand(cmd, params: scoped)
@@ -294,6 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, self.frecency.setHistoryIgnore(pattern) else { return }
             let (index, values) = (self.frecency.index, self.frecency.valueIndex)
             DispatchQueue.main.async {
+                self.state.installFrecencySnapshot(index)
                 self.state.engine?.setFrecency(index)
                 self.state.engine?.setHistoryValues(values)
             }

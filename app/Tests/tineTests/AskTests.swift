@@ -1,6 +1,20 @@
 import Foundation
 import Testing
 
+struct AskIndexSaveTests {
+    @Test func successfulSaveFiresTheSnapshotRefreshCallback() throws {
+        let entry = AskEntry(name: "jq", description: "Command-line JSON processor")
+        let stored = AskIndex.Stored(signature: "test", builtAt: Date(), entries: [entry])
+        let path = Scratch.dir("ask-index-save") + "/ask-index.json"
+        var refreshedEntries: [AskEntry]?
+
+        try AskIndex.save(stored, to: path) { refreshedEntries = $0 }
+
+        #expect(refreshedEntries == [entry])
+        #expect(FileManager.default.fileExists(atPath: path))
+    }
+}
+
 struct AskExampleTests {
     static let translations: [(String, String)] = [
         (".Dl Nm", "tool"),

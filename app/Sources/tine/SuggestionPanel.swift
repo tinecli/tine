@@ -31,7 +31,7 @@ final class SuggestionPanel: NSPanel {
 
     /// `origin` is the panel's top-left in Cocoa coords (y grows upward), `gap` below the caret.
     func present(at origin: CGPoint, lineHeight: CGFloat, gap: CGFloat = 4) {
-        let size = SuggestionListView.panelSize(rows: state.suggestions.count, config: state.config)
+        let size = SuggestionListView.panelSize(state: state)
         setContentSize(size)
 
         var o = origin
