@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SuggestionListView: View {
@@ -53,13 +54,38 @@ struct SuggestionListView: View {
         .onChange(of: state.suggestions.count) { _, _ in topID = 0 }
     }
 
-    static let detailWidth: CGFloat = 260
+    static let detailWidth = SuggestionDetail.width
     static let listWidth: CGFloat = 520
 
-    static func panelSize(rows: Int, config: TineConfig) -> CGSize {
-        let visible = min(max(rows, 1), max(1, config.maxVisibleRows))
-        return CGSize(width: listWidth + (config.showDetail ? detailWidth : 0),
-                      height: (CGFloat(config.fontSize) + 12) * CGFloat(visible) + 8)
+    static func detailContent(from state: AppState) -> SuggestionDetail.Content {
+        guard state.suggestions.indices.contains(state.selectedIndex) else {
+            return .empty
+        }
+        let suggestion = state.suggestions[state.selectedIndex]
+        return SuggestionDetail.Content(
+            title: suggestion.name,
+            type: suggestion.type,
+            isDangerous: suggestion.isDangerous,
+            isExecute: suggestion.isExecute,
+            description: suggestion.description,
+            insertValue: suggestion.insertValue,
+            usageLine: state.selectedUsageLine,
+            manName: state.selectedManName,
+            issueURL: state.selectedSpecIssueURL
+        )
+    }
+
+    @MainActor
+    static func panelSize(state: AppState) -> CGSize {
+        let config = state.config
+        return CGSize(
+            width: listWidth + (config.showDetail ? detailWidth : 0),
+            height: SuggestionDetail.panelHeight(
+                rows: state.suggestions.count,
+                config: config,
+                content: detailContent(from: state)
+            )
+        )
     }
 
     private var content: some View {
@@ -68,7 +94,11 @@ struct SuggestionListView: View {
             list.frame(width: Self.listWidth)
             if state.config.showDetail {
                 Divider().overlay(.white.opacity(0.12))
-                detail.frame(width: Self.detailWidth)
+                SuggestionDetailView(
+                    content: Self.detailContent(from: state), fontSize: fontSize
+                )
+                .frame(width: Self.detailWidth)
+                .frame(maxHeight: .infinity)
             }
         }
     }
@@ -89,44 +119,6 @@ struct SuggestionListView: View {
             .background(VisualEffectView(material: .hudWindow))
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.12)))
-    }
-
-    @ViewBuilder private var detail: some View {
-        let sel = state.suggestions.indices.contains(state.selectedIndex)
-            ? state.suggestions[state.selectedIndex] : nil
-        VStack(alignment: .leading, spacing: 6) {
-            if let s = sel {
-                Text(s.isExecute ? "Run" : s.name)
-                    .font(.system(size: fontSize + 1, weight: .semibold, design: .monospaced))
-                    .lineLimit(2)
-                    .foregroundStyle(s.isDangerous ? .red : .primary)
-                HStack(spacing: 6) {
-                    if !s.type.isEmpty {
-                        Text(s.type).font(.system(size: 10)).foregroundStyle(.secondary)
-                    }
-                    if s.isDangerous {
-                        Label("dangerous", systemImage: "exclamationmark.triangle.fill")
-                            .font(.system(size: 10)).foregroundStyle(.red)
-                    }
-                }
-                if !s.description.isEmpty {
-                    Text(s.description)
-                        .font(.system(size: max(10, fontSize - 1)))
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if !s.isExecute && !s.insertValue.isEmpty {
-                    Text("inserts  \(s.insertValue)")
-                        .font(.system(size: max(9, fontSize - 2), design: .monospaced))
-                        .foregroundStyle(.secondary).lineLimit(3)
-                }
-            } else {
-                Text("No selection").font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func icon(for s: Suggestion) -> String {

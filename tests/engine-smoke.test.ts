@@ -11,6 +11,7 @@ type Item = {
   insertValue: string;
   queryTerm: string;
   type: string;
+  specName: string;
 };
 type Result = { searchTerm: string; items: Item[] };
 type Suggest = (
@@ -37,6 +38,7 @@ const files: Record<string, string> = {
       "tine",
       "tie",
       "different",
+      "localshadow",
     ],
     diffVersionedCompletions: [],
   }),
@@ -92,6 +94,16 @@ const files: Record<string, string> = {
       { name: "lower", priority: 75 },
       { name: "higher", priority: 76 },
     ],
+  };
+  export default completionSpec;`,
+  [`${specsDir}/localshadow.js`]: `var completionSpec = {
+    name: "localshadow",
+    subcommands: [{ name: "from-pack" }],
+  };
+  export default completionSpec;`,
+  "/tine-smoke-local/override/localshadow.js": `var completionSpec = {
+    name: "localshadow",
+    subcommands: [{ name: "from-local-override" }],
   };
   export default completionSpec;`,
 };
@@ -328,7 +340,13 @@ test("__proto__ is not inherited as an alias", async () => {
 });
 
 test("suggests subcommands", async () => {
-  expect(await names("git ch")).toEqual(["checkout", "cherry-pick"]);
+  const { items } = await suggest("git ");
+  const subcommands = items.filter((item) => item.type === "subcommand");
+  expect(subcommands.map((item) => item.name)).toEqual([
+    "checkout",
+    "cherry-pick",
+  ]);
+  expect(subcommands.map((item) => item.specName)).toEqual(["git", "git"]);
 });
 
 test("suggests options", async () => {
@@ -337,17 +355,26 @@ test("suggests options", async () => {
 });
 
 test("the folders template lists only directories", async () => {
-  expect(await names("cd ")).toEqual(["app/", "my dir/", ".hidden/", "../"]);
+  const { items } = await suggest("cd ");
+  expect(items.map((item) => item.name)).toEqual([
+    "app/",
+    "my dir/",
+    ".hidden/",
+    "../",
+  ]);
+  expect(items.every((item) => item.specName === "")).toBeTrue();
 });
 
 test("the filepaths template lists files and directories", async () => {
-  expect(await names("cat ")).toEqual([
+  const { items } = await suggest("cat ");
+  expect(items.map((item) => item.name)).toEqual([
     "app/",
     "my dir/",
     "README.md",
     ".hidden/",
     "../",
   ]);
+  expect(items.every((item) => item.specName === "")).toBeTrue();
 });
 
 test("a nested path lists that directory and replaces only the basename", async () => {
@@ -411,6 +438,7 @@ test("a command with no spec at all still offers its history values", async () =
     "web.example.com",
   ]);
   expect(items[0].type).toBe("history");
+  expect(items.every((item) => item.specName === "")).toBeTrue();
   // The old path threw MissingSpecError on every keystroke here.
   expect(vm.runInContext("globalThis.__tineErr", context)).toBeUndefined();
   expect(await names("mytool w")).toEqual(["web.example.com"]);
@@ -524,6 +552,10 @@ test("an alias offers to learn its resolved missing command", async () => {
     insertValue: "tine learn plug-cli",
     type: "learn-it",
   });
+  const aliasRows = (await suggest("alias")).items.filter(
+    (item) => item.name === "aliaspc",
+  );
+  expect(aliasRows.map((item) => item.specName)).toEqual([""]);
 });
 
 test("the learn-it row keeps normal token replacement scope", async () => {
@@ -535,11 +567,22 @@ test("the learn-it row keeps normal token replacement scope", async () => {
 });
 
 test("tine learn completes PATH commands that have no spec yet", async () => {
-  const learnNames = await names("tine learn ");
+  const { items } = await suggest("tine learn ");
+  const learnNames = items.map((item) => item.name);
   expect(learnNames).toContain("mytool");
   expect(learnNames).toContain("newtool");
   expect(learnNames).not.toContain("git");
   expect(learnNames).not.toContain("cat");
+  for (const name of ["mytool", "newtool"]) {
+    expect(items.find((item) => item.name === name)?.specName).toBe("");
+  }
+});
+
+test("a local override never reports the shadowed pack spec", async () => {
+  const { items } = await suggest("localshadow ");
+  expect(items.map((item) => [item.name, item.specName])).toEqual([
+    ["from-local-override", ""],
+  ]);
 });
 
 test("a command with a local override/extend spec is filtered like a pack one", async () => {

@@ -38,12 +38,14 @@ enum AskIndex {
         return stored.signature != signature || stored.entries.isEmpty
     }
 
-    static func save(_ stored: Stored, to dir: String = AskIndex.dir) throws {
+    static func save(_ stored: Stored, to dir: String = AskIndex.dir,
+                     didSave: (([AskEntry]) -> Void)? = nil) throws {
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         try encoder.encode(stored).write(
             to: URL(fileURLWithPath: "\(dir)/ask-index.json"), options: .atomic)
+        didSave?(stored.entries)
     }
 
     /// Weakening this (e.g. dropping mtimes) makes the index cache never invalidate.
