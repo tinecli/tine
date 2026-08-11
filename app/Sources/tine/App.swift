@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appliedProjectRoot: String?
     private var pendingProjectFrecencyApply = false
     private var idleHide: DispatchWorkItem?
+    private let manNameSnapshotQueue = DispatchQueue(
+        label: "dev.gustaf.tine.man-name-snapshot", qos: .utility)
     private var sockPath = ""
     private var socketListening = false
     private var ownerPID: pid_t?
@@ -26,6 +28,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastPanelPlacement: DoctorReport.PanelPlacement = .awaitingInput
     private var lastFeed: (anchorRow: Int, anchorCol: Int, cols: Int, rows: Int,
                            cellW: Int, cellH: Int, cursor: Int, buffer: String)?
+
+    private func refreshManNameSnapshot(with savedEntries: [AskEntry]? = nil) {
+        manNameSnapshotQueue.async { [weak self] in
+            let entries = savedEntries ?? AskIndex.load()?.entries ?? []
+            let snapshot = SuggestionDetail.manNames(from: entries)
+            DispatchQueue.main.async { self?.state.installManNameSnapshot(snapshot) }
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -71,11 +81,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         asker.outline = { [weak self] tool in self?.state.engine?.outline(command: tool) ?? [] }
         asker.shellPath = { CommandRunner.shellPath() ?? "" }
         asker.frecency = { [weak self] in self?.frecency.commandScorer() ?? { _ in 0 } }
-
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let entries = AskIndex.load()?.entries ?? []
-            DispatchQueue.main.async { self?.state.installManNameSnapshot(entries) }
+        asker.onIndexSaved = { [weak self] entries in
+            self?.refreshManNameSnapshot(with: entries)
         }
+
+        refreshManNameSnapshot()
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }

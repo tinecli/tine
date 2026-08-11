@@ -1,6 +1,25 @@
 import Foundation
 
 enum SuggestionDetail {
+    private static let detailContentLineCount =
+        1 // title
+        + 1 // type / danger
+        + 1 // usage
+        + 1 // man NAME
+        + 1 // description
+        + 1 // inserted value
+        + 1 // spec-report action
+        + 1 // keyboard footer
+
+    static func panelHeight(rows: Int, config: TineConfig) -> CGFloat {
+        let visible = min(max(rows, 1), max(1, config.maxVisibleRows))
+        let lineHeight = CGFloat(config.fontSize) + 12
+        let rowsHeight = lineHeight * CGFloat(visible) + 8
+        guard config.showDetail else { return rowsHeight }
+        let detailHeight = lineHeight * CGFloat(detailContentLineCount) + 8
+        return max(rowsHeight, detailHeight)
+    }
+
     static func firstToken(in buffer: String, cursor: Int) -> String? {
         let characters = Array(buffer)
         guard cursor >= 0, cursor <= characters.count else { return nil }

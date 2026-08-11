@@ -58,9 +58,8 @@ struct SuggestionListView: View {
     static let listWidth: CGFloat = 520
 
     static func panelSize(rows: Int, config: TineConfig) -> CGSize {
-        let visible = min(max(rows, 1), max(1, config.maxVisibleRows))
         return CGSize(width: listWidth + (config.showDetail ? detailWidth : 0),
-                      height: (CGFloat(config.fontSize) + 12) * CGFloat(visible) + 8)
+                      height: SuggestionDetail.panelHeight(rows: rows, config: config))
     }
 
     private var content: some View {

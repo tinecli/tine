@@ -79,8 +79,8 @@ final class AppState: ObservableObject {
         )
     }
 
-    func installManNameSnapshot(_ entries: [AskEntry]) {
-        manNameSnapshot = SuggestionDetail.manNames(from: entries)
+    func installManNameSnapshot(_ snapshot: [String: String]) {
+        manNameSnapshot = snapshot
     }
 
     func installFrecencySnapshot(_ snapshot: Frecency.Index) {
