@@ -212,13 +212,16 @@ struct AskIndexPruneTests {
 }
 
 struct LocalSpecsBridgeTests {
-    @Test func localSpecDirsCanBePushedIntoTheLiveEngine() throws {
+    @Test func setLocalSpecsDirsPushesAndResetsWithoutCreatingDirectories() throws {
         let root = Scratch.dir("local-specs-bridge")
         let resources = root + "/resources"
         try FileManager.default.createDirectory(atPath: resources, withIntermediateDirectories: true)
         let script = """
+        globalThis.__tineSpecResetCount = 0;
+        globalThis.tineResetSpecs = function() { globalThis.__tineSpecResetCount += 1; };
         globalThis.tineSuggest = function(line, cursor, cwd, cb) {
-          cb({items: [{name: globalThis.__tineLocalSpecsDirs.join('|'), description: '',
+          cb({items: [{name: globalThis.__tineLocalSpecsDirs.join('|'),
+            description: String(globalThis.__tineSpecResetCount),
             insertValue: '', shouldAddSpace: false, type: 'arg', queryTerm: '',
             isDangerous: false, matchIndices: []}]});
         };
@@ -231,9 +234,12 @@ struct LocalSpecsBridgeTests {
             specsDir: root + "/pack", localSpecsDirs: [oldDir], resourcesDir: resources,
             logPath: root + "/tine.log")
 
-        engine.setLocalSpecsDirs([newDir])
+        engine.setLocalSpecsDirs(["", newDir])
 
-        #expect(engine.suggest(line: "x", cursor: 1, cwd: root).first?.name == newDir)
+        let suggestion = engine.suggest(line: "x", cursor: 1, cwd: root).first
+        #expect(suggestion?.name == newDir)
+        #expect(suggestion?.description == "1")
+        #expect(!FileManager.default.fileExists(atPath: newDir))
     }
 }
 

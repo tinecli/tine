@@ -246,7 +246,7 @@ struct SettingsView: View {
         }
         Section("Your specs") {
             VStack(alignment: .leading, spacing: 6) {
-                Text("In each folder, drop Fig `.js` specs in `override/<cmd>.js` (replaces a spec) or `extend/<cmd>.js` (adds to it). Earlier folders win. Restart tine after changing.")
+                Text("In each folder, drop Fig `.js` specs in `override/<cmd>.js` (replaces a spec) or `extend/<cmd>.js` (adds to it). Earlier folders win.")
                     .font(.caption).foregroundStyle(.secondary)
                 List(selection: $selectedSpecDir) {
                     ForEach(state.config.localSpecsDirs.indices, id: \.self) { i in
