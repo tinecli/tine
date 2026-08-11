@@ -73,12 +73,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         asker.frecency = { [weak self] in self?.frecency.commandScorer() ?? { _ in 0 } }
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
+            let entries = AskIndex.load()?.entries ?? []
+            DispatchQueue.main.async { self?.state.installManNameSnapshot(entries) }
+        }
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
             self.frecency.load()
+            let index = self.frecency.index
+            let values = self.frecency.valueIndex
             DispatchQueue.main.async {
-                self.state.engine?.setFrecency(self.frecency.index)
+                self.state.installFrecencySnapshot(index)
+                self.state.engine?.setFrecency(index)
                 self.selectProjectFrecency(for: self.state.cwd)
-                self.state.engine?.setHistoryValues(self.frecency.valueIndex)
+                self.state.engine?.setHistoryValues(values)
             }
         }
 
@@ -97,7 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.pendingProjectFrecencyApply = true
                 }
                 self.resolveProjectFrecency(for: req.cwd)
-                self.state.update(feed)
+                self.state.update(feed, frecencySnapshot: self.frecency.index)
                 if verdict.changed, let app = verdict.appPID {
                     // Must only update here — an async redraw from a background terminal
                     // reaches this handler too, but doesn't prove ownership.

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SuggestionListView: View {
@@ -109,6 +110,20 @@ struct SuggestionListView: View {
                             .font(.system(size: 10)).foregroundStyle(.red)
                     }
                 }
+                if let usage = state.selectedUsageLine {
+                    Text(usage)
+                        .font(.system(size: max(9, fontSize - 2)))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                if let manName = state.selectedManName {
+                    Text("man  \(manName)")
+                        .font(.system(size: max(9, fontSize - 2)))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
                 if !s.description.isEmpty {
                     Text(s.description)
                         .font(.system(size: max(10, fontSize - 1)))
@@ -120,10 +135,26 @@ struct SuggestionListView: View {
                         .font(.system(size: max(9, fontSize - 2), design: .monospaced))
                         .foregroundStyle(.secondary).lineLimit(3)
                 }
+                if let issueURL = state.selectedSpecIssueURL {
+                    Button {
+                        NSWorkspace.shared.open(issueURL)
+                    } label: {
+                        Label("Spec wrong?", systemImage: "exclamationmark.bubble")
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: max(9, fontSize - 2)))
+                    .foregroundStyle(.tint)
+                }
             } else {
                 Text("No selection").font(.system(size: 11)).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
+            Text("↑↓ move · ↩ accept · ⇥ prefix · esc close · ⌃K hide")
+                .font(.system(size: 9))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

@@ -39,6 +39,7 @@ type TineSuggestion = {
   isDangerous: boolean;
   // Matched character positions in `name` (fuzzy search), for highlighting.
   matchIndices: number[];
+  specName?: string;
 };
 
 const firstName = (n: string | string[]): string =>
@@ -255,7 +256,11 @@ async function suggest(
   const filtered = filterSuggestions(ranked, parsed.searchTerm, true, false);
   return {
     searchTerm: parsed.searchTerm ?? "",
-    items: toItems(filtered, parsed.searchTerm ?? ""),
+    items: toItems(
+      filtered,
+      parsed.searchTerm ?? "",
+      packSpecName(parsed.annotations),
+    ),
   };
 }
 
@@ -330,9 +335,12 @@ function historyFlagKey(upToCursor: string): string {
 function toItems(
   filtered: readonly unknown[],
   searchTerm: string,
+  specName = "",
 ): TineSuggestion[] {
   return filtered.map((s) => {
     const type = (s as { type?: string }).type ?? "";
+    const generated = (s as { generator?: unknown }).generator !== undefined;
+    const itemSpecName = (s as { specName?: string }).specName ?? specName;
     const isFolder = type === "folder";
     const raw =
       (s as { insertValue?: string }).insertValue ??
@@ -352,6 +360,7 @@ function toItems(
       queryTerm: getQueryTermForSuggestion(s as never, searchTerm),
       isDangerous: Boolean((s as { isDangerous?: boolean }).isDangerous),
       matchIndices: fuzzy?.[0]?.indexes ?? [],
+      specName: generated || type === "history" ? "" : itemSpecName,
     };
   });
 }
@@ -393,12 +402,29 @@ function specIndex(): SpecIndex {
   return cachedSpecIndex;
 }
 
+function packSpecName(annotations: readonly unknown[]): string {
+  for (const annotation of annotations) {
+    const specLocation = (
+      annotation as { specLocation?: { name?: unknown; type?: unknown } }
+    ).specLocation;
+    if (
+      specLocation?.type === "global" &&
+      typeof specLocation.name === "string" &&
+      specIndex().names.includes(specLocation.name)
+    ) {
+      return specLocation.name;
+    }
+  }
+  return "";
+}
+
 function commandNameResult(
   partial: string,
   aliases: Record<string, string>,
 ): TineResult {
   const frec = frecencyIndex();
   const { names: specs, descriptions } = specIndex();
+  const packNames = new Set(specs);
   const names = new Set<string>([
     ...specs,
     ...Object.keys(aliases),
@@ -424,6 +450,7 @@ function commandNameResult(
         ? `alias → ${aliases[name]}`
         : (descriptions[name] ?? ""),
       priority: boost ? 75 + boost : 50,
+      specName: !aliases[name] && packNames.has(name) ? name : "",
     };
   });
   const filtered = filterSuggestions(cmds as never, partial, true, false);
