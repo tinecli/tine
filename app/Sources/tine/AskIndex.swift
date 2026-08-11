@@ -1,14 +1,18 @@
+import Compression
 import Foundation
 
 struct AskEntry: Codable, Equatable, Sendable {
     let name: String
     let description: String
     let manPagePath: String
+    let resolvedBinaryPath: String?
 
-    init(name: String, description: String, manPagePath: String = "") {
+    init(name: String, description: String, manPagePath: String = "",
+         resolvedBinaryPath: String? = nil) {
         self.name = name
         self.description = description
         self.manPagePath = manPagePath
+        self.resolvedBinaryPath = resolvedBinaryPath
     }
 }
 
@@ -51,7 +55,7 @@ enum AskIndex {
             let modified = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
             return "\(dir)@\(Int(modified))"
         }
-        return parts.joined(separator: ":")
+        return "3:" + parts.joined(separator: ":")
     }
 
     static let maxEntries = 8000
@@ -69,12 +73,14 @@ enum AskIndex {
         let dirs = pathDirs(shellPath)
         let pages = manPages(in: manDirs(pathDirs: dirs))
         var entries: [AskEntry] = []
-        for name in binaries(in: dirs).prefix(maxEntries) {
+        for binary in binaryEntries(in: dirs).prefix(maxEntries) {
+            let name = binary.name
             let manPagePath = pages[name] ?? ""
             let described = nameLine(inManPageAt: manPagePath) ?? packDescriptions[name] ?? ""
             entries.append(AskEntry(name: name,
                                     description: description(described, of: name),
-                                    manPagePath: manPagePath))
+                                    manPagePath: manPagePath,
+                                    resolvedBinaryPath: binary.resolvedPath))
         }
         return Stored(signature: signature(pathDirs: dirs), builtAt: Date(), entries: entries)
     }
@@ -88,8 +94,17 @@ enum AskIndex {
 
     /// Keep first-hit-wins — matches shell PATH shadowing; last-hit-wins picks the wrong binary.
     static func binaries(in dirs: [String]) -> [String] {
+        binaryEntries(in: dirs).map(\.name)
+    }
+
+    private struct BinaryEntry {
+        let name: String
+        let resolvedPath: String
+    }
+
+    private static func binaryEntries(in dirs: [String]) -> [BinaryEntry] {
         var seen = Set<String>()
-        var names: [String] = []
+        var entries: [BinaryEntry] = []
         for dir in dirs {
             let contents = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
             for name in contents.sorted() where isToolName(name) {
@@ -99,10 +114,12 @@ enum AskIndex {
                 guard !isDir.boolValue,
                       FileManager.default.isExecutableFile(atPath: "\(dir)/\(name)"),
                       seen.insert(name).inserted else { continue }
-                names.append(name)
+                let path = URL(fileURLWithPath: "\(dir)/\(name)")
+                    .resolvingSymlinksInPath().standardizedFileURL.path
+                entries.append(BinaryEntry(name: name, resolvedPath: path))
             }
         }
-        return names
+        return entries
     }
 
     static func isToolName(_ name: String) -> Bool {
@@ -127,15 +144,14 @@ enum AskIndex {
 
     private static let sections = ["man1", "man6", "man8"]
 
-    /// `.gz` pages must stay skipped — tine has no gunzip and would show garbled text.
     static func manPages(in manDirs: [String]) -> [String: String] {
         var paths: [String: String] = [:]
         for manDir in manDirs {
             for section in sections {
                 let dir = "\(manDir)/\(section)"
                 let files = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
-                for file in files where !file.hasSuffix(".gz") {
-                    let stem = (file as NSString).deletingPathExtension
+                for file in files.sorted() {
+                    let stem = manPageName(file)
                     if paths[stem] == nil { paths[stem] = "\(dir)/\(file)" }
                 }
             }
@@ -153,16 +169,101 @@ enum AskIndex {
 
     static func examples(inManPageAt path: String) -> String? {
         guard !path.isEmpty else { return nil }
-        let toolName = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+        let toolName = manPageName(URL(fileURLWithPath: path).lastPathComponent)
         return manPage(at: path, maxBytes: maxExamplesPageBytes)
             .flatMap { examples(inManPage: $0, toolName: toolName) }
     }
 
-    private static func manPage(at path: String, maxBytes: Int) -> String? {
+    private static func manPageName(_ file: String) -> String {
+        let uncompressed = file.hasSuffix(".gz") ? (file as NSString).deletingPathExtension : file
+        return (uncompressed as NSString).deletingPathExtension
+    }
+
+    private static func manPage(at path: String, maxBytes: Int,
+                                followInclude: Bool = true) -> String? {
+        guard let source = readManPage(at: path, maxBytes: maxBytes) else { return nil }
+        guard followInclude, let included = includedManPage(in: source, from: path) else {
+            return source
+        }
+        return manPage(at: included, maxBytes: maxBytes, followInclude: false)
+    }
+
+    private static func readManPage(at path: String, maxBytes: Int) -> String? {
         guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
         defer { try? handle.close() }
         guard let data = try? handle.read(upToCount: maxBytes), !data.isEmpty else { return nil }
+        if path.hasSuffix(".gz") { return gunzipped(data, maxBytes: maxBytes) }
         return String(decoding: data, as: UTF8.self)
+    }
+
+    private static func includedManPage(in source: String, from path: String) -> String? {
+        guard let line = source.split(whereSeparator: \.isNewline).first?
+            .trimmingCharacters(in: .whitespaces), line.hasPrefix(".so ") else { return nil }
+        let reference = line.dropFirst(4).trimmingCharacters(in: .whitespaces)
+        guard !reference.isEmpty, !reference.hasPrefix("/") else { return nil }
+        let page = URL(fileURLWithPath: path).standardizedFileURL
+        let root = page.deletingLastPathComponent().deletingLastPathComponent()
+        var target = root.appendingPathComponent(reference).standardizedFileURL
+        guard target.path.hasPrefix(root.path + "/") else { return nil }
+        if !FileManager.default.fileExists(atPath: target.path),
+           FileManager.default.fileExists(atPath: target.path + ".gz") {
+            target = URL(fileURLWithPath: target.path + ".gz")
+        }
+        let resolvedRoot = root.resolvingSymlinksInPath().standardizedFileURL.path
+        let resolvedTarget = target.resolvingSymlinksInPath().standardizedFileURL.path
+        guard resolvedTarget.hasPrefix(resolvedRoot + "/") else { return nil }
+        return target.path
+    }
+
+    private static func gunzipped(_ data: Data, maxBytes: Int) -> String? {
+        guard let payload = gzipPayload(in: data) else { return nil }
+        let placeholder = UnsafeMutablePointer<UInt8>.allocate(capacity: 1)
+        defer { placeholder.deallocate() }
+        var stream = compression_stream(
+            dst_ptr: placeholder, dst_size: 0, src_ptr: UnsafePointer(placeholder),
+            src_size: 0, state: nil)
+        guard compression_stream_init(&stream, COMPRESSION_STREAM_DECODE, COMPRESSION_ZLIB)
+                != COMPRESSION_STATUS_ERROR else { return nil }
+        defer { compression_stream_destroy(&stream) }
+        var output = [UInt8](repeating: 0, count: maxBytes)
+        let status = data.withUnsafeBytes { source in
+            output.withUnsafeMutableBytes { destination in
+                guard let sourceBase = source.bindMemory(to: UInt8.self).baseAddress,
+                      let destinationBase = destination.bindMemory(to: UInt8.self).baseAddress
+                else { return COMPRESSION_STATUS_ERROR }
+                stream.src_ptr = sourceBase.advanced(by: payload.lowerBound)
+                stream.src_size = payload.count
+                stream.dst_ptr = destinationBase
+                stream.dst_size = maxBytes
+                return compression_stream_process(
+                    &stream, Int32(COMPRESSION_STREAM_FINALIZE.rawValue))
+            }
+        }
+        guard status != COMPRESSION_STATUS_ERROR else { return nil }
+        let written = maxBytes - stream.dst_size
+        guard written > 0 else { return nil }
+        return String(decoding: output.prefix(written), as: UTF8.self)
+    }
+
+    private static func gzipPayload(in data: Data) -> Range<Int>? {
+        let bytes = [UInt8](data)
+        guard bytes.count >= 18, bytes[0] == 0x1f, bytes[1] == 0x8b,
+              bytes[2] == 8, bytes[3] & 0xe0 == 0 else { return nil }
+        let flags = bytes[3]
+        var offset = 10
+        if flags & 0x04 != 0 {
+            guard offset + 2 <= bytes.count else { return nil }
+            let length = Int(bytes[offset]) | Int(bytes[offset + 1]) << 8
+            offset += 2 + length
+            guard offset <= bytes.count else { return nil }
+        }
+        for flag: UInt8 in [0x08, 0x10] where flags & flag != 0 {
+            guard let end = bytes[offset...].firstIndex(of: 0) else { return nil }
+            offset = end + 1
+        }
+        if flags & 0x02 != 0 { offset += 2 }
+        guard offset < bytes.count - 8 else { return nil }
+        return offset..<(bytes.count - 8)
     }
 
     /// Must stay unroffed below — this is untrusted local content, never display it raw.
@@ -588,11 +689,39 @@ enum AskIndex {
 
     private static func prune(_ ranked: [Hit]) -> [Hit] {
         let names = Set(ranked.map { $0.entry.name })
+        let byName = Dictionary(ranked.map { ($0.entry.name, $0.entry) },
+                                uniquingKeysWith: { first, _ in first })
+        var hiddenTwins = Set<String>()
+        var distinctVersions = Set<String>()
+        for hit in ranked {
+            guard let base = versionBase(of: hit.entry.name, among: names),
+                  let baseEntry = byName[base] else { continue }
+            if hit.entry.resolvedBinaryPath == baseEntry.resolvedBinaryPath,
+               hit.entry.resolvedBinaryPath != nil {
+                hiddenTwins.insert(hit.entry.name)
+            } else {
+                distinctVersions.formUnion([hit.entry.name, base])
+            }
+        }
         var shown = Set<String>()
         return ranked.filter { hit in
-            if let base = versionlessName(hit.entry.name), names.contains(base) { return false }
+            if hiddenTwins.contains(hit.entry.name) { return false }
+            if distinctVersions.contains(hit.entry.name) { return true }
             return hit.entry.description.isEmpty || shown.insert(hit.entry.description).inserted
         }
+    }
+
+    private static func versionBase(of name: String, among names: Set<String>) -> String? {
+        guard let range = name.range(of: "[0-9]+(\\.[0-9]+)*$", options: .regularExpression),
+              range.lowerBound != name.startIndex else { return nil }
+        let prefix = String(name[..<range.lowerBound])
+        let parts = name[range].split(separator: ".").map(String.init)
+        for count in stride(from: parts.count - 1, through: 0, by: -1) {
+            let suffix = parts.prefix(count).joined(separator: ".")
+            let candidate = prefix + suffix
+            if names.contains(candidate) { return candidate }
+        }
+        return nil
     }
 
     static func versionlessName(_ name: String) -> String? {

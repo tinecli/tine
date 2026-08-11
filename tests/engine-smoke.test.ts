@@ -33,6 +33,7 @@ const files: Record<string, string> = {
       "cat",
       "deploy",
       "wipe",
+      "optionwipe",
       "wrapper",
       "tine",
       "tie",
@@ -74,6 +75,11 @@ const files: Record<string, string> = {
     name: "wipe",
     options: [{ name: ["-r", "--recursive"] }],
     args: { name: "target", isDangerous: true, template: "filepaths" },
+  };
+  export default completionSpec;`,
+  [`${specsDir}/optionwipe.js`]: `var completionSpec = {
+    name: "optionwipe",
+    options: [{ name: "--all", isDangerous: true }],
   };
   export default completionSpec;`,
   [`${specsDir}/wrapper.js`]: `var completionSpec = {
@@ -613,6 +619,15 @@ test("a spec's own isDangerous reaches the answer", async () => {
     dangerous: true,
   });
   expect(await validate("git checkout")).toMatchObject({ dangerous: false });
+});
+
+test("an option's isDangerous reaches the answer", async () => {
+  expect(await validate("optionwipe --all")).toEqual({
+    status: "ok",
+    token: "",
+    dangerous: true,
+  });
+  expect(await validate("optionwipe")).toMatchObject({ dangerous: false });
 });
 
 test("nothing that is not a single command validates", async () => {

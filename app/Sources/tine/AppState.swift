@@ -9,9 +9,9 @@ final class AppState: ObservableObject {
     @Published var isLoading = false
     @Published var config = TineConfig.load() {
         didSet {
-            guard persists else { return }
-            config.save()
+            if persists { config.save() }
             engine?.setFirstTokenEnabled(config.firstTokenCompletion)
+            engine?.setLocalSpecsDirs(config.localSpecsDirsExpanded)
         }
     }
 
