@@ -168,12 +168,9 @@ enum TineLog {
 }
 
 final class TineLogChangeGate<Value: Equatable> {
-    private let lock = NSLock()
     private var lastValue: Value?
 
     func changed(to value: Value) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
         guard lastValue != value else { return false }
         lastValue = value
         return true

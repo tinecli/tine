@@ -2,12 +2,7 @@ import AppKit
 import ApplicationServices
 
 enum AXCaret {
-    private struct Placement: Equatable {
-        let point: NSPoint
-        let lineHeight: CGFloat
-    }
-
-    private static let placementLogGate = TineLogChangeGate<Placement>()
+    private static let logGate = TineLogChangeGate<String>()
 
     static func ensureTrusted() {
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue()
@@ -25,7 +20,7 @@ enum AXCaret {
         var focused: CFTypeRef?
         let fErr = AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused)
         guard fErr == .success, let focusedRef = focused else {
-            tlog("AX[\(app)] focusedElement FAILED err=\(fErr.rawValue)")
+            logOnChange("AX[\(app)] focusedElement FAILED err=\(fErr.rawValue)")
             return nil
         }
         let element = focusedRef as! AXUIElement
@@ -33,7 +28,7 @@ enum AXCaret {
         var rangeRef: CFTypeRef?
         let rErr = AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef)
         guard rErr == .success, let rangeVal = rangeRef else {
-            tlog("AX[\(app)] selectedRange FAILED err=\(rErr.rawValue)")
+            logOnChange("AX[\(app)] selectedRange FAILED err=\(rErr.rawValue)")
             return nil
         }
 
@@ -57,7 +52,7 @@ enum AXCaret {
             anchorRight = false
         }
         guard let r = rect, valid(r) else {
-            tlog("AX[\(app)] no valid bounds for caret \(caret)")
+            logOnChange("AX[\(app)] no valid bounds for caret \(caret)")
             return nil
         }
 
@@ -67,10 +62,13 @@ enum AXCaret {
         let caretBottomCocoaY = primaryHeight - (r.origin.y + r.height)
         let point = NSPoint(x: anchorX, y: caretBottomCocoaY - gap)
 
-        if placementLogGate.changed(to: Placement(point: point, lineHeight: r.height)) {
-            tlog("AX[\(app)] caret=\(caret) rect=\(r) anchorRight=\(anchorRight) -> \(point)")
-        }
+        logOnChange("AX[\(app)] caret=\(caret) rect=\(r) anchorRight=\(anchorRight) -> \(point)")
         return (point, r.height)
+    }
+
+    private static func logOnChange(_ message: String) {
+        guard logGate.changed(to: message) else { return }
+        tlog(message)
     }
 
     // The 100pt cap is load-bearing: widen it and a whole Ghostty canvas passes as a caret.

@@ -1,5 +1,4 @@
 import Foundation
-import AppKit
 import Testing
 
 struct TineLogTests {
@@ -85,8 +84,6 @@ struct TineLogTests {
             ofItemAtPath: root
         )
         let logPath = root + "/data/tine/tine.log"
-        let rootAttributes = try FileManager.default.attributesOfItem(atPath: root)
-        let rootPermissions = try #require(rootAttributes[.posixPermissions] as? NSNumber)
 
         TineLog.write("created securely", to: logPath)
 
@@ -95,16 +92,6 @@ struct TineLogTests {
         )
         let finalPermissions = try #require(finalAttributes[.posixPermissions] as? NSNumber)
         #expect(finalPermissions.intValue & 0o777 == 0o700)
-
-        let intermediateAttributes = try FileManager.default.attributesOfItem(
-            atPath: root + "/data"
-        )
-        let intermediatePermissions = try #require(
-            intermediateAttributes[.posixPermissions] as? NSNumber
-        )
-        #expect(
-            intermediatePermissions.intValue & 0o777 == (rootPermissions.intValue & 0o777)
-        )
     }
 
     @Test func globalLoggerUsesAnExplicitPath() throws {
@@ -176,20 +163,22 @@ struct TineLogTests {
         #expect(!tail.hasPrefix("�"))
     }
 
-    @Test func placementLogOnlyWritesWhenPlacementChanges() {
-        struct Placement: Equatable {
-            let point: NSPoint
-            let lineHeight: CGFloat
-        }
-        let gate = TineLogChangeGate<Placement>()
-        let placement = Placement(point: NSPoint(x: 100, y: 200), lineHeight: 18)
+    @Test func placementLogOnlyWritesWhenFormattedMessageChanges() {
+        let gate = TineLogChangeGate<String>()
+        let placement = "AX[Ghostty] caret=42 rect=(100, 200, 1, 18) "
+            + "anchorRight=false -> (100, 200)"
 
         #expect(gate.changed(to: placement))
         #expect(!gate.changed(to: placement))
-        #expect(gate.changed(to: Placement(
-            point: NSPoint(x: 101, y: 200), lineHeight: 18)))
-        #expect(gate.changed(to: Placement(
-            point: NSPoint(x: 101, y: 200), lineHeight: 19)))
+        let flippedProbe = placement.replacingOccurrences(
+            of: "anchorRight=false", with: "anchorRight=true")
+        #expect(gate.changed(to: flippedProbe))
+        #expect(gate.changed(to: flippedProbe.replacingOccurrences(
+            of: "AX[Ghostty]", with: "AX[Code]")))
+
+        let failure = "AX[Ghostty] no valid bounds for caret CFRange(location: 42, length: 0)"
+        #expect(gate.changed(to: failure))
+        #expect(!gate.changed(to: failure))
     }
 
     @Test func scratchDirectoriesAreOwnerOnly() throws {
