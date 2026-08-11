@@ -23,7 +23,7 @@ private actor LateCompletionProbe {
 struct BoundedTests {
     @Test func deadlineAbandonsUncancellableExpansion() async {
         let deadline: TimeInterval = 0.05
-        let mockSleep: TimeInterval = 0.5
+        let mockSleep: TimeInterval = 5.0
         let probe = LateCompletionProbe()
         let clock = ContinuousClock()
         let started = clock.now
@@ -49,7 +49,7 @@ struct BoundedTests {
                      elapsed, deadline, mockSleep))
         #expect(result == nil)
         #expect(elapsed >= deadline * 0.5)
-        #expect(elapsed < mockSleep * 0.5)
+        #expect(elapsed < 2.0)
 
         await probe.waitForCompletion()
         #expect(result == nil)

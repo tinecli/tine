@@ -168,6 +168,13 @@ struct ShellIntegrationTests {
     }
 
     @Test func backupIsOwnerReadableUnderHostileUmask() throws {
+        if try TestSubprocess.runCurrentTest(
+            filteredTo: "backupIsOwnerReadableUnderHostileUmask",
+            childEnvironmentKey: "TINE_TEST_HOSTILE_UMASK_CHILD"
+        ) {
+            return
+        }
+
         let dir = Scratch.dir("zshrc-backup-mode")
         let path = dir + "/.zshrc"
         try "export EDITOR=vim\n".write(toFile: path, atomically: true, encoding: .utf8)
