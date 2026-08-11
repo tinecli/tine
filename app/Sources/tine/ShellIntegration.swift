@@ -81,7 +81,7 @@ enum ShellIntegration {
         }
     }
 
-    private struct FileIdentity: Equatable {
+    private struct FileIdentity: Hashable {
         let device: dev_t
         let inode: ino_t
     }
@@ -98,14 +98,11 @@ enum ShellIntegration {
     }
 
     private static func resolve(path: String, expectedUID: uid_t) -> Resolution {
-        var currentPath = URL(fileURLWithPath: path).standardized.path
-        var visited = Set<String>()
+        var currentPath = path
+        var visited = Set<FileIdentity>()
         var followedSymlink = false
 
         for _ in 0..<40 {
-            guard visited.insert(currentPath).inserted else {
-                return .refused("Refused to use .zshrc because its symlink chain contains a loop.")
-            }
             var metadata = stat()
             guard lstat(currentPath, &metadata) == 0 else {
                 if errno == ENOENT {
@@ -114,6 +111,10 @@ enum ShellIntegration {
                         : .missing
                 }
                 return .refused("Refused to inspect .zshrc: \(errorMessage()).")
+            }
+            let identity = FileIdentity(device: metadata.st_dev, inode: metadata.st_ino)
+            guard visited.insert(identity).inserted else {
+                return .refused("Refused to use .zshrc because its symlink chain contains a loop.")
             }
 
             let kind = metadata.st_mode & S_IFMT
@@ -131,10 +132,18 @@ enum ShellIntegration {
                     if destination.hasPrefix("/") {
                         nextPath = destination
                     } else {
-                        let parent = URL(fileURLWithPath: currentPath).deletingLastPathComponent()
-                        nextPath = parent.appendingPathComponent(destination).path
+                        let parent: String
+                        if let separator = currentPath.lastIndex(of: "/") {
+                            let prefix = currentPath[..<separator]
+                            parent = prefix.isEmpty ? "/" : String(prefix)
+                        } else {
+                            parent = "."
+                        }
+                        nextPath = parent == "/"
+                            ? parent + destination
+                            : parent + "/" + destination
                     }
-                    currentPath = URL(fileURLWithPath: nextPath).standardized.path
+                    currentPath = nextPath
                     followedSymlink = true
                 }
                 continue
@@ -145,8 +154,7 @@ enum ShellIntegration {
             guard metadata.st_uid == expectedUID else {
                 return .refused("Refused to use .zshrc because it is owned by another user.")
             }
-            return .file(currentPath, FileIdentity(device: metadata.st_dev,
-                                                   inode: metadata.st_ino))
+            return .file(currentPath, identity)
         }
         return .refused("Refused to use .zshrc because its symlink chain is too long.")
     }
@@ -183,8 +191,19 @@ enum ShellIntegration {
 
         let separator = contents.isEmpty || contents.last == 0x0A ? "" : "\n"
         let addition = Data("\(separator)\(sourceLine)\n".utf8)
+        let end = lseek(descriptor, 0, SEEK_END)
         guard writeAll(addition, to: descriptor) else {
-            return .refused("Could not append the tine source line to .zshrc: \(errorMessage()).")
+            let reason = errorMessage()
+            if end >= 0, ftruncate(descriptor, end) == 0 {
+                return .refused(
+                    "Could not append the tine source line to .zshrc: \(reason). "
+                        + "Restored .zshrc to its original length; the backup is at \(backupPath)."
+                )
+            }
+            return .refused(
+                "Could not append the tine source line to .zshrc: \(reason). "
+                    + "Could not restore .zshrc; recover it from the backup at \(backupPath)."
+            )
         }
         return status(at: path, expectedUID: expectedUID)
     }
@@ -220,7 +239,9 @@ enum ShellIntegration {
             return "Could not create the .zshrc backup at \(path): \(errorMessage())."
         }
         defer { Darwin.close(descriptor) }
-        guard writeAll(contents, to: descriptor), fsync(descriptor) == 0 else {
+        guard fchmod(descriptor, mode_t(0o600)) == 0,
+              writeAll(contents, to: descriptor),
+              fsync(descriptor) == 0 else {
             let reason = errorMessage()
             _ = Darwin.unlink(path)
             return "Could not finish the .zshrc backup at \(path): \(reason)."
@@ -231,7 +252,7 @@ enum ShellIntegration {
     private static func lineStatus(in data: Data) -> Status {
         let contents = String(decoding: data, as: UTF8.self)
         let matchingLines = contents.split(separator: "\n", omittingEmptySubsequences: false)
-            .filter { $0.contains("tine.zsh") }
+            .filter { $0.contains("tine/tine.zsh") }
         guard !matchingLines.isEmpty else { return .missing }
         let onlyCommented = matchingLines.allSatisfy {
             $0.drop(while: { $0 == " " || $0 == "\t" }).first == "#"
