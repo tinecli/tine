@@ -19,7 +19,7 @@ enum AskIndex {
         let entries: [AskEntry]
     }
 
-    /// Tests must set `TINE_DATA_DIR`, or they read/write the real ~/.local/share/tine.
+    /// Pass an explicit test directory; the default is real user data.
     static var dir: String {
         ProcessInfo.processInfo.environment["TINE_DATA_DIR"]
             ?? "\(NSHomeDirectory())/.local/share/tine"
@@ -27,8 +27,9 @@ enum AskIndex {
 
     static var path: String { "\(dir)/ask-index.json" }
 
-    static func load() -> Stored? {
-        guard let data = FileManager.default.contents(atPath: path) else { return nil }
+    static func load(from dir: String = AskIndex.dir) -> Stored? {
+        guard let data = FileManager.default.contents(atPath: "\(dir)/ask-index.json")
+        else { return nil }
         return try? JSONDecoder().decode(Stored.self, from: data)
     }
 
@@ -37,15 +38,13 @@ enum AskIndex {
         return stored.signature != signature || stored.entries.isEmpty
     }
 
-    static func save(_ stored: Stored, to destination: String = path,
+    static func save(_ stored: Stored, to dir: String = AskIndex.dir,
                      didSave: (([AskEntry]) -> Void)? = nil) throws {
-        let destinationDir = (destination as NSString).deletingLastPathComponent
-        try FileManager.default.createDirectory(
-            atPath: destinationDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         try encoder.encode(stored).write(
-            to: URL(fileURLWithPath: destination), options: .atomic)
+            to: URL(fileURLWithPath: "\(dir)/ask-index.json"), options: .atomic)
         didSave?(stored.entries)
     }
 

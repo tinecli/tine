@@ -11,6 +11,7 @@ type Transcript = {
   name: string;
   invocation: string[];
   requests: Request[];
+  pollInterval?: string;
   exitCode: number;
   stdout: string;
   stderr: string;
@@ -31,6 +32,17 @@ const started = (verb: string, payload = ""): Request =>
   request(verb, payload, "started");
 
 const poll = (verb: string, reply: string): Request => request(verb, "", reply);
+
+const repeatedPoll = (verb: string, reply: string, count: number): Request[] =>
+  Array.from({ length: count }, () => poll(verb, reply));
+
+const spinnerProgress = (line: string, count: number, suffix = ""): string => {
+  const spin = "|/-\\";
+  return Array.from(
+    { length: count },
+    (_, index) => `\rtine: ${line}… ${spin[index % spin.length]} ${suffix}`,
+  ).join("");
+};
 
 const transcripts: Transcript[] = [
   {
@@ -223,6 +235,45 @@ const transcripts: Transcript[] = [
   },
 ];
 
+const giveUpTranscripts: Transcript[] = [
+  {
+    name: "update gives up after 200 checking ticks",
+    invocation: ["_tine_update"],
+    requests: [
+      started("appUpdate"),
+      ...repeatedPoll("appUpdateStatus", "checking", 201),
+    ],
+    pollInterval: "0.001",
+    exitCode: 1,
+    stdout: `tine: checking for updates… ${spinnerProgress("checking for updates", 200)}\r${clearLine}`,
+    stderr: "tine: could not check for updates\n",
+  },
+  {
+    name: "learn gives up after 600 model ticks",
+    invocation: ["_tine_learn", "jq"],
+    requests: [
+      started("learn", "jq"),
+      ...repeatedPoll("learnStatus", "idle", 601),
+    ],
+    pollInterval: "0.001",
+    exitCode: 1,
+    stdout: `tine: learning jq… ${spinnerProgress("learning jq", 600, clearLine)}\r${clearLine}`,
+    stderr: "tine: gave up waiting for the model\n",
+  },
+  {
+    name: "ask gives up after 600 answer ticks",
+    invocation: ["_tine_ask", "find", "files"],
+    requests: [
+      started("ask", "find files"),
+      ...repeatedPoll("askStatus", "idle", 601),
+    ],
+    pollInterval: "0.001",
+    exitCode: 1,
+    stdout: `tine: thinking… ${spinnerProgress("thinking", 600, clearLine)}\r${clearLine}`,
+    stderr: "tine: gave up waiting for an answer\n",
+  },
+];
+
 const harness = [
   'source "$1"',
   "shift",
@@ -232,7 +283,6 @@ const harness = [
   "shift $invocation_count",
   'typeset -ga requests=("$@")',
   'typeset -g request_mismatch=""',
-  "sleep() { : }",
   "whence() { return 0 }",
   "_tine_req() {",
   "  if (( ${#requests} == 0 )); then",
@@ -260,7 +310,7 @@ const harness = [
   "exit $invocation_result",
 ].join("\n");
 
-for (const transcript of transcripts) {
+for (const transcript of [...transcripts, ...giveUpTranscripts]) {
   test(`shell transcript: ${transcript.name}`, () => {
     const requests = transcript.requests.map(
       ({ verb, payload, reply }) =>
@@ -278,7 +328,12 @@ for (const transcript of transcripts) {
         ...transcript.invocation,
         ...requests,
       ],
-      { cwd: new URL("..", import.meta.url).pathname },
+      {
+        cwd: new URL("..", import.meta.url).pathname,
+        env: transcript.pollInterval
+          ? { ...process.env, TINE_POLL_INTERVAL: transcript.pollInterval }
+          : process.env,
+      },
     );
 
     expect({
@@ -295,4 +350,5 @@ for (const transcript of transcripts) {
 
 test("shell transcript count stays intentional", () => {
   expect(transcripts).toHaveLength(18);
+  expect(giveUpTranscripts).toHaveLength(3);
 });
