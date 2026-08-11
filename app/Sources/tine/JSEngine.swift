@@ -35,8 +35,11 @@ final class JSEngine {
     private let ctx = JSContext()!
     private(set) var ready = false
 
-    init(specsDir: String, localSpecsDirs: [String], resourcesDir: String) {
-        ctx.exceptionHandler = { _, exc in tlog("JS EXC: \(exc?.toString() ?? "?")") }
+    init(specsDir: String, localSpecsDirs: [String], resourcesDir: String,
+         logPath: String = TineLog.path) {
+        ctx.exceptionHandler = { _, exc in
+            tlog("JS EXC: \(exc?.toString() ?? "?")", to: logPath)
+        }
 
         let readFile: @convention(block) (String) -> String = { path in
             (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
@@ -55,12 +58,12 @@ final class JSEngine {
 
         let path = "\(resourcesDir)/tine-engine.js"
         guard let src = try? String(contentsOfFile: path, encoding: .utf8) else {
-            tlog("engine: missing \(path)")
+            tlog("engine: missing \(path)", to: logPath)
             return
         }
         ctx.evaluateScript(src, withSourceURL: URL(fileURLWithPath: path))
         ready = ctx.objectForKeyedSubscript("tineSuggest")?.isUndefined == false
-        tlog("engine ready=\(ready) specsDir=\(specsDir)")
+        tlog("engine ready=\(ready) specsDir=\(specsDir)", to: logPath)
     }
 
     func setAliases(_ aliases: [String: String]) {

@@ -288,13 +288,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @MainActor func doctorReport() -> DoctorReport {
-        let zshrcPath = (ProcessInfo.processInfo.environment["ZDOTDIR"] ?? NSHomeDirectory())
-            + "/.zshrc"
-        let shellInstalled = FileManager.default.contents(atPath: zshrcPath)
-            .map { String(decoding: $0, as: UTF8.self).contains("tine.zsh") } ?? false
         return DoctorReport(
             accessibilityGranted: AXCaret.isTrusted,
-            shellInstalled: shellInstalled,
+            shellIntegration: ShellIntegration.status(at: ShellIntegration.zshrcPath()),
             specCount: SpecInstaller.installedCount(),
             packUpdateAvailable: specInstaller.updateAvailable,
             appVersion: (Bundle.main.object(
@@ -305,6 +301,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             socketListening: socketListening,
             panelPlacement: lastPanelPlacement
         )
+    }
+
+    @MainActor func addShellIntegration() -> ShellIntegration.Status {
+        ShellIntegration.addSourceLine(to: ShellIntegration.zshrcPath())
     }
 
     /// Must stay serial — a concurrent queue could apply an older pattern after a newer one.

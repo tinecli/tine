@@ -121,7 +121,7 @@ enum FrecencyHarness {
         ]
         try? lines.joined(separator: "\n").write(toFile: fixture, atomically: true, encoding: .utf8)
 
-        let frecency = Frecency(historyPath: fixture)
+        let frecency = Frecency(historyPath: fixture, logPath: root + "/tine.log")
         func value(_ cmd: String, _ flag: String, _ v: String) -> Bool {
             frecency.valueIndex[cmd]?[flag]?[v] != nil
         }

@@ -53,6 +53,14 @@ struct AskExampleTests {
         #expect(AskIndex.examples(inManPage: Self.page(example: c.source)) == c.expected)
     }
 
+    @Test func optionalFlagsRenderConcreteNotBracketed() {
+        let op = AskIndex.examples(inManPage: Self.page(example: ".Dl Nm Op Fl verbose"))
+        let oo = AskIndex.examples(inManPage: Self.page(example: ".Dl Nm Oo Fl quiet Oc"))
+
+        #expect(op == "tool -verbose")
+        #expect(oo == "tool -quiet")
+    }
+
     @Test func unknownMdocMacroStillFailsClosed() {
         let example = AskIndex.examples(inManPage: Self.page(example: ".Dl Nm Xx injected"))
         #expect(example == "Nm Xx injected")
@@ -157,6 +165,16 @@ struct AskRetrievalTests {
         #expect(expanded.map(\.name) == ["metadata-tool"])
     }
 
+    @Test func guidedExpansionTermsDecodeThroughInjectedSeam() async {
+        let expanded = await Asker.retrievalCandidates(
+            question: "shrink a video", in: Self.corpus, limit: 3,
+            expansionTimeout: 0.1,
+            expand: { _ in ExpandedSearchTerms(terms: ["compress", "encode", "movie"]) }
+        )
+
+        #expect(Set(expanded.map(\.name)) == ["shrinker", "encoder"])
+    }
+
     @Test func expansionErrorFailsOpenToRawRanking() async {
         struct Unavailable: Error {}
         let raw = Asker.candidatePool(question: "shrink a video", expansion: nil,
@@ -178,7 +196,7 @@ struct AskRetrievalTests {
             expansionTimeout: 0.01,
             expand: { _ in
                 try await Task.sleep(nanoseconds: 1_000_000_000)
-                return "compress encode video"
+                return ExpandedSearchTerms(terms: ["compress", "encode", "video"])
             }
         )
 

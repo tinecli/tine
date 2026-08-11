@@ -204,12 +204,13 @@ enum AskIndex {
         return cleaned.isEmpty ? nil : cleaned
     }
 
-    private static let examplesHeadingPattern = try! NSRegularExpression(
+    private static let examplesHeadingPattern = try? NSRegularExpression(
         pattern: #"(?im)^\.(?:SH|SS)[\t ]+"?EXAMPLES?(?=["\t ]|$)"#
     )
 
     private static func containsExamplesHeading(in source: String) -> Bool {
-        examplesHeadingPattern.firstMatch(
+        guard let examplesHeadingPattern else { return false }
+        return examplesHeadingPattern.firstMatch(
             in: source, range: NSRange(source.startIndex..<source.endIndex, in: source)
         ) != nil
     }
@@ -277,6 +278,12 @@ enum AskIndex {
             !$0.quoted && isMdocMacro($0.text) && !translatedMdocMacros.contains($0.text)
         }) else { return nil }
 
+        func nextArgument(after index: Int) -> MdocToken? {
+            guard index + 1 < tokens.count else { return nil }
+            let token = tokens[index + 1]
+            return token.quoted || !translatedMdocMacros.contains(token.text) ? token : nil
+        }
+
         var output = ""
         var joinNext = false
         var quoteClosings: [String] = []
@@ -294,10 +301,8 @@ enum AskIndex {
             }
             switch token.text {
             case "Nm":
-                if index + 1 < tokens.count,
-                   tokens[index + 1].quoted
-                    || !translatedMdocMacros.contains(tokens[index + 1].text) {
-                    piece = tokens[index + 1].text
+                if let argument = nextArgument(after: index) {
+                    piece = argument.text
                     index += 1
                 } else {
                     guard let toolName, !toolName.isEmpty else { return nil }
@@ -316,18 +321,14 @@ enum AskIndex {
             case "Ns":
                 joinNext = true
             case "Pf":
-                if index + 1 < tokens.count,
-                   tokens[index + 1].quoted
-                    || !translatedMdocMacros.contains(tokens[index + 1].text) {
-                    piece = tokens[index + 1].text
+                if let argument = nextArgument(after: index) {
+                    piece = argument.text
                     pieceJoinsFollowing = true
                     index += 1
                 }
             case let macro where mdocArguments.contains(macro):
-                if index + 1 < tokens.count,
-                   tokens[index + 1].quoted
-                    || !translatedMdocMacros.contains(tokens[index + 1].text) {
-                    piece = tokens[index + 1].text
+                if let argument = nextArgument(after: index) {
+                    piece = argument.text
                     index += 1
                 }
             case let macro where mdocQuoteDelimiters[macro] != nil:
@@ -337,12 +338,8 @@ enum AskIndex {
                 pieceJoinsFollowing = true
                 quoteClosings.append(delimiters.1)
             case "Xr":
-                guard index + 2 < tokens.count else { return nil }
-                let name = tokens[index + 1]
-                let section = tokens[index + 2]
-                guard name.quoted || !translatedMdocMacros.contains(name.text),
-                      section.quoted || !translatedMdocMacros.contains(section.text)
-                else { return nil }
+                guard let name = nextArgument(after: index),
+                      let section = nextArgument(after: index + 1) else { return nil }
                 piece = "\(name.text)(\(section.text))"
                 index += 2
             default:
