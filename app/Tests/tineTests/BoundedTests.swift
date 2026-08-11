@@ -31,9 +31,11 @@ struct BoundedTests {
         let result = await Asker.boundedExpansion(
             question: "shrink a video", timeout: deadline
         ) { _ in
-            let expansion: String = await withCheckedContinuation { continuation in
+            let expansion: ExpandedSearchTerms = await withCheckedContinuation { continuation in
                 DispatchQueue.global().asyncAfter(deadline: .now() + mockSleep) {
-                    continuation.resume(returning: "compress encode movie")
+                    continuation.resume(returning: ExpandedSearchTerms(
+                        terms: ["compress", "encode", "movie"]
+                    ))
                 }
             }
             await probe.markCompleted()
