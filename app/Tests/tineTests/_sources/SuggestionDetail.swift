@@ -1,0 +1,1 @@
+../../../Sources/tine/SuggestionDetail.swift

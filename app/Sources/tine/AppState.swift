@@ -7,6 +7,8 @@ final class AppState: ObservableObject {
     @Published var suggestions: [Suggestion] = []
     @Published var selectedIndex = 0
     @Published var isLoading = false
+    @Published private(set) var frecencySnapshot: Frecency.Index = [:]
+    @Published private(set) var manNameSnapshot: [String: String] = [:]
     @Published var config = TineConfig.load() {
         didSet {
             if persists { config.save() }
@@ -38,6 +40,51 @@ final class AppState: ObservableObject {
 
     var selectedType: String? {
         suggestions.indices.contains(selectedIndex) ? suggestions[selectedIndex].type : nil
+    }
+
+    var selectedUsageLine: String? {
+        guard suggestions.indices.contains(selectedIndex),
+              let command = SuggestionDetail.firstToken(in: buffer, cursor: cursor),
+              let use = SuggestionDetail.use(
+                in: frecencySnapshot, command: command,
+                suggestion: suggestions[selectedIndex].name
+              ) else { return nil }
+        return SuggestionDetail.usageLine(for: use)
+    }
+
+    var selectedManName: String? {
+        guard suggestions.indices.contains(selectedIndex) else { return nil }
+        return SuggestionDetail.manName(
+            in: manNameSnapshot,
+            suggestion: suggestions[selectedIndex].name,
+            isFirstTokenRow: SuggestionDetail.isFirstTokenRow(buffer: buffer, cursor: cursor)
+        )
+    }
+
+    var selectedSpecIssueURL: URL? {
+        guard suggestions.indices.contains(selectedIndex) else { return nil }
+        let suggestion = suggestions[selectedIndex]
+        guard !suggestion.specName.isEmpty,
+              let firstToken = SuggestionDetail.firstToken(in: buffer, cursor: cursor)
+        else { return nil }
+        let isFirstToken = SuggestionDetail.isFirstTokenRow(buffer: buffer, cursor: cursor)
+        let cli = isFirstToken ? suggestion.name : firstToken
+        let rendered = suggestion.description.isEmpty
+            ? suggestion.name : "\(suggestion.name) — \(suggestion.description)"
+        let version = (Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
+        return SuggestionDetail.issueURL(
+            cli: cli, item: suggestion.name, specName: suggestion.specName,
+            renderedSuggestion: rendered, version: version
+        )
+    }
+
+    func installManNameSnapshot(_ snapshot: [String: String]) {
+        manNameSnapshot = snapshot
+    }
+
+    func installFrecencySnapshot(_ snapshot: Frecency.Index) {
+        frecencySnapshot = snapshot
     }
 
     @discardableResult

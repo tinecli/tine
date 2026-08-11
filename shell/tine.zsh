@@ -341,7 +341,7 @@ _tine_poll() {
   local spin='|/-\' i=0 waited=0 result
   printf 'tine: %s… ' "$label"
   while true; do
-    sleep 0.3
+    sleep "${TINE_POLL_INTERVAL:-0.3}"
     _tine_req "$status_verb" "" 2>/dev/null \
       || { printf '\r\e[K'; print -u2 -- "tine: lost contact with the app"; return 1 }
     "$handler" "$_TINE_REPLY" "${spin:$((i%4)):1}" "$waited" "$label" "$payload"

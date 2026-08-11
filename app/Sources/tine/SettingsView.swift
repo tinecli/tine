@@ -177,8 +177,7 @@ struct SettingsView: View {
     }
 
     private var preview: some View {
-        let size = SuggestionListView.panelSize(rows: previewState.suggestions.count,
-                                                config: previewState.config)
+        let size = SuggestionListView.panelSize(state: previewState)
         return GeometryReader { geometry in
             let scale = min(1, geometry.size.width / size.width)
             ZStack(alignment: .topLeading) {

@@ -10,6 +10,21 @@ struct Suggestion {
     let queryTerm: String
     let isDangerous: Bool
     let matchIndices: [Int]
+    let specName: String
+
+    init(name: String, description: String, insertValue: String,
+         shouldAddSpace: Bool, type: String, queryTerm: String,
+         isDangerous: Bool, matchIndices: [Int], specName: String = "") {
+        self.name = name
+        self.description = description
+        self.insertValue = insertValue
+        self.shouldAddSpace = shouldAddSpace
+        self.type = type
+        self.queryTerm = queryTerm
+        self.isDangerous = isDangerous
+        self.matchIndices = matchIndices
+        self.specName = specName
+    }
 
     /// insertValue is "\n" for this row — treat as a name, not a literal, and it breaks execution.
     var isExecute: Bool { type == "auto-execute" }
@@ -171,7 +186,8 @@ final class JSEngine {
                 type: d["type"] as? String ?? "",
                 queryTerm: d["queryTerm"] as? String ?? "",
                 isDangerous: d["isDangerous"] as? Bool ?? false,
-                matchIndices: (d["matchIndices"] as? [Any])?.compactMap { ($0 as? NSNumber)?.intValue } ?? []
+                matchIndices: (d["matchIndices"] as? [Any])?.compactMap { ($0 as? NSNumber)?.intValue } ?? [],
+                specName: d["specName"] as? String ?? ""
             )
         }
     }
