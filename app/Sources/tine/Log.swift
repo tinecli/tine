@@ -9,10 +9,10 @@ struct DoctorReport: Equatable {
         case cornerFallback = "Screen corner fallback"
     }
 
-    static let shellSourceLine = "source ~/.local/share/tine/tine.zsh"
+    static let shellSourceLine = ShellIntegration.sourceLine
 
     let accessibilityGranted: Bool
-    let shellInstalled: Bool
+    let shellIntegration: ShellIntegration.Status
     let specCount: Int
     let packUpdateAvailable: Bool
     let appVersion: String
@@ -21,6 +21,8 @@ struct DoctorReport: Equatable {
     let socketPath: String
     let socketListening: Bool
     let panelPlacement: PanelPlacement
+
+    var shellInstalled: Bool { shellIntegration.isInstalled }
 
     var socketValue: String {
         "ax=\(accessibilityGranted ? 1 : 0);specs=\(specCount);"
@@ -31,7 +33,7 @@ struct DoctorReport: Equatable {
     func diagnostics(logPath: String = TineLog.path) -> String {
         let values = [
             "Accessibility: \(accessibilityGranted ? "granted" : "not granted")",
-            "Shell integration: \(shellInstalled ? "installed" : "not installed")",
+            "Shell integration: \(shellIntegration.diagnosticDetail)",
             "Completion specs: \(specCount)",
             "Spec pack update: \(packUpdateAvailable ? "available" : "none pending")",
             "App version: \(appVersion)",

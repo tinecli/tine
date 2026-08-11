@@ -7,6 +7,7 @@ struct SettingsView: View {
     @EnvironmentObject var updater: AppUpdater
 
     @State private var report: DoctorReport?
+    @State private var shellWriteDetail: String?
     @State private var selectedSpecDir: Int?
     @State private var startAtLogin = SMAppService.mainApp.status == .enabled
     @State private var pane: Pane? = .general
@@ -85,12 +86,15 @@ struct SettingsView: View {
                     }
                 }
                 setupRow("Shell integration", ok: report.shellInstalled,
-                         detail: report.shellInstalled ? "Installed" : "Not installed") {
+                         detail: shellWriteDetail ?? report.shellIntegration.detail) {
                     Text(DoctorReport.shellSourceLine)
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                     Button("Copy line") { copy(DoctorReport.shellSourceLine) }
+                    if report.shellIntegration == .missing {
+                        Button("Add the source line to .zshrc") { addShellIntegration() }
+                    }
                 }
             }
             Section("Updates") {
@@ -107,8 +111,8 @@ struct SettingsView: View {
                 setupRow("Staged app update", ok: report.stagedAppVersion == nil,
                          detail: report.stagedAppVersion.map { "v\($0) is ready to install" }
                             ?? "No update staged") {
-                    if let version = report.stagedAppVersion {
-                        Button("Update to \(version) and Relaunch") {
+                    if report.stagedAppVersion != nil {
+                        Button("Update & Relaunch") {
                             updater.applyAndRelaunch()
                         }
                     }
@@ -288,8 +292,8 @@ struct SettingsView: View {
                 }
                 updaterStatus
             }
-            if let ready = updater.readyVersion {
-                Button("Update to \(ready) and Relaunch") { updater.applyAndRelaunch() }
+            if updater.readyVersion != nil {
+                Button("Update & Relaunch") { updater.applyAndRelaunch() }
             }
             Toggle("Update tine automatically", isOn: bind(\.autoUpdateApp))
             Toggle("Notify me about updates", isOn: bind(\.updateNotifications))
@@ -320,7 +324,16 @@ struct SettingsView: View {
     }
 
     private func refreshReport() {
-        report = (NSApp.delegate as? AppDelegate)?.doctorReport()
+        let refreshed = (NSApp.delegate as? AppDelegate)?.doctorReport()
+        if refreshed?.shellIntegration != .missing { shellWriteDetail = nil }
+        report = refreshed
+    }
+
+    private func addShellIntegration() {
+        guard let delegate = NSApp.delegate as? AppDelegate else { return }
+        let result = delegate.addShellIntegration()
+        shellWriteDetail = result.isInstalled ? nil : result.detail
+        refreshReport()
     }
 
     private func appVersionDetail(_ report: DoctorReport) -> String {
