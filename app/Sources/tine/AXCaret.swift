@@ -2,6 +2,13 @@ import AppKit
 import ApplicationServices
 
 enum AXCaret {
+    private struct Placement: Equatable {
+        let point: NSPoint
+        let lineHeight: CGFloat
+    }
+
+    private static let placementLogGate = TineLogChangeGate<Placement>()
+
     static func ensureTrusted() {
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue()
         let options = [key: true] as CFDictionary
@@ -60,7 +67,9 @@ enum AXCaret {
         let caretBottomCocoaY = primaryHeight - (r.origin.y + r.height)
         let point = NSPoint(x: anchorX, y: caretBottomCocoaY - gap)
 
-        tlog("AX[\(app)] caret=\(caret) rect=\(r) anchorRight=\(anchorRight) -> \(point)")
+        if placementLogGate.changed(to: Placement(point: point, lineHeight: r.height)) {
+            tlog("AX[\(app)] caret=\(caret) rect=\(r) anchorRight=\(anchorRight) -> \(point)")
+        }
         return (point, r.height)
     }
 

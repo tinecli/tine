@@ -6,7 +6,8 @@
 //       app/Sources/tine/CommandRunner.swift app/Sources/tine/SocketServer.swift \
 //       app/Sources/tine/SocketSafe.swift app/Sources/tine/Log.swift \
 //       app/Sources/tine/SpecLearner.swift app/Sources/tine/TineConfig.swift \
-//       app/Sources/tine/JSEngine.swift app/Sources/tine/Frecency.swift
+//       app/Sources/tine/JSEngine.swift app/Sources/tine/Frecency.swift \
+//       app/Sources/tine/JobState.swift
 //   TINE_DATA_DIR=/private/tmp/tine-harness /private/tmp/tine-harness/ask
 //
 // Man-page parsing, description cleaning, ranking and answer validation run
@@ -52,7 +53,9 @@ enum AskHarness {
         if CommandLine.arguments.contains("--measure-expansion") {
             await measureExpansion()
         }
-        if CommandLine.arguments.contains("--answer") { await MainActor.run { answering() } }
+        if CommandLine.arguments.contains("--answer") {
+            await MainActor.run { answering(logPath: root + "/tine.log") }
+        }
         print("\n\(pass) passed, \(fail) failed")
         exit(fail == 0 ? 0 : 1)
     }
@@ -488,11 +491,16 @@ enum AskHarness {
     /// real engine over the installed pack, the real index, the real model. Only
     /// the scratch data dir is not real.
     @MainActor
-    static func answering() {
+    static func answering(logPath: String) {
         let environment = ProcessInfo.processInfo.environment
         let pack = environment["TINE_SPECS_DIR"] ?? "\(NSHomeDirectory())/.local/share/tine/specs"
         let resources = environment["TINE_RESOURCES_DIR"] ?? "app/engine"
-        let engine = JSEngine(specsDir: pack, localSpecsDirs: [], resourcesDir: resources)
+        let engine = JSEngine(
+            specsDir: pack,
+            localSpecsDirs: [],
+            resourcesDir: resources,
+            logPath: logPath
+        )
         check("engine ready", engine.ready)
         check("engine rejects an invented flag",
               engine.validate(line: "git --quantum") == .invalid("--quantum"))
