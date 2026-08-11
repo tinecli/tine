@@ -2,6 +2,9 @@ import Combine
 import Foundation
 import FoundationModels
 
+typealias SpecAvailability = () -> String?
+typealias SpecHelp = @Sendable (String) async throws -> String
+
 /// Guided generation: the model produces a *value* here, never source or a file.
 @Generable
 struct LearnedSpec {
@@ -65,7 +68,7 @@ final class SpecLearner: ObservableObject {
         case failed(String)
     }
 
-    @Published private var jobState = JobState<Status>(.idle, timeout: 150)
+    @Published private var jobState: JobState<Status>
 
     var status: Status { jobState.status }
 
@@ -87,10 +90,19 @@ final class SpecLearner: ObservableObject {
 
     private let configuredDirs: [String]?
     private let packDir: String
+    private let availability: SpecAvailability
+    private let readHelp: SpecHelp
 
-    init(localSpecsDirs: [String]? = nil, packDir: String) {
+    init(localSpecsDirs: [String]? = nil,
+         packDir: String,
+         availability: @escaping SpecAvailability = SpecLearner.unavailableReason,
+         help: @escaping SpecHelp = { try SpecLearner.help(for: $0) },
+         jobTimeout: TimeInterval = 150) {
         self.configuredDirs = localSpecsDirs
         self.packDir = packDir
+        self.availability = availability
+        self.readHelp = help
+        self.jobState = JobState<Status>(.idle, timeout: jobTimeout)
     }
 
     private var specDirs: [String] {
@@ -129,7 +141,7 @@ final class SpecLearner: ObservableObject {
                 + "or re-run with --force to merge in what its --help documents"))
             return "started"
         }
-        if let reason = Self.unavailableReason() {
+        if let reason = availability() {
             jobState.reset(to: .failed(reason))
             return "started"
         }
@@ -139,9 +151,10 @@ final class SpecLearner: ObservableObject {
         case .started(let admitted): job = admitted
         case .busy(let label): return "busy:\(label)"
         }
+        let readHelp = self.readHelp
         Task.detached {
             do {
-                let help = try Self.help(for: command)
+                let help = try await readHelp(command)
                 await MainActor.run {
                     _ = self.jobState.report(.running("learning \(command)"), for: job)
                 }

@@ -3,6 +3,8 @@ import Foundation
 import FoundationModels
 
 typealias AskQueryExpansion = @Sendable (String) async throws -> ExpandedSearchTerms
+typealias AskDataDirectory = @Sendable () -> String
+typealias AskCorpusBuilder = @Sendable (String, [String: String]) async -> AskIndex.Stored
 
 @Generable
 struct ExpandedSearchTerms: Sendable {
@@ -49,7 +51,7 @@ final class Asker: ObservableObject {
         case note(String)
     }
 
-    @Published private var jobState = JobState<Status>(.idle, timeout: 180)
+    @Published private var jobState: JobState<Status>
 
     var status: Status { jobState.status }
 
@@ -65,14 +67,29 @@ final class Asker: ObservableObject {
     private let packDir: String
     private let queryExpansion: AskQueryExpansion
     private let expansionTimeout: TimeInterval
+    private let dataDir: AskDataDirectory
+    private let corpusBuilder: AskCorpusBuilder
+
+    nonisolated static func defaultDataDirectory() -> String { AskIndex.dir }
 
     init(packDir: String,
          queryExpansion: @escaping AskQueryExpansion = {
              try await Asker.expandedSearchTerms($0)
-         }, expansionTimeout: TimeInterval = 2) {
+         },
+         expansionTimeout: TimeInterval = 2,
+         dataDir: @escaping AskDataDirectory = { Asker.defaultDataDirectory() },
+         corpusBuilder: @escaping AskCorpusBuilder = { path, descriptions in
+             await Task.detached(priority: .utility) {
+                 AskIndex.build(shellPath: path, packDescriptions: descriptions)
+             }.value
+         },
+         jobTimeout: TimeInterval = 180) {
         self.packDir = packDir
         self.queryExpansion = queryExpansion
         self.expansionTimeout = expansionTimeout
+        self.dataDir = dataDir
+        self.corpusBuilder = corpusBuilder
+        self.jobState = JobState<Status>(.idle, timeout: jobTimeout)
     }
 
     var statusLine: String {
@@ -244,17 +261,14 @@ final class Asker: ObservableObject {
         let dirs = AskIndex.pathDirs(path)
         guard !dirs.isEmpty else { throw Failure("tine does not know your PATH yet — open a new shell") }
         let signature = AskIndex.signature(pathDirs: dirs)
-        let stored = AskIndex.load()
+        let stored = AskIndex.load(from: dataDir())
         if !rebuild, !AskIndex.needsRebuild(stored, signature: signature), let stored {
             return stored.entries
         }
         report(job, .running("indexing the tools on your PATH"))
-        let built = await Task.detached(priority: .utility) {
-            AskIndex.build(shellPath: path,
-                           packDescriptions: AskIndex.packDescriptions(in: packDir))
-        }.value
+        let built = await corpusBuilder(path, AskIndex.packDescriptions(in: packDir))
         guard !built.entries.isEmpty else { throw Failure("found no tools on your PATH") }
-        try AskIndex.save(built)
+        try AskIndex.save(built, to: dataDir())
         return built.entries
     }
 
