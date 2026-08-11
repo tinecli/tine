@@ -4,7 +4,7 @@ import Testing
 struct DoctorReportTests {
     private let report = DoctorReport(
         accessibilityGranted: true,
-        shellInstalled: false,
+        shellIntegration: .missing,
         specCount: 417,
         packUpdateAvailable: true,
         appVersion: "0.1.31",
@@ -36,7 +36,7 @@ struct DoctorReportTests {
     @Test func socketValueUsesEmptyUpdateVersionsAndNumericFlags() {
         let quiet = DoctorReport(
             accessibilityGranted: false,
-            shellInstalled: true,
+            shellIntegration: .installed,
             specCount: 0,
             packUpdateAvailable: false,
             appVersion: "?",
