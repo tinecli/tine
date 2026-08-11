@@ -133,6 +133,128 @@ struct AskExampleTests {
         #expect(Asker.isSafeExample("ls scratch.txt", validation: .ok(dangerous: false)))
         #expect(!Asker.isSafeExample("ls scratch.txt", validation: .ok(dangerous: true)))
     }
+
+    @Test func followsOneSameTreeSoIncludeForTheName() throws {
+        let root = Scratch.dir("ask-so-include") + "/share/man"
+        let section = root + "/man1"
+        try FileManager.default.createDirectory(atPath: section, withIntermediateDirectories: true)
+        try ".so man1/tool.1\n".write(
+            toFile: section + "/alias.1", atomically: true, encoding: .utf8)
+        try ".SH NAME\ntool \\- included description\n".write(
+            toFile: section + "/tool.1", atomically: true, encoding: .utf8)
+
+        #expect(AskIndex.nameLine(inManPageAt: section + "/alias.1")
+            == "tool - included description")
+    }
+
+    @Test func soIncludeIsOneHopAndCannotLeaveItsManTree() throws {
+        let parent = Scratch.dir("ask-so-bounds")
+        let root = parent + "/share/man"
+        let section = root + "/man1"
+        try FileManager.default.createDirectory(atPath: section, withIntermediateDirectories: true)
+        try ".so man1/middle.1\n".write(
+            toFile: section + "/alias.1", atomically: true, encoding: .utf8)
+        try ".so man1/target.1\n".write(
+            toFile: section + "/middle.1", atomically: true, encoding: .utf8)
+        try ".SH NAME\ntool \\- too far\n".write(
+            toFile: section + "/target.1", atomically: true, encoding: .utf8)
+        try ".SH NAME\nescape \\- outside tree\n".write(
+            toFile: parent + "/escape.1", atomically: true, encoding: .utf8)
+        try ".so ../../../escape.1\n".write(
+            toFile: section + "/escape.1", atomically: true, encoding: .utf8)
+
+        #expect(AskIndex.nameLine(inManPageAt: section + "/alias.1") == nil)
+        #expect(AskIndex.nameLine(inManPageAt: section + "/escape.1") == nil)
+    }
+
+    @Test func discoversAndReadsGzippedManPages() throws {
+        let root = Scratch.dir("ask-gzip") + "/share/man"
+        let section = root + "/man1"
+        try FileManager.default.createDirectory(atPath: section, withIntermediateDirectories: true)
+        let encoded = "H4sIANjPemoAA9ML8VCI8gwI8ff3UTDk0gv2UPBz9HXlqsosKMnPz1GI0VUoSk1MKVZIzs8tKEotLk5NUchNzCtNzCkGK3ZxDXYOAmr39PfjSspPqeQCALg6g0tQAAAA"
+        try #require(Data(base64Encoded: encoded)).write(
+            to: URL(fileURLWithPath: section + "/ziptool.1.gz"))
+
+        let pages = AskIndex.manPages(in: [root])
+        let path = try #require(pages["ziptool"])
+        #expect(path.hasSuffix("ziptool.1.gz"))
+        #expect(AskIndex.nameLine(inManPageAt: path) == "ziptool - reads compressed manuals")
+    }
+}
+
+struct AskIndexPruneTests {
+    @Test func versionLikeNamesForDistinctBinariesBothSurface() throws {
+        let entries = try entriesForPythonCommands(sameBinary: false)
+        let names = AskIndex.rank("python runtime", in: entries, limit: 10).map(\.entry.name)
+
+        #expect(names.contains("python"))
+        #expect(names.contains("python3"))
+    }
+
+    @Test func trueVersionTwinsStillCollapse() throws {
+        let entries = try entriesForPythonCommands(sameBinary: true)
+        let names = AskIndex.rank("python runtime", in: entries, limit: 10).map(\.entry.name)
+
+        #expect(names.contains("python3"))
+        #expect(!names.contains("python3.9"))
+    }
+
+    private func entriesForPythonCommands(sameBinary: Bool) throws -> [AskEntry] {
+        let root = Scratch.dir("ask-python-twins")
+        let bin = root + "/bin"
+        let man = root + "/share/man/man1"
+        try FileManager.default.createDirectory(atPath: bin, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: man, withIntermediateDirectories: true)
+        let first = root + "/python-runtime"
+        let second = root + "/python3-runtime"
+        try "#!/bin/sh\n".write(toFile: first, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\n".write(toFile: second, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: first)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: second)
+        let olderName = sameBinary ? "python3" : "python"
+        let newerName = sameBinary ? "python3.9" : "python3"
+        try FileManager.default.createSymbolicLink(
+            atPath: bin + "/" + olderName, withDestinationPath: first)
+        try FileManager.default.createSymbolicLink(
+            atPath: bin + "/" + newerName, withDestinationPath: sameBinary ? first : second)
+        for name in [olderName, newerName] {
+            try ".SH NAME\n\(name) \\- python runtime\n".write(
+                toFile: man + "/\(name).1", atomically: true, encoding: .utf8)
+        }
+        return AskIndex.build(shellPath: bin, packDescriptions: [:]).entries
+    }
+}
+
+struct LocalSpecsBridgeTests {
+    @Test func setLocalSpecsDirsPushesAndResetsWithoutCreatingDirectories() throws {
+        let root = Scratch.dir("local-specs-bridge")
+        let resources = root + "/resources"
+        try FileManager.default.createDirectory(atPath: resources, withIntermediateDirectories: true)
+        let script = """
+        globalThis.__tineSpecResetCount = 0;
+        globalThis.tineResetSpecs = function() { globalThis.__tineSpecResetCount += 1; };
+        globalThis.tineSuggest = function(line, cursor, cwd, cb) {
+          cb({items: [{name: globalThis.__tineLocalSpecsDirs.join('|'),
+            description: String(globalThis.__tineSpecResetCount),
+            insertValue: '', shouldAddSpace: false, type: 'arg', queryTerm: '',
+            isDangerous: false, matchIndices: []}]});
+        };
+        """
+        try script.write(
+            toFile: resources + "/tine-engine.js", atomically: true, encoding: .utf8)
+        let oldDir = root + "/old"
+        let newDir = root + "/new"
+        let engine = JSEngine(
+            specsDir: root + "/pack", localSpecsDirs: [oldDir], resourcesDir: resources,
+            logPath: root + "/tine.log")
+
+        engine.setLocalSpecsDirs(["", newDir])
+
+        let suggestion = engine.suggest(line: "x", cursor: 1, cwd: root).first
+        #expect(suggestion?.name == newDir)
+        #expect(suggestion?.description == "1")
+        #expect(!FileManager.default.fileExists(atPath: newDir))
+    }
 }
 
 struct AskRetrievalTests {

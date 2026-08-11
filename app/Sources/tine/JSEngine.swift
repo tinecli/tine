@@ -46,11 +46,14 @@ final class JSEngine {
         }
         ctx.setObject(readFile, forKeyedSubscript: "__tineReadFile" as NSString)
         ctx.setObject(specsDir as NSString, forKeyedSubscript: "__tineSpecsDir" as NSString)
-        for d in localSpecsDirs {
-            try? FileManager.default.createDirectory(atPath: "\(d)/override", withIntermediateDirectories: true)
-            try? FileManager.default.createDirectory(atPath: "\(d)/extend", withIntermediateDirectories: true)
+        let localSpecsDirs = normalizedLocalSpecsDirs(localSpecsDirs)
+        for dir in localSpecsDirs {
+            try? FileManager.default.createDirectory(
+                atPath: "\(dir)/override", withIntermediateDirectories: true)
+            try? FileManager.default.createDirectory(
+                atPath: "\(dir)/extend", withIntermediateDirectories: true)
         }
-        ctx.setObject(localSpecsDirs as NSArray, forKeyedSubscript: "__tineLocalSpecsDirs" as NSString)
+        pushLocalSpecsDirs(localSpecsDirs)
 
         let runCommand: @convention(block) (String) -> String = { CommandRunner.run($0) }
         ctx.setObject(runCommand, forKeyedSubscript: "__tineRun" as NSString)
@@ -69,6 +72,21 @@ final class JSEngine {
     func setAliases(_ aliases: [String: String]) {
         guard ready else { return }
         ctx.setObject(aliases as NSDictionary, forKeyedSubscript: "__tineAliases" as NSString)
+    }
+
+    func setLocalSpecsDirs(_ dirs: [String]) {
+        guard ready else { return }
+        pushLocalSpecsDirs(normalizedLocalSpecsDirs(dirs))
+        resetSpecCache()
+    }
+
+    private func normalizedLocalSpecsDirs(_ dirs: [String]) -> [String] {
+        dirs.map { ($0 as NSString).expandingTildeInPath }.filter { !$0.isEmpty }
+    }
+
+    private func pushLocalSpecsDirs(_ dirs: [String]) {
+        ctx.setObject(dirs as NSArray,
+                      forKeyedSubscript: "__tineLocalSpecsDirs" as NSString)
     }
 
     func setFrecency(_ index: [String: [String: Frecency.Use]]) {

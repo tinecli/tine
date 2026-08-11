@@ -356,27 +356,61 @@ private final class RedirectBlocker: NSObject, URLSessionTaskDelegate {
 }
 
 enum UpdateNotice {
+    typealias Authorization = (@escaping (Bool) -> Void) -> Void
+    typealias Delivery = (@escaping (Bool) -> Void) -> Void
+
+    private static let onceLock = NSLock()
+    private nonisolated(unsafe) static var pending = Set<String>()
+
     static func post(_ title: String, _ body: String, once key: String? = nil) {
         guard TineConfig.load().updateNotifications,
               Bundle.main.bundleURL.pathExtension == "app",
               Bundle.main.bundleIdentifier != nil
         else { return }
+        let center = UNUserNotificationCenter.current()
+        deliver(
+            once: key, defaults: .standard,
+            authorize: { completion in
+                center.requestAuthorization(options: [.alert]) { granted, _ in completion(granted) }
+            },
+            schedule: { completion in
+                let content = UNMutableNotificationContent()
+                content.title = title
+                content.body = body
+                center.add(UNNotificationRequest(identifier: UUID().uuidString,
+                                                 content: content, trigger: nil)) { error in
+                    completion(error == nil)
+                }
+            })
+    }
+
+    static func deliver(once key: String?, defaults: UserDefaults,
+                        authorize: @escaping Authorization, schedule: @escaping Delivery) {
         let seen = key.map { "tine.notified.\($0)" }
         if let seen {
-            guard !UserDefaults.standard.bool(forKey: seen) else { return }
-            UserDefaults.standard.set(true, forKey: seen)
+            let reserved = onceLock.withLock {
+                guard !defaults.bool(forKey: seen), !pending.contains(seen) else { return false }
+                pending.insert(seen)
+                return true
+            }
+            guard reserved else { return }
         }
-        let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert]) { granted, _ in
+        authorize { granted in
             guard granted else {
-                if let seen { UserDefaults.standard.removeObject(forKey: seen) }
+                finish(seen: seen, delivered: false, defaults: defaults)
                 return
             }
-            let content = UNMutableNotificationContent()
-            content.title = title
-            content.body = body
-            center.add(UNNotificationRequest(identifier: UUID().uuidString,
-                                             content: content, trigger: nil))
+            schedule { delivered in
+                finish(seen: seen, delivered: delivered, defaults: defaults)
+            }
+        }
+    }
+
+    private static func finish(seen: String?, delivered: Bool, defaults: UserDefaults) {
+        guard let seen else { return }
+        onceLock.withLock {
+            if delivered { defaults.set(true, forKey: seen) }
+            pending.remove(seen)
         }
     }
 }

@@ -478,16 +478,16 @@ async function parseLine(line: string): Promise<TineValidation> {
       command as never,
       shellContext("/") as never,
     );
-    // A dangerous arg the line already filled is no longer the *current* one, so
-    // the question is whether this subcommand declares one at all — which is what
-    // marks `rm`, and what the panel colours red.
+    // Consumed args and options have both left currentArg by this point.
     const args = (parsed.completionObj.args ?? []) as Array<{
       isDangerous?: boolean;
     }>;
     return {
       status: "ok",
       token: "",
-      dangerous: args.some((arg) => arg.isDangerous),
+      dangerous:
+        args.some((arg) => arg.isDangerous) ||
+        parsed.passedOptions.some((option) => option.isDangerous),
     };
   } catch (e) {
     if (e instanceof MissingSpecError) {
