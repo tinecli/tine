@@ -56,6 +56,24 @@ struct ShellIntegrationTests {
         #expect(ShellIntegration.status(at: path) == .missing)
     }
 
+    @Test func relocatedTineScriptStillCountsAsInstalled() throws {
+        let dir = Scratch.dir("zshrc-relocated")
+        let path = dir + "/.zshrc"
+        try "source ~/tine.zsh\n".write(toFile: path, atomically: true, encoding: .utf8)
+
+        #expect(ShellIntegration.status(at: path) == .installed)
+    }
+
+    @Test func doubledSeparatorStillCountsAsInstalled() throws {
+        let dir = Scratch.dir("zshrc-double-slash")
+        let path = dir + "/.zshrc"
+        try "source ~/.local/share/tine//tine.zsh\n".write(
+            toFile: path, atomically: true, encoding: .utf8
+        )
+
+        #expect(ShellIntegration.status(at: path) == .installed)
+    }
+
     @Test func aliasMentioningTineScriptNameDoesNotCountAsInstalled() throws {
         let dir = Scratch.dir("zshrc-alias-mention")
         let path = dir + "/.zshrc"

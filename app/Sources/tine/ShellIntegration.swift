@@ -252,7 +252,7 @@ enum ShellIntegration {
     private static func lineStatus(in data: Data) -> Status {
         let contents = String(decoding: data, as: UTF8.self)
         let matchingLines = contents.split(separator: "\n", omittingEmptySubsequences: false)
-            .filter { $0.contains("tine/tine.zsh") }
+            .filter { $0.contains("/tine.zsh") }
         guard !matchingLines.isEmpty else { return .missing }
         let onlyCommented = matchingLines.allSatisfy {
             $0.drop(while: { $0 == " " || $0 == "\t" }).first == "#"
