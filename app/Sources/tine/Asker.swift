@@ -338,11 +338,12 @@ final class Asker: ObservableObject {
         if let reason = SpecLearner.unavailableReason() { throw Failure(reason) }
         let session = LanguageModelSession(instructions: """
             Generate search keywords for finding a command-line tool. Include the task, input and \
-            output types, and common equivalent words.
+            output types, and common equivalent words. Prefer distinct, single-word lowercase terms \
+            over multi-word phrases.
             """)
         return try await session.respond(
             to: question, generating: ExpandedSearchTerms.self,
-            options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 48)
+            options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 160)
         ).content
     }
 
