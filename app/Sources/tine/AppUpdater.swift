@@ -188,7 +188,8 @@ final class AppUpdater: ObservableObject {
         let helper = Process()
         helper.executableURL = URL(fileURLWithPath: "/bin/sh")
         helper.arguments = [script, "\(getpid())", staged.app.path,
-                            Bundle.main.bundleURL.path, relaunch ? "open" : "quiet"]
+                            Bundle.main.bundleURL.path, relaunch ? "open" : "quiet",
+                            installed ?? ""]
         do { try helper.run() } catch { return "could not start the update helper" }
         swapping = true
         return nil
@@ -318,11 +319,16 @@ final class AppUpdater: ObservableObject {
     #!/bin/sh
     set -u
     [ "$(id -u)" = "0" ] && exit 1
-    pid=$1; staged=$2; target=$3; relaunch=$4
+    pid=$1; staged=$2; target=$3; relaunch=$4; expected=$5
     i=0
     while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 300 ]; do sleep 0.2; i=$((i+1)); done
     kill -0 "$pid" 2>/dev/null && exit 1
     [ -d "$staged" ] && [ -d "$target" ] || exit 1
+    # Read it again here, not at spawn: brew or another installer may have replaced
+    # the app while we waited, and that install wins.
+    now=$(/usr/bin/plutil -extract CFBundleShortVersionString raw -o - \
+      "$target/Contents/Info.plist" 2>/dev/null)
+    [ "$now" = "$expected" ] || exit 1
     backup="$target.tine-old"
     rm -rf "$backup"
     mv "$target" "$backup" || exit 1

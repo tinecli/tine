@@ -52,6 +52,31 @@ struct AppUpdaterTests {
         #expect(!AppUpdater.mayInstall("0.1.0", over: "0.1.0"), "never a downgrade or a no-op swap")
     }
 
+    @Test func theSwapHelperInstallsTheStagedAppWhenTheTargetIsUntouched() throws {
+        let bundles = try SwapHelperFixture(target: "0.1.36", staged: "0.1.37")
+
+        #expect(try bundles.run(expecting: "0.1.36") == 0)
+        #expect(AppUpdater.bundleVersion(of: bundles.target) == "0.1.37")
+        #expect(!FileManager.default.fileExists(atPath: bundles.staged.path))
+    }
+
+    @Test func theSwapHelperKeepsAnInstallThatLandedWhileItWaited() throws {
+        let bundles = try SwapHelperFixture(target: "0.1.36", staged: "0.1.37")
+        try bundles.writeTarget(version: "0.1.38")
+
+        #expect(try bundles.run(expecting: "0.1.36") != 0)
+        #expect(AppUpdater.bundleVersion(of: bundles.target) == "0.1.38")
+    }
+
+    @Test func theSwapHelperStillRepairsATargetWithNoReadableVersion() throws {
+        let bundles = try SwapHelperFixture(target: "0.1.36", staged: "0.1.37")
+        try FileManager.default.removeItem(
+            at: bundles.target.appendingPathComponent("Contents/Info.plist"))
+
+        #expect(try bundles.run(expecting: "") == 0)
+        #expect(AppUpdater.bundleVersion(of: bundles.target) == "0.1.37")
+    }
+
     @Test func deniedAuthorizationDoesNotConsumeTheVersionNotice() throws {
         let suite = "tine-update-notice-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -101,5 +126,50 @@ struct AppUpdaterTests {
             once: key, defaults: defaults,
             authorize: { $0(true) }, schedule: { $0(true) })
         #expect(defaults.bool(forKey: marker))
+    }
+}
+
+/// The staged app needs its own parent directory — the helper deletes that on success.
+private struct SwapHelperFixture {
+    let root: String
+    let target: URL
+    let staged: URL
+
+    init(target targetVersion: String, staged stagedVersion: String) throws {
+        root = Scratch.dir("swap")
+        target = URL(fileURLWithPath: root + "/Applications/Tine.app")
+        staged = URL(fileURLWithPath: root + "/staging/Tine.app")
+        try writeTarget(version: targetVersion)
+        try Self.write(version: stagedVersion, to: staged)
+    }
+
+    func writeTarget(version: String) throws {
+        try Self.write(version: version, to: target)
+    }
+
+    /// Runs the real helper against an already-exited pid, so its wait loop falls straight through.
+    func run(expecting expected: String) throws -> Int32 {
+        let script = root + "/swap.sh"
+        try AppUpdater.helperScript.write(toFile: script, atomically: true, encoding: .utf8)
+        let exited = Process()
+        exited.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        try exited.run()
+        exited.waitUntilExit()
+
+        let helper = Process()
+        helper.executableURL = URL(fileURLWithPath: "/bin/sh")
+        helper.arguments = [script, "\(exited.processIdentifier)", staged.path, target.path,
+                            "quiet", expected]
+        try helper.run()
+        helper.waitUntilExit()
+        return helper.terminationStatus
+    }
+
+    private static func write(version: String, to app: URL) throws {
+        let contents = app.appendingPathComponent("Contents")
+        try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+        let plist = try PropertyListSerialization.data(
+            fromPropertyList: ["CFBundleShortVersionString": version], format: .xml, options: 0)
+        try plist.write(to: contents.appendingPathComponent("Info.plist"))
     }
 }
