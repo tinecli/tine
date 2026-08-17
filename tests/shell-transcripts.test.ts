@@ -310,42 +310,58 @@ const harness = [
   "exit $invocation_result",
 ].join("\n");
 
-for (const transcript of [...transcripts, ...giveUpTranscripts]) {
-  test(`shell transcript: ${transcript.name}`, () => {
-    const requests = transcript.requests.map(
-      ({ verb, payload, reply }) =>
-        `${verb}${unitSeparator}${payload}${unitSeparator}${reply}`,
-    );
-    const result = Bun.spawnSync(
-      [
-        "zsh",
-        "-df",
-        "-c",
-        harness,
-        "shell-transcript",
-        "shell/tine.zsh",
-        transcript.invocation.length.toString(),
-        ...transcript.invocation,
-        ...requests,
-      ],
-      {
-        cwd: new URL("..", import.meta.url).pathname,
-        env: transcript.pollInterval
-          ? { ...process.env, TINE_POLL_INTERVAL: transcript.pollInterval }
-          : process.env,
-      },
-    );
+// Hundreds of spinner ticks per run: on a loaded CI runner these overrun bun's
+// 5s default and have already failed two releases.
+const giveUpTimeout = 60_000;
 
-    expect({
-      exitCode: result.exitCode,
-      stdout: result.stdout.toString(),
-      stderr: result.stderr.toString(),
-    }).toEqual({
-      exitCode: transcript.exitCode,
-      stdout: transcript.stdout,
-      stderr: transcript.stderr,
-    });
-  });
+function registerTranscript(transcript: Transcript, timeout?: number) {
+  test(
+    `shell transcript: ${transcript.name}`,
+    () => {
+      const requests = transcript.requests.map(
+        ({ verb, payload, reply }) =>
+          `${verb}${unitSeparator}${payload}${unitSeparator}${reply}`,
+      );
+      const result = Bun.spawnSync(
+        [
+          "zsh",
+          "-df",
+          "-c",
+          harness,
+          "shell-transcript",
+          "shell/tine.zsh",
+          transcript.invocation.length.toString(),
+          ...transcript.invocation,
+          ...requests,
+        ],
+        {
+          cwd: new URL("..", import.meta.url).pathname,
+          env: transcript.pollInterval
+            ? { ...process.env, TINE_POLL_INTERVAL: transcript.pollInterval }
+            : process.env,
+        },
+      );
+
+      expect({
+        exitCode: result.exitCode,
+        stdout: result.stdout.toString(),
+        stderr: result.stderr.toString(),
+      }).toEqual({
+        exitCode: transcript.exitCode,
+        stdout: transcript.stdout,
+        stderr: transcript.stderr,
+      });
+    },
+    timeout,
+  );
+}
+
+for (const transcript of transcripts) {
+  registerTranscript(transcript);
+}
+
+for (const transcript of giveUpTranscripts) {
+  registerTranscript(transcript, giveUpTimeout);
 }
 
 test("shell transcript count stays intentional", () => {
