@@ -2,6 +2,7 @@ import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
+    let delegate: AppDelegate
     @EnvironmentObject var state: AppState
     @EnvironmentObject var installer: SpecInstaller
     @EnvironmentObject var updater: AppUpdater
@@ -36,6 +37,8 @@ struct SettingsView: View {
                          ("Courier New", "Courier New")]
     static let appVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
 
+    init(delegate: AppDelegate) { self.delegate = delegate }
+
     var body: some View {
         NavigationSplitView {
             List(selection: $pane) {
@@ -51,7 +54,7 @@ struct SettingsView: View {
                 .navigationTitle((pane ?? .general).rawValue)
         }
         .frame(minWidth: 440, idealWidth: 590, minHeight: 360, idealHeight: 700)
-        .background(WindowAccessor())
+        .background(WindowAccessor(delegate: delegate))
         .onChange(of: pane) { _, pane in
             if pane == .status { refreshReport() }
         }
@@ -323,13 +326,12 @@ struct SettingsView: View {
     }
 
     private func refreshReport() {
-        let refreshed = (NSApp.delegate as? AppDelegate)?.doctorReport()
-        if refreshed?.shellIntegration != .missing { shellWriteDetail = nil }
+        let refreshed = delegate.doctorReport()
+        if refreshed.shellIntegration != .missing { shellWriteDetail = nil }
         report = refreshed
     }
 
     private func addShellIntegration() {
-        guard let delegate = NSApp.delegate as? AppDelegate else { return }
         let result = delegate.addShellIntegration()
         shellWriteDetail = result.isInstalled ? nil : result.detail
         refreshReport()
@@ -368,7 +370,7 @@ struct SettingsView: View {
         Binding(get: { state.config[keyPath: keyPath] },
                 set: {
                     state.config[keyPath: keyPath] = $0
-                    (NSApp.delegate as? AppDelegate)?.relayoutPanel()
+                    delegate.relayoutPanel()
                 })
     }
 

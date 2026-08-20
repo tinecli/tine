@@ -508,7 +508,7 @@ struct TineApp: App {
     var body: some Scene {
         // Must stay a SwiftUI Window, not a hand-built NSWindow, or the native Liquid Glass sidebar is lost.
         Window("Tine", id: Self.dashboardID) {
-            SettingsView()
+            SettingsView(delegate: delegate)
                 .environmentObject(delegate.state)
                 .environmentObject(delegate.specInstaller)
                 .environmentObject(delegate.appUpdater)
@@ -572,12 +572,13 @@ private struct DashboardMenu: View {
 }
 
 struct WindowAccessor: NSViewRepresentable {
+    let delegate: AppDelegate
     func makeNSView(context: Context) -> NSView {
         let v = NSView()
-        DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.dashboardWindow = v.window }
+        DispatchQueue.main.async { delegate.dashboardWindow = v.window }
         return v
     }
     func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.dashboardWindow = nsView.window }
+        DispatchQueue.main.async { delegate.dashboardWindow = nsView.window }
     }
 }
