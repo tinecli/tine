@@ -13,7 +13,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         packDir: ProcessInfo.processInfo.environment["TINE_SPECS_DIR"] ?? SpecInstaller.specsDir)
     private var panel: SuggestionPanel?
     private var server: SocketServer?
-    weak var dashboardWindow: NSWindow?
     private let frecency = Frecency()
     private var appliedProjectRoot: String?
     private var pendingProjectFrecencyApply = false
@@ -476,11 +475,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func openDashboard() {
-        if let w = dashboardWindow {
-            w.makeKeyAndOrderFront(nil)
-        } else {
-            NotificationCenter.default.post(name: .tineOpenDashboard, object: nil)
-        }
+        NotificationCenter.default.post(name: .tineOpenDashboard, object: nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -508,7 +503,7 @@ struct TineApp: App {
     var body: some Scene {
         // Must stay a SwiftUI Window, not a hand-built NSWindow, or the native Liquid Glass sidebar is lost.
         Window("Tine", id: Self.dashboardID) {
-            SettingsView()
+            SettingsView(delegate: delegate)
                 .environmentObject(delegate.state)
                 .environmentObject(delegate.specInstaller)
                 .environmentObject(delegate.appUpdater)
@@ -568,16 +563,5 @@ private struct DashboardMenu: View {
         }
         Divider()
         Button("Quit tine") { NSApp.terminate(nil) }
-    }
-}
-
-struct WindowAccessor: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let v = NSView()
-        DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.dashboardWindow = v.window }
-        return v
-    }
-    func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.dashboardWindow = nsView.window }
     }
 }
