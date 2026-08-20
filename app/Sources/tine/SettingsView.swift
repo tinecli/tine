@@ -37,8 +37,6 @@ struct SettingsView: View {
                          ("Courier New", "Courier New")]
     static let appVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
 
-    init(delegate: AppDelegate) { self.delegate = delegate }
-
     var body: some View {
         NavigationSplitView {
             List(selection: $pane) {
@@ -54,7 +52,6 @@ struct SettingsView: View {
                 .navigationTitle((pane ?? .general).rawValue)
         }
         .frame(minWidth: 440, idealWidth: 590, minHeight: 360, idealHeight: 700)
-        .background(WindowAccessor(delegate: delegate))
         .onChange(of: pane) { _, pane in
             if pane == .status { refreshReport() }
         }
