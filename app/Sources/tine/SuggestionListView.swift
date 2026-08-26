@@ -18,6 +18,7 @@ struct SuggestionListView: View {
     private var tint: Color { .accentColor }
 
     private func keepVisible(_ sel: Int) {
+        guard sel >= 0 else { return }
         let top = topID ?? 0
         if sel < top {
             topID = sel

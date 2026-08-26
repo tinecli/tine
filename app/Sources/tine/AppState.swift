@@ -94,7 +94,7 @@ final class AppState: ObservableObject {
         cursor = msg.cursor
         cwd = msg.cwd
         suggestions = engine?.suggest(line: msg.buffer, cursor: msg.cursor, cwd: msg.cwd) ?? []
-        selectedIndex = 0
+        selectedIndex = initialSelection
         isLoading = CommandRunner.isLoading
         return true
     }
@@ -105,7 +105,9 @@ final class AppState: ObservableObject {
         let items = engine?.suggest(line: buffer, cursor: cursor, cwd: cwd) ?? []
         let changed = items.count != suggestions.count
         suggestions = items
-        if selectedIndex >= suggestions.count { selectedIndex = 0 }
+        if selectedIndex < 0 || selectedIndex >= suggestions.count {
+            selectedIndex = initialSelection
+        }
         isLoading = CommandRunner.isLoading
         return changed
     }
@@ -132,6 +134,14 @@ final class AppState: ObservableObject {
         let newBuffer = String(chars[0..<start]) + prefix + String(chars[cursor...])
         return (newBuffer, start + prefix.count)
     }
+
+    /// The learn-it row is an offer, not a completion: it starts unselected so Enter
+    /// runs the typed line and Tab still falls through.
+    static func initialSelection(for suggestions: [Suggestion]) -> Int {
+        suggestions.first?.type == "learn-it" ? -1 : 0
+    }
+
+    private var initialSelection: Int { Self.initialSelection(for: suggestions) }
 
     func moveSelection(_ delta: Int) {
         guard !suggestions.isEmpty else { return }
