@@ -128,7 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // max(…, 1): raw 0 while still loading would unbind Up/Down before results land.
                 return "\(self.state.hasContent ? max(self.state.suggestions.count, 1) : 0)"
             case "up":
-                if self.panel?.isVisible != true || self.state.selectedIndex == 0
+                if self.panel?.isVisible != true || self.state.selectedIndex <= 0
                     || !self.sessions.isOwner(req.session) {
                     return "PASS" // must fire at the top row too, or Up can never reach zsh history
                 }
