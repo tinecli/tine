@@ -9,7 +9,7 @@ import "../../app/engine/shims.js";
 import { getCustomSuggestions } from "./src/generators/customSuggestionsGenerator.js";
 import { getScriptSuggestions } from "./src/generators/scriptSuggestionsGenerator.js";
 import { getTemplateSuggestions } from "./src/generators/templateSuggestionsGenerator.js";
-import { resetCaches } from "./src/parser/caches.js";
+import { createCache, resetCaches } from "./src/parser/caches.js";
 import {
   LoadLocalSpecError,
   MissingSpecError,
@@ -379,11 +379,21 @@ const descriptionMap = (value: unknown): Record<string, string> => {
   return map;
 };
 
-let cachedSpecIndex: SpecIndex | undefined;
+// Via createCache so a spec install clears it with every other cache — an index
+// that outlived the pack it described would hide the newly covered commands.
+const specIndexCache = createCache<SpecIndex>();
 function specIndex(): SpecIndex {
   // Don't cache an empty result: the pack may still be downloading on first run,
   // so re-read until the index has content (then it sticks).
-  if (cachedSpecIndex && cachedSpecIndex.names.length) return cachedSpecIndex;
+  const cached = specIndexCache.get("index");
+  if (cached?.names.length) return cached;
+  const index = readSpecIndex();
+  specIndexCache.set("index", index);
+  return index;
+}
+
+function readSpecIndex(): SpecIndex {
+  const empty = { names: [], descriptions: descriptionMap(undefined) };
   try {
     const g = globalThis as {
       __tineSpecsDir?: string;
@@ -392,14 +402,13 @@ function specIndex(): SpecIndex {
     const raw =
       g.__tineReadFile?.(`${g.__tineSpecsDir ?? ""}/index.json`) ?? "";
     const parsed = JSON.parse(raw);
-    cachedSpecIndex = {
+    return {
       names: (parsed.completions ?? []) as string[],
       descriptions: descriptionMap(parsed.descriptions),
     };
   } catch {
-    cachedSpecIndex = { names: [], descriptions: descriptionMap(undefined) };
+    return empty;
   }
-  return cachedSpecIndex;
 }
 
 function packSpecName(annotations: readonly unknown[]): string {

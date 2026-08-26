@@ -62,7 +62,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 localSpecsDirs: state.config.localSpecsDirsExpanded,
                                 resourcesDir: resources)
 
-        specInstaller.onInstalled = { [weak self] in self?.scheduleRefresh() }
+        specInstaller.onInstalled = { [weak self] in
+            // Without the reset the new pack sits on disk behind the specs already parsed.
+            self?.state.engine?.resetSpecCache()
+            self?.scheduleRefresh()
+        }
         if SpecInstaller.isInstalled() {
             SpecInstaller.refreshBuiltins()
             specInstaller.startChecking()
