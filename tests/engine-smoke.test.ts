@@ -676,3 +676,41 @@ test("an option's isDangerous reaches the answer", async () => {
 test("nothing that is not a single command validates", async () => {
   expect(await validate("")).toMatchObject({ status: "unparsed" });
 });
+
+// A spec install rewrites the pack under a running engine. Its own context and
+// file map, so mutating them cannot leak into the shared fixtures above.
+test("resetting the caches picks up a rewritten pack without a new context", async () => {
+  const dir = "/tine-reset-specs";
+  const index = (completions: string[]) =>
+    JSON.stringify({ completions, diffVersionedCompletions: [] });
+  const spec = (option: string) =>
+    `export default { name: "pc", options: [{ name: "${option}" }] };`;
+  const store: Record<string, string> = {
+    [`${dir}/index.json`]: index(["pc"]),
+    [`${dir}/pc.js`]: spec("--old"),
+  };
+
+  const ctx = vm.createContext({
+    __tineReadFile: (path: string) => store[path] ?? "",
+    __tineSpecsDir: dir,
+  });
+  vm.runInContext(bundle, ctx);
+  const run: Suggest = vm.runInContext("globalThis.tineSuggest", ctx);
+  const rows = (line: string): Promise<string[]> =>
+    new Promise((resolve) =>
+      run(line, line.length, "/tmp", (r) =>
+        resolve(r.items.map((i) => i.name)),
+      ),
+    );
+
+  expect(await rows("pc -")).toEqual(["--old"]);
+  expect(await rows("fr")).toEqual([]);
+
+  store[`${dir}/pc.js`] = spec("--new");
+  store[`${dir}/index.json`] = index(["pc", "freshcmd"]);
+  vm.runInContext("globalThis.tineResetSpecs()", ctx);
+
+  expect(await rows("pc -")).toEqual(["--new"]);
+  expect(await rows("fr")).toEqual(["freshcmd"]);
+  expect(vm.runInContext("globalThis.__tineErr", ctx)).toBeUndefined();
+});
