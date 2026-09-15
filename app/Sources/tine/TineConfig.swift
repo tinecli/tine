@@ -1,8 +1,21 @@
 import Foundation
 
+enum PaneTint: String, Codable, CaseIterable, Identifiable {
+    case auto, dark, light
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .auto: return "Auto"
+        case .dark: return "Always dark"
+        case .light: return "Always light"
+        }
+    }
+}
+
 struct TineConfig: Codable, Equatable {
     var maxVisibleRows: Int = 12
     var glass: Bool = true
+    var paneTint: PaneTint = .auto
     var fontName: String = ""       // "" = system monospaced; else a named font
     var fontSize: Double = 12
     var firstTokenCompletion: Bool = true
@@ -29,6 +42,7 @@ struct TineConfig: Codable, Equatable {
         let d = TineConfig()
         maxVisibleRows = value(.maxVisibleRows, d.maxVisibleRows)
         glass = value(.glass, d.glass)
+        paneTint = value(.paneTint, d.paneTint)
         fontName = value(.fontName, d.fontName)
         fontSize = value(.fontSize, d.fontSize)
         firstTokenCompletion = value(.firstTokenCompletion, d.firstTokenCompletion)

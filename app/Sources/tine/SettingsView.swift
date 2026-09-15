@@ -153,6 +153,9 @@ struct SettingsView: View {
     @ViewBuilder private var appearancePane: some View {
         Section {
             Toggle("Liquid glass", isOn: bind(\.glass))
+            Picker("Pane tint", selection: bind(\.paneTint)) {
+                ForEach(PaneTint.allCases) { Text($0.label).tag($0) }
+            }
             Toggle("Detail pane (⌃K)", isOn: bind(\.showDetail))
             Picker("Font", selection: bind(\.fontName)) {
                 ForEach(fonts, id: \.0) { Text($0.1).tag($0.0) }

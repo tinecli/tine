@@ -4,6 +4,7 @@ import SwiftUI
 struct SuggestionListView: View {
     @EnvironmentObject var state: AppState
     @State private var topID: Int?
+    @Environment(\.colorScheme) private var systemColorScheme
 
     private var maxRows: Int { max(1, state.config.maxVisibleRows) }
 
@@ -104,7 +105,20 @@ struct SuggestionListView: View {
         }
     }
 
-    @ViewBuilder var body: some View {
+    var body: some View {
+        tinted
+            .environment(\.colorScheme, forcedColorScheme ?? systemColorScheme)
+    }
+
+    private var forcedColorScheme: ColorScheme? {
+        switch state.config.paneTint {
+        case .auto: return nil
+        case .dark: return .dark
+        case .light: return .light
+        }
+    }
+
+    @ViewBuilder private var tinted: some View {
         if state.config.glass {
             // Unlike materialContent below, glassEffect draws its own edge — no border needed.
             GlassEffectContainer {
