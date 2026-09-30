@@ -85,7 +85,8 @@ final class SocketServer {
         readLoop: while true {
             if let deadline {
                 let remaining = deadline.timeIntervalSinceNow
-                guard remaining > 0 else { return }
+                // A zero SO_RCVTIMEO means block forever.
+                guard remaining > 0.001 else { return }
                 var timeout = timeval(tv_sec: Int(remaining), tv_usec: Int32(remaining.truncatingRemainder(dividingBy: 1) * 1_000_000))
                 setsockopt(conn, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
             }
