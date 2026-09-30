@@ -111,7 +111,8 @@ struct RemoteSessionsTests {
     }
 }
 
-struct RemoteRouterTests {
+/// Serialized: each case builds two JSContexts, and forty at once starve the timing-sensitive suites on CI.
+@Suite(.serialized) struct RemoteRouterTests {
     static let localOnlyVerbs = [
         "path", "env", "aliases", "showDashboard", "install", "installStatus", "appUpdate",
         "appUpdateStatus", "appUpdateApply", "learn", "learnStatus", "ask", "index", "askStatus",
@@ -245,11 +246,8 @@ struct RemoteEngineTests {
     }
 }
 
-/// Each listener parks a thread in accept() for good, so these run in a child process.
-struct RemoteSocketTests {
+@Suite(.serialized) struct RemoteSocketTests {
     @Test func theListenerSocketIsOwnerOnly() throws {
-        if try TestSubprocess.runCurrentTest(
-            filteredTo: "theListenerSocketIsOwnerOnly", childEnvironmentKey: "TINE_TEST_SOCKET_CHILD") { return }
         let path = Scratch.dir("remote-socket") + "/remote.sock"
         let server = SocketServer(path: path) { _ in nil }
         #expect(server.start())
@@ -258,9 +256,6 @@ struct RemoteSocketTests {
     }
 
     @Test func aLimitedListenerDropsOversizedLinesAndStalledClients() throws {
-        if try TestSubprocess.runCurrentTest(
-            filteredTo: "aLimitedListenerDropsOversizedLinesAndStalledClients",
-            childEnvironmentKey: "TINE_TEST_SOCKET_CHILD") { return }
         let path = Scratch.dir("remote-limits") + "/remote.sock"
         let server = SocketServer(path: path, limits: .init(maxLineBytes: 16, deadlineSeconds: 1)) { _ in
             Issue.record("a dropped connection must never reach respond")
@@ -297,9 +292,6 @@ struct RemoteSocketTests {
     }
 
     @Test func aClientThatHangsUpBeforeTheReplyDoesNotKillTheApp() throws {
-        if try TestSubprocess.runCurrentTest(
-            filteredTo: "aClientThatHangsUpBeforeTheReplyDoesNotKillTheApp",
-            childEnvironmentKey: "TINE_TEST_SOCKET_CHILD") { return }
         let path = Scratch.dir("remote-sigpipe") + "/remote.sock"
         let server = SocketServer(path: path, respond: { _ in
             Thread.sleep(forTimeInterval: 0.2)
