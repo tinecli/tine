@@ -36,14 +36,15 @@ final class JSEngine {
     private(set) var ready = false
 
     init(specsDir: String, localSpecsDirs: [String], resourcesDir: String,
-         logPath: String = TineLog.path) {
+         logPath: String = TineLog.path,
+         home: String = NSHomeDirectory(),
+         run: @escaping (String) -> String = CommandRunner.run,
+         read: @escaping (String) -> String = { (try? String(contentsOfFile: $0, encoding: .utf8)) ?? "" }) {
         ctx.exceptionHandler = { _, exc in
             tlog("JS EXC: \(exc?.toString() ?? "?")", to: logPath)
         }
 
-        let readFile: @convention(block) (String) -> String = { path in
-            (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
-        }
+        let readFile: @convention(block) (String) -> String = { read($0) }
         ctx.setObject(readFile, forKeyedSubscript: "__tineReadFile" as NSString)
         ctx.setObject(specsDir as NSString, forKeyedSubscript: "__tineSpecsDir" as NSString)
         let localSpecsDirs = normalizedLocalSpecsDirs(localSpecsDirs)
@@ -55,9 +56,9 @@ final class JSEngine {
         }
         pushLocalSpecsDirs(localSpecsDirs)
 
-        let runCommand: @convention(block) (String) -> String = { CommandRunner.run($0) }
+        let runCommand: @convention(block) (String) -> String = { run($0) }
         ctx.setObject(runCommand, forKeyedSubscript: "__tineRun" as NSString)
-        ctx.setObject(NSHomeDirectory() as NSString, forKeyedSubscript: "__tineHome" as NSString)
+        ctx.setObject(home as NSString, forKeyedSubscript: "__tineHome" as NSString)
 
         let path = "\(resourcesDir)/tine-engine.js"
         guard let src = try? String(contentsOfFile: path, encoding: .utf8) else {
@@ -67,6 +68,19 @@ final class JSEngine {
         ctx.evaluateScript(src, withSourceURL: URL(fileURLWithPath: path))
         ready = ctx.objectForKeyedSubscript("tineSuggest")?.isUndefined == false
         tlog("engine ready=\(ready) specsDir=\(specsDir)", to: logPath)
+    }
+
+    static func remote(specsDir: String, resourcesDir: String, logPath: String = TineLog.path) -> JSEngine {
+        let root = URL(fileURLWithPath: specsDir).resolvingSymlinksInPath().path + "/"
+        return JSEngine(
+            specsDir: specsDir, localSpecsDirs: [], resourcesDir: resourcesDir, logPath: logPath,
+            home: "",
+            run: { _ in #"{"stdout":"","stderr":"tine: not available over ssh","exitCode":1}"# },
+            read: { path in
+                let resolved = URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
+                guard resolved.hasPrefix(root) else { return "" }
+                return (try? String(contentsOfFile: resolved, encoding: .utf8)) ?? ""
+            })
     }
 
     func setAliases(_ aliases: [String: String]) {

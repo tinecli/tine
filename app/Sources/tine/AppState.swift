@@ -13,6 +13,7 @@ final class AppState: ObservableObject {
         didSet {
             if persists { config.save() }
             engine?.setFirstTokenEnabled(config.firstTokenCompletion)
+            remoteEngine?.setFirstTokenEnabled(config.firstTokenCompletion)
             engine?.setLocalSpecsDirs(config.localSpecsDirsExpanded)
         }
     }
@@ -25,6 +26,11 @@ final class AppState: ObservableObject {
     }
 
     var engine: JSEngine?
+    var remoteEngine: JSEngine?
+
+    /// Which engine produced `suggestions`: a local refresh must never recompute a remote buffer with the local engine.
+    private(set) var showsRemote = false
+    private var suggestingEngine: JSEngine? { showsRemote ? remoteEngine : engine }
 
     var hasSuggestions: Bool { !suggestions.isEmpty }
 
@@ -89,26 +95,39 @@ final class AppState: ObservableObject {
 
     @discardableResult
     func update(_ msg: FeedMessage) -> Bool {
-        if msg.buffer == buffer && msg.cursor == cursor && msg.cwd == cwd { return false }
+        if !showsRemote && msg.buffer == buffer && msg.cursor == cursor && msg.cwd == cwd { return false }
+        showsRemote = false
+        show(msg)
+        return true
+    }
+
+    @discardableResult
+    func updateRemote(_ msg: FeedMessage) -> Bool {
+        if showsRemote && msg.buffer == buffer && msg.cursor == cursor && msg.cwd == cwd { return false }
+        showsRemote = true
+        show(msg)
+        return true
+    }
+
+    private func show(_ msg: FeedMessage) {
         buffer = msg.buffer
         cursor = msg.cursor
         cwd = msg.cwd
-        suggestions = engine?.suggest(line: msg.buffer, cursor: msg.cursor, cwd: msg.cwd) ?? []
+        suggestions = suggestingEngine?.suggest(line: msg.buffer, cursor: msg.cursor, cwd: msg.cwd) ?? []
         selectedIndex = initialSelection
-        isLoading = CommandRunner.isLoading
-        return true
+        isLoading = !showsRemote && CommandRunner.isLoading
     }
 
     @discardableResult
     func recompute() -> Bool {
         guard !buffer.isEmpty else { return false }
-        let items = engine?.suggest(line: buffer, cursor: cursor, cwd: cwd) ?? []
+        let items = suggestingEngine?.suggest(line: buffer, cursor: cursor, cwd: cwd) ?? []
         let changed = items.count != suggestions.count
         suggestions = items
         if selectedIndex < 0 || selectedIndex >= suggestions.count {
             selectedIndex = initialSelection
         }
-        isLoading = CommandRunner.isLoading
+        isLoading = !showsRemote && CommandRunner.isLoading
         return changed
     }
 
