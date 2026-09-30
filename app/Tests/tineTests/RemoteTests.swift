@@ -111,8 +111,7 @@ struct RemoteSessionsTests {
     }
 }
 
-/// Serialized: each case builds two JSContexts, and forty at once starve the timing-sensitive suites on CI.
-@Suite(.serialized) struct RemoteRouterTests {
+struct RemoteRouterTests {
     static let localOnlyVerbs = [
         "path", "env", "aliases", "showDashboard", "install", "installStatus", "appUpdate",
         "appUpdateStatus", "appUpdateApply", "learn", "learnStatus", "ask", "index", "askStatus",
