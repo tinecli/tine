@@ -63,9 +63,10 @@ final class SocketServer {
         guard chmod(path, 0o600) == 0 else { perror("tine chmod"); return false }
         guard listen(fd, 16) == 0 else { perror("tine listen"); return false }
 
-        DispatchQueue.global(qos: .userInteractive).async { [weak self] in
-            self?.acceptLoop()
-        }
+        // A dedicated thread: this loop blocks in accept() for the app's lifetime and must not hold a GCD worker.
+        let thread = Thread { [weak self] in self?.acceptLoop() }
+        thread.qualityOfService = .userInteractive
+        thread.start()
         return true
     }
 
