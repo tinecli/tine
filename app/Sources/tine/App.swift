@@ -13,6 +13,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         packDir: ProcessInfo.processInfo.environment["TINE_SPECS_DIR"] ?? SpecInstaller.specsDir)
     private var panel: SuggestionPanel?
     private var server: SocketServer?
+    private var remoteServer: SocketServer?
+    private var remoteRouter: RemoteRouter?
+    private let remoteSessions = RemoteSessions()
     private let frecency = Frecency()
     private var appliedProjectRoot: String?
     private var pendingProjectFrecencyApply = false
@@ -52,19 +55,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Must have this fixed default — the input-method process can't see the shell's TINE_SOCK.
         let sockPath = env["TINE_SOCK"] ?? "\(NSHomeDirectory())/.local/share/tine/tine.sock"
         self.sockPath = sockPath
-        try? FileManager.default.createDirectory(
-            atPath: (sockPath as NSString).deletingLastPathComponent,
-            withIntermediateDirectories: true)
+        let sockDir = (sockPath as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: sockDir, withIntermediateDirectories: true)
+        chmod(sockDir, 0o700)
 
         let resources = Bundle.main.resourcePath ?? "."
         let specsDir = env["TINE_SPECS_DIR"] ?? SpecInstaller.specsDir
         state.engine = JSEngine(specsDir: specsDir,
                                 localSpecsDirs: state.config.localSpecsDirsExpanded,
                                 resourcesDir: resources)
+        state.remoteEngine = JSEngine.remote(specsDir: specsDir, resourcesDir: resources)
 
         specInstaller.onInstalled = { [weak self] in
             // Without the reset the new pack sits on disk behind the specs already parsed.
             self?.state.engine?.resetSpecCache()
+            self?.state.remoteEngine?.resetSpecCache()
             self?.scheduleRefresh()
         }
         if SpecInstaller.isInstalled() {
@@ -76,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appUpdater.start()
 
         state.engine?.setFirstTokenEnabled(state.config.firstTokenCompletion)
+        state.remoteEngine?.setFirstTokenEnabled(state.config.firstTokenCompletion)
         specLearner.onLearned = { [weak self] in self?.state.engine?.resetSpecCache() }
 
         asker.validate = { [weak self] line in
@@ -104,145 +110,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let server = SocketServer(path: sockPath) { [weak self] req in
-            guard let self else { return "0" }
-            switch req.type {
-            case "update":
-                let feed = FeedMessage(cursor: req.cursor, cwd: req.cwd, buffer: req.buffer)
-                guard let verdict = self.sessions.admit(session: req.session, feed) else {
-                    return "0"
-                }
-                self.lastFeed = (req.anchorRow, req.anchorCol, req.cols, req.rows,
-                                 req.cellW, req.cellH, req.cursor, req.buffer)
-                if req.cwd != self.state.cwd {
-                    self.state.engine?.setProjectFrecency([:])
-                    self.pendingProjectFrecencyApply = true
-                }
-                self.resolveProjectFrecency(for: req.cwd)
-                self.state.update(feed)
-                if verdict.changed, let app = verdict.appPID {
-                    // Must only update here — an async redraw from a background terminal
-                    // reaches this handler too, but doesn't prove ownership.
-                    self.ownerPID = app
-                    self.reflectPanel(buffer: req.buffer)
-                } else if req.buffer.isEmpty || !self.state.hasContent {
-                    self.dismissPanel()
-                } else {
-                    self.scheduleIdleHide()
-                }
-                // max(…, 1): raw 0 while still loading would unbind Up/Down before results land.
-                return "\(self.state.hasContent ? max(self.state.suggestions.count, 1) : 0)"
-            case "up":
-                if self.panel?.isVisible != true || self.state.selectedIndex <= 0
-                    || !self.sessions.isOwner(req.session) {
-                    return "PASS" // must fire at the top row too, or Up can never reach zsh history
-                }
-                self.state.moveSelection(-1)
-                self.panel?.relayout()
-                return "\(self.state.suggestions.count)"
-            case "down":
-                if self.panel?.isVisible != true || !self.sessions.isOwner(req.session) {
-                    return "PASS"
-                }
-                self.state.moveSelection(1)
-                self.panel?.relayout()
-                return "\(self.state.suggestions.count)"
-            case "accept":
-                // "" here falls through to a normal accept-line — this shell's _TINE_ACTIVE
-                // can be stale if the panel idle-hid or moved to another shell.
-                if self.panel?.isVisible != true || !self.sessions.isOwner(req.session) {
-                    return ""
-                }
-                if self.state.selectedIsExecute {
-                    self.dismissPanel()
-                    return "EXEC"
-                }
-                if let (b, c) = self.state.accept() {
-                    // Must exclude "history" and "learn-it" — recording them as picks corrupts frecency ranking.
-                    if let name = self.state.selectedName,
-                       self.state.selectedType != "history",
-                       self.state.selectedType != "learn-it" {
-                        let cmd = req.buffer.split(whereSeparator: { $0 == " " || $0 == "\t" })
-                            .first.map(String.init) ?? ""
-                        if let result = self.frecency.record(cmd: cmd, param: name, cwd: req.cwd) {
-                            self.state.installFrecencySnapshot(self.frecency.index)
-                            self.state.engine?.setFrecencyCommand(cmd, params: result.global)
-                            if let scoped = result.scoped {
-                                self.state.engine?.setProjectFrecencyCommand(cmd, params: scoped)
-                            }
-                        }
-                    }
-                    self.dismissPanel()
-                    return "\(c)\(TINE_US)\(b)"
-                }
-                return ""
-            case "prefix":
-                if self.panel?.isVisible != true || !self.sessions.isOwner(req.session) {
-                    return ""
-                }
-                if let (b, c) = self.state.commonPrefix() {
-                    return "\(c)\(TINE_US)\(b)"
-                }
-                return ""
-            case "path":
-                CommandRunner.setShellPath(req.buffer)
-                return "0"
-            case "showDashboard":
-                self.openDashboard()
-                return "0"
-            case "install":
-                self.specInstaller.install()
-                return "started"
-            case "installStatus":
-                return self.specInstaller.statusLine
-            case "appUpdate":
-                self.appUpdater.check(manual: true)
-                return "started"
-            case "appUpdateStatus":
-                return self.appUpdater.statusLine
-            case "appUpdateApply":
-                if let reason = self.appUpdater.applyAndRelaunch() { return reason.socketSafe }
-                return "ok"
-            case "learn":
-                // buffer is "<cmd>" or "<cmd>" RS "force" — changing this breaks --force from the shell.
-                let sections = req.buffer.components(separatedBy: TINE_RS)
-                return self.specLearner.learn(command: sections.first ?? "",
-                                              force: sections.count > 1 && sections[1] == "force")
-            case "learnStatus":
-                return self.specLearner.statusLine
-            case "ask":
-                return self.asker.ask(question: req.buffer)
-            case "index":
-                return self.asker.index()
-            case "askStatus":
-                return self.asker.statusLine
-            case "version":
-                return (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
-            case "doctor":
-                return self.doctorReport().socketValue
-            case "aliases":
-                return "\(self.applyAliases(req.buffer))"
-            case "env":
-                // A present-but-empty alias/history section still applies; only an omitted one (no RS) is skipped.
-                let sections = req.buffer.components(separatedBy: TINE_RS)
-                if let path = sections.first, !path.isEmpty {
-                    CommandRunner.setShellPath(path)
-                }
-                if sections.count > 1 { _ = self.applyAliases(sections[1]) }
-                if sections.count > 2 { self.applyHistoryIgnore(sections[2]) }
-                return "0"
-            case "toggleDetail":
-                self.state.config.showDetail.toggle()
-                self.panel?.relayout()
-                return "0"
-            case "dismiss":
-                if self.sessions.isOwner(req.session) { self.dismissPanel() }
-                return "0"
-            default:
-                return "0"
-            }
+            self?.handleLocal(req) ?? "0"
         }
         socketListening = server.start()
         self.server = server
+
+        let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
+        remoteRouter = RemoteRouter(state: state, sessions: sessions, tokens: remoteSessions,
+                                    panel: self, version: version)
+        let remoteServer = SocketServer(
+            path: "\(sockDir)/remote.sock",
+            limits: .init(maxLineBytes: 1 << 20, readTimeoutSeconds: 5)
+        ) { [weak self] line in
+            self?.remoteRouter?.respond(to: line)
+        }
+        _ = remoteServer.start()
+        self.remoteServer = remoteServer
 
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
@@ -255,6 +138,149 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tlog("listening on \(sockPath) (AX trusted: \(AXCaret.isTrusted))")
 
         CommandRunner.onRefresh = { [weak self] in self?.scheduleRefresh() }
+    }
+
+    @MainActor private func handleLocal(_ req: Request) -> String {
+        switch req.type {
+        case "update":
+            let feed = FeedMessage(cursor: req.cursor, cwd: req.cwd, buffer: req.buffer)
+            guard let verdict = self.sessions.admit(session: req.session, feed) else {
+                return "0"
+            }
+            self.lastFeed = (req.anchorRow, req.anchorCol, req.cols, req.rows,
+                             req.cellW, req.cellH, req.cursor, req.buffer)
+            if req.cwd != self.state.cwd {
+                self.state.engine?.setProjectFrecency([:])
+                self.pendingProjectFrecencyApply = true
+            }
+            self.resolveProjectFrecency(for: req.cwd)
+            self.state.update(feed)
+            if verdict.changed, let app = verdict.appPID {
+                // Must only update here — an async redraw from a background terminal
+                // reaches this handler too, but doesn't prove ownership.
+                self.ownerPID = app
+                self.reflectPanel(buffer: req.buffer)
+            } else if req.buffer.isEmpty || !self.state.hasContent {
+                self.dismissPanel()
+            } else {
+                self.scheduleIdleHide()
+            }
+            // max(…, 1): raw 0 while still loading would unbind Up/Down before results land.
+            return "\(self.state.hasContent ? max(self.state.suggestions.count, 1) : 0)"
+        case "up":
+            if self.panel?.isVisible != true || self.state.selectedIndex <= 0
+                || !self.sessions.isOwner(req.session) {
+                return "PASS" // must fire at the top row too, or Up can never reach zsh history
+            }
+            self.state.moveSelection(-1)
+            self.panel?.relayout()
+            return "\(self.state.suggestions.count)"
+        case "down":
+            if self.panel?.isVisible != true || !self.sessions.isOwner(req.session) {
+                return "PASS"
+            }
+            self.state.moveSelection(1)
+            self.panel?.relayout()
+            return "\(self.state.suggestions.count)"
+        case "accept":
+            // "" here falls through to a normal accept-line — this shell's _TINE_ACTIVE
+            // can be stale if the panel idle-hid or moved to another shell.
+            if self.panel?.isVisible != true || !self.sessions.isOwner(req.session) {
+                return ""
+            }
+            if self.state.selectedIsExecute {
+                self.dismissPanel()
+                return "EXEC"
+            }
+            if let (b, c) = self.state.accept() {
+                // Must exclude "history" and "learn-it" — recording them as picks corrupts frecency ranking.
+                if let name = self.state.selectedName,
+                   self.state.selectedType != "history",
+                   self.state.selectedType != "learn-it" {
+                    let cmd = req.buffer.split(whereSeparator: { $0 == " " || $0 == "\t" })
+                        .first.map(String.init) ?? ""
+                    if let result = self.frecency.record(cmd: cmd, param: name, cwd: req.cwd) {
+                        self.state.installFrecencySnapshot(self.frecency.index)
+                        self.state.engine?.setFrecencyCommand(cmd, params: result.global)
+                        if let scoped = result.scoped {
+                            self.state.engine?.setProjectFrecencyCommand(cmd, params: scoped)
+                        }
+                    }
+                }
+                self.dismissPanel()
+                return "\(c)\(TINE_US)\(b)"
+            }
+            return ""
+        case "prefix":
+            if self.panel?.isVisible != true || !self.sessions.isOwner(req.session) {
+                return ""
+            }
+            if let (b, c) = self.state.commonPrefix() {
+                return "\(c)\(TINE_US)\(b)"
+            }
+            return ""
+        case "path":
+            CommandRunner.setShellPath(req.buffer)
+            return "0"
+        case "showDashboard":
+            self.openDashboard()
+            return "0"
+        case "install":
+            self.specInstaller.install()
+            return "started"
+        case "installStatus":
+            return self.specInstaller.statusLine
+        case "appUpdate":
+            self.appUpdater.check(manual: true)
+            return "started"
+        case "appUpdateStatus":
+            return self.appUpdater.statusLine
+        case "appUpdateApply":
+            if let reason = self.appUpdater.applyAndRelaunch() { return reason.socketSafe }
+            return "ok"
+        case "learn":
+            // buffer is "<cmd>" or "<cmd>" RS "force" — changing this breaks --force from the shell.
+            let sections = req.buffer.components(separatedBy: TINE_RS)
+            return self.specLearner.learn(command: sections.first ?? "",
+                                          force: sections.count > 1 && sections[1] == "force")
+        case "learnStatus":
+            return self.specLearner.statusLine
+        case "ask":
+            return self.asker.ask(question: req.buffer)
+        case "index":
+            return self.asker.index()
+        case "askStatus":
+            return self.asker.statusLine
+        case "version":
+            return (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
+        case "doctor":
+            return self.doctorReport().socketValue
+        case "aliases":
+            return "\(self.applyAliases(req.buffer))"
+        case "env":
+            // A present-but-empty alias/history section still applies; only an omitted one (no RS) is skipped.
+            let sections = req.buffer.components(separatedBy: TINE_RS)
+            if let path = sections.first, !path.isEmpty {
+                CommandRunner.setShellPath(path)
+            }
+            if sections.count > 1 { _ = self.applyAliases(sections[1]) }
+            if sections.count > 2 { self.applyHistoryIgnore(sections[2]) }
+            return "0"
+        case "toggleDetail":
+            self.state.config.showDetail.toggle()
+            self.panel?.relayout()
+            return "0"
+        case "dismiss":
+            if self.sessions.isOwner(req.session) { self.dismissPanel() }
+            return "0"
+        case "sshBegin":
+            return remoteSessions.begin(session: req.session) ?? "0"
+        case "sshEnd":
+            remoteSessions.end(token: req.buffer)
+            return "0"
+        default:
+            return "0"
+        }
     }
 
     private func selectProjectFrecency(for cwd: String) {
@@ -363,7 +389,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Must cancel reposition/refresh work here too, or stale work scheduled before this can undo it.
-    private func dismissPanel() {
+    func dismissPanel() {
         repositionWork?.cancel()
         refreshWork?.cancel()
         ownerPID = nil
@@ -453,7 +479,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Without this, a closed terminal or exited shell leaves the panel stuck on screen forever.
-    private func scheduleIdleHide() {
+    func scheduleIdleHide() {
         idleHide?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.dismissPanel() }
         idleHide = work
@@ -491,6 +517,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             atPath: (dest as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
         // Must always overwrite — this is a managed file, and a brew upgrade needs it to deliver shell-side fixes.
         try? data.write(to: URL(fileURLWithPath: dest))
+    }
+}
+
+extension AppDelegate: RemotePanel {
+    var panelIsVisible: Bool { panel?.isVisible == true }
+
+    func record(feed req: Request) {
+        lastFeed = (req.anchorRow, req.anchorCol, req.cols, req.rows,
+                    req.cellW, req.cellH, req.cursor, req.buffer)
+    }
+
+    func present(over app: pid_t, buffer: String) {
+        ownerPID = app
+        reflectPanel(buffer: buffer)
     }
 }
 

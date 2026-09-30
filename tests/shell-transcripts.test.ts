@@ -1,5 +1,15 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: The harness contains zsh parameter expansions.
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 
 type Request = {
   verb: string;
@@ -368,3 +378,344 @@ test("shell transcript count stays intentional", () => {
   expect(transcripts).toHaveLength(18);
   expect(giveUpTranscripts).toHaveLength(3);
 });
+
+const repoRoot = new URL("..", import.meta.url).pathname;
+const sshTimeout = 30_000;
+const repoCwd = repoRoot.replace(/\/$/, "");
+
+const scratchDirs: string[] = [];
+
+const scratchDir = (): string => {
+  const dir = realpathSync(mkdtempSync("/tmp/tine-ssh-"));
+  if (!/^\/(private\/)?tmp\/tine-ssh-/.test(dir)) {
+    throw new Error(`refusing to run outside a temp dir: ${dir}`);
+  }
+  chmodSync(dir, 0o700);
+  scratchDirs.push(dir);
+  return dir;
+};
+
+afterAll(() => {
+  for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true });
+});
+
+type FakeApp = { lines: string[]; stop: () => void };
+
+const fakeApp = (
+  path: string,
+  reply: (line: string) => string,
+  mode = 0o600,
+): FakeApp => {
+  const lines: string[] = [];
+  const pending = new Map<object, string>();
+  const server = Bun.listen({
+    unix: path,
+    socket: {
+      data(socket, data) {
+        const buffered = (pending.get(socket) ?? "") + data.toString();
+        const end = buffered.indexOf("\n");
+        if (end < 0) {
+          pending.set(socket, buffered);
+          return;
+        }
+        const line = buffered.slice(0, end);
+        lines.push(line);
+        socket.end(`${reply(line)}\n`);
+      },
+    },
+  });
+  chmodSync(path, mode);
+  return { lines, stop: () => server.stop(true) };
+};
+
+const runZsh = async (script: string, env: Record<string, string>) => {
+  const proc = Bun.spawn(
+    ["zsh", "-df", "-c", `source shell/tine.zsh\n${script}`],
+    {
+      cwd: repoRoot,
+      env: { PATH: "/usr/bin:/bin", ...env },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return { stdout, stderr, exitCode };
+};
+
+const token = "0123456789abcdef0123456789abcdef";
+
+const remoteEnv = (dir: string, sock: string) => ({
+  HOME: dir,
+  TINE_SOCK: sock,
+  TINE_TOKEN: token,
+  TINE_REMOTE: "1",
+});
+
+test(
+  "remote mode prefixes every request with the token",
+  async () => {
+    const dir = scratchDir();
+    const app = fakeApp(`${dir}/tine.sock`, () => "3");
+    const result = await runZsh(
+      'print -r -- $$; cd "$HOME"; COLUMNS=80; LINES=24; BUFFER="git st"; CURSOR=6\n' +
+        '_tine_req update; print -r -- "rc=$? reply=$_TINE_REPLY"',
+      remoteEnv(dir, `${dir}/tine.sock`),
+    ).finally(app.stop);
+    const [pid, status] = result.stdout.trim().split("\n");
+    expect(status).toBe("rc=0 reply=3");
+    expect(app.lines).toEqual([
+      [token, "update", "6", dir, `1;1;80;24;0;0;${pid}`, "git st"].join(
+        unitSeparator,
+      ),
+    ]);
+  },
+  sshTimeout,
+);
+
+test(
+  "remote mode refuses a socket it cannot trust",
+  async () => {
+    const dir = scratchDir();
+    const real = fakeApp(`${dir}/real.sock`, () => "3");
+    const loose = fakeApp(`${dir}/loose.sock`, () => "3", 0o666);
+    symlinkSync(`${dir}/real.sock`, `${dir}/link.sock`);
+    const outcomes = [];
+    for (const sock of ["link.sock", "loose.sock", "missing.sock"]) {
+      const result = await runZsh(
+        'BUFFER="git st"; CURSOR=6; _tine_req update; print -r -- "rc=$?"',
+        remoteEnv(dir, `${dir}/${sock}`),
+      );
+      outcomes.push([sock, result.stdout.trim()]);
+    }
+    real.stop();
+    loose.stop();
+    expect(outcomes).toEqual([
+      ["link.sock", "rc=1"],
+      ["loose.sock", "rc=1"],
+      ["missing.sock", "rc=1"],
+    ]);
+    expect(real.lines).toEqual([]);
+    expect(loose.lines).toEqual([]);
+  },
+  sshTimeout,
+);
+
+test(
+  "remote mode sends no env and keeps KEYTIMEOUT",
+  async () => {
+    const dir = scratchDir();
+    const app = fakeApp(`${dir}/tine.sock`, () => "0");
+    const script =
+      'KEYTIMEOUT=40; source shell/tine.zsh; _tine_send_env; print -r -- "kt=$KEYTIMEOUT"';
+    const remote = await runZsh(script, remoteEnv(dir, `${dir}/tine.sock`));
+    const local = await runZsh(script, {
+      HOME: dir,
+      TINE_SOCK: `${dir}/missing.sock`,
+    });
+    app.stop();
+    expect(remote.stdout).toBe("kt=40\n");
+    expect(local.stdout).toBe("kt=1\n");
+    expect(app.lines).toEqual([]);
+  },
+  sshTimeout,
+);
+
+const localOnlyVerbs = [
+  "dashboard",
+  "restart",
+  "install",
+  "update",
+  "learn",
+  "ask",
+  "index",
+  "doctor",
+];
+
+test(
+  "remote mode refuses local-only tine verbs",
+  async () => {
+    const dir = scratchDir();
+    const app = fakeApp(`${dir}/tine.sock`, () => "1.2.3");
+    const env = remoteEnv(dir, `${dir}/tine.sock`);
+    const refused = [];
+    for (const verb of localOnlyVerbs) {
+      const result = await runZsh(`tine ${verb} jq`, env);
+      refused.push([result.exitCode, result.stderr]);
+    }
+    const version = await runZsh("tine version", env);
+    app.stop();
+    expect(refused).toEqual(
+      localOnlyVerbs.map((verb) => [
+        1,
+        `tine: ${verb} is not available over ssh\n`,
+      ]),
+    );
+    expect(version.stdout).toBe("tine 1.2.3\n");
+    expect(
+      app.lines.map((line) => line.split(unitSeparator).slice(0, 2)),
+    ).toEqual([[token, "version"]]);
+  },
+  sshTimeout,
+);
+
+type SshCase = {
+  name: string;
+  args: string[];
+  reply?: (line: string) => string;
+  remoteCommandConfig?: boolean;
+  remote?: boolean;
+  appDown?: boolean;
+};
+
+const sshWorld = async (c: SshCase) => {
+  const dir = scratchDir();
+  mkdirSync(`${dir}/bin`, { mode: 0o700 });
+  writeFileSync(
+    `${dir}/bin/ssh`,
+    [
+      "#!/bin/sh",
+      'if [ "$1" = "-G" ]; then',
+      '  [ -n "$FAKE_REMOTECOMMAND" ] && printf "user me\\nremotecommand tmux attach\\n"',
+      "  exit 0",
+      "fi",
+      'for a in "$@"; do printf "%s\\n" "$a"; done >> "$SSH_LOG"',
+      'printf "%s\\n" "--end--" >> "$SSH_LOG"',
+      "exit 7",
+    ].join("\n"),
+    { mode: 0o700 },
+  );
+  writeFileSync(`${dir}/ssh.log`, "");
+  const app = c.appDown
+    ? undefined
+    : fakeApp(`${dir}/tine.sock`, c.reply ?? (() => "0"));
+  const listener = fakeApp(`${dir}/remote.sock`, () => "0");
+  const env: Record<string, string> = {
+    HOME: dir,
+    PATH: `${dir}/bin:/usr/bin:/bin`,
+    TINE_SOCK: `${dir}/tine.sock`,
+    SSH_LOG: `${dir}/ssh.log`,
+    TERM_PROGRAM: "ghostty",
+  };
+  if (c.remoteCommandConfig) env.FAKE_REMOTECOMMAND = "1";
+  if (c.remote) Object.assign(env, { TINE_REMOTE: "1", TINE_TOKEN: token });
+  const quoted = c.args.map((arg) => `'${arg.replace(/'/g, "'\\''")}'`);
+  const result = await runZsh(`tine ssh ${quoted.join(" ")}`, env);
+  app?.stop();
+  listener.stop();
+  const invocations = readFileSync(`${dir}/ssh.log`, "utf8")
+    .split("--end--\n")
+    .filter((chunk) => chunk.length > 0)
+    .map((chunk) => chunk.replace(/\n$/, "").split("\n"));
+  return {
+    dir,
+    exitCode: result.exitCode,
+    invocations,
+    appLines: app?.lines ?? [],
+    listenerLines: listener.lines,
+  };
+};
+
+const plainSshCases: SshCase[] = [
+  {
+    name: "the app is not running",
+    args: ["-p", "2222", "host"],
+    appDown: true,
+  },
+  { name: "a remote command is given", args: ["host", "ls", "-la"] },
+  {
+    name: "a remote command follows options after the host",
+    args: ["-l", "me", "host", "-p", "22", "uptime"],
+  },
+  { name: "the command follows --", args: ["--", "host", "uptime"] },
+  { name: "-N asks for no session", args: ["-N", "host"] },
+  { name: "-W forwards stdio", args: ["-W", "db:5432", "jump"] },
+  { name: "a flag is unknown", args: ["-Z", "host"] },
+  { name: "no destination is given", args: ["-p", "22"] },
+  {
+    name: "ssh config sets RemoteCommand",
+    args: ["host"],
+    remoteCommandConfig: true,
+  },
+  { name: "the shell is already remote", args: ["host"], remote: true },
+];
+
+for (const c of plainSshCases) {
+  test(
+    `tine ssh runs plain ssh when ${c.name}`,
+    async () => {
+      const world = await sshWorld(c);
+      expect(world.exitCode).toBe(7);
+      expect(world.invocations).toEqual([c.args]);
+      expect(world.appLines).toEqual([]);
+    },
+    sshTimeout,
+  );
+}
+
+test(
+  "tine ssh runs plain ssh when the app predates sshBegin",
+  async () => {
+    const world = await sshWorld({ name: "old app", args: ["host"] });
+    expect(world.exitCode).toBe(7);
+    expect(world.invocations).toEqual([["host"]]);
+    expect(world.appLines.map((line) => line.split(unitSeparator)[0])).toEqual([
+      "sshBegin",
+    ]);
+  },
+  sshTimeout,
+);
+
+test(
+  "tine ssh forwards the restricted listener to a per-session path",
+  async () => {
+    const world = await sshWorld({
+      name: "forward",
+      args: ["-l", "me", "-i", "key file", "host", "-p", "22"],
+      reply: (line) => (line.startsWith("sshBegin") ? token : "0"),
+    });
+    const sock = `/tmp/tine-${token}.sock`;
+    expect(world.exitCode).toBe(7);
+    expect(world.invocations).toEqual([
+      [
+        "-t",
+        "-R",
+        `${sock}:${world.dir}/remote.sock`,
+        "-l",
+        "me",
+        "-i",
+        "key file",
+        "host",
+        "-p",
+        "22",
+        `export TINE_SOCK=${sock} TINE_TOKEN=${token} TINE_REMOTE=1 TERM_PROGRAM='ghostty'; exec "$SHELL" -l`,
+      ],
+    ]);
+    expect(world.appLines.map((line) => line.split(unitSeparator))).toEqual([
+      ["sshBegin", "", repoCwd, expect.stringMatching(/;\d+$/), ""],
+      ["sshEnd", "", repoCwd, expect.stringMatching(/;\d+$/), token],
+    ]);
+    expect(world.listenerLines).toEqual([]);
+  },
+  sshTimeout,
+);
+
+test(
+  "tine ssh treats a destination after -- as a login",
+  async () => {
+    const world = await sshWorld({
+      name: "double dash",
+      args: ["--", "host"],
+      reply: (line) => (line.startsWith("sshBegin") ? token : "0"),
+    });
+    expect(
+      world.invocations.map((argv) =>
+        argv.slice(0, 2).concat(argv.slice(3, 5)),
+      ),
+    ).toEqual([["-t", "-R", "--", "host"]]);
+  },
+  sshTimeout,
+);

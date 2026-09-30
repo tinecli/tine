@@ -77,6 +77,11 @@ export default {
       ],
     },
     { name: "restart", description: "Quit and relaunch the app" },
+    {
+      name: "ssh",
+      description: "ssh with autocomplete in the remote zsh",
+      loadSpec: "ssh",
+    },
     { name: "update", description: "Update the app to the latest release" },
     { name: "version", description: "Print the running app version" },
     { name: "help", description: "Show usage" },

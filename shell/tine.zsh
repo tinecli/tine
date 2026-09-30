@@ -70,17 +70,28 @@ _tine_cellsize() {
 # field, so an app that predates it just ignores it. Best-effort; never blocks
 # the prompt.
 _tine_req() {
-  local type=$1 payload=${2-$BUFFER}
+  local type=$1 payload=${2-$BUFFER} token=""
   [[ -n "$TINE_SOCK" ]] || return 1
+  if [[ -n "${TINE_REMOTE-}" ]]; then
+    _tine_remote_sock_ok || return 1
+    token=${TINE_TOKEN}${_TINE_US}
+  fi
   zmodload zsh/net/socket 2>/dev/null || return 1
   local fd
   zsocket "$TINE_SOCK" 2>/dev/null || return 1
   fd=$REPLY
-  print -u "$fd" -r -- "${type}${_TINE_US}${CURSOR}${_TINE_US}${PWD}${_TINE_US}${_TINE_AROW};${_TINE_ACOL};${COLUMNS};${LINES};${_TINE_CW};${_TINE_CH};$$${_TINE_US}${payload}"
+  print -u "$fd" -r -- "${token}${type}${_TINE_US}${CURSOR}${_TINE_US}${PWD}${_TINE_US}${_TINE_AROW};${_TINE_ACOL};${COLUMNS};${LINES};${_TINE_CW};${_TINE_CH};$$${_TINE_US}${payload}"
   _TINE_REPLY=""
   IFS= read -r -u "$fd" _TINE_REPLY
   exec {fd}>&-
   return 0
+}
+
+# Over ssh TINE_SOCK sits in a shared /tmp.
+_tine_remote_sock_ok() {
+  local -A st
+  zstat -L -H st "$TINE_SOCK" 2>/dev/null || return 1
+  (( st[uid] == UID && (st[mode] & 8#170000) == 8#140000 && (st[mode] & 8#7777) == 8#600 ))
 }
 
 # Fires on every buffer/cursor change: refresh suggestions, track whether the
@@ -217,7 +228,7 @@ zle -N _tine_detail
 # forgotten it, and also recreated the socket, so a new inode forces a resend.
 _tine_send_env() {
   emulate -L zsh
-  [[ -n "$TINE_SOCK" ]] || return
+  [[ -n "$TINE_SOCK" && -z "${TINE_REMOTE-}" ]] || return
   local -a st
   zstat -A st +inode "$TINE_SOCK" 2>/dev/null
   if [[ "$st[1]" != "$_TINE_SOCK_INODE" ]]; then
@@ -259,9 +270,13 @@ _tine_send_env() {
 #   tine index       rebuild the tool index `tine ask` searches
 #   tine learn <cmd> write a spec for <cmd> from its own --help
 #   tine restart     quit and relaunch the app
+#   tine ssh <host>  ssh with autocomplete in the remote zsh
 #   tine update      update the app to the latest release
 tine() {
   emulate -L zsh
+  if [[ -n "${TINE_REMOTE-}" && "$1" == (dashboard|restart|install|update|learn|ask|index|doctor) ]]; then
+    print -u2 -- "tine: $1 is not available over ssh"; return 1
+  fi
   case "$1" in
     dashboard)
       _tine_req showDashboard >/dev/null 2>&1 || open -a Tine 2>/dev/null \
@@ -293,6 +308,7 @@ tine() {
     ask) shift; _tine_ask "$@" ;;
     index) _tine_index ;;
     doctor) _tine_doctor ;;
+    ssh) shift; _tine_ssh "$@" ;;
     version|--version|-v)
       if _tine_req version 2>/dev/null && [[ -n "$_TINE_REPLY" ]]; then
         print -- "tine $_TINE_REPLY"
@@ -309,11 +325,64 @@ tine() {
       print -- "  install     download the latest completion specs"
       print -- "  learn <cmd> write a spec for <cmd> from its own --help"
       print -- "  restart     quit and relaunch the app"
+      print -- "  ssh <host>  ssh with autocomplete in the remote zsh"
       print -- "  update      update the app to the latest release"
       print -- "  version     print the running app version"
       ;;
     *) print -u2 -- "tine: unknown command: $1 (try: tine help)"; return 1 ;;
   esac
+}
+
+# One forward path per session: sshd refuses to rebind an existing path by default.
+_tine_ssh() {
+  emulate -L zsh
+  local listener=${TINE_SOCK:h}/remote.sock
+  if [[ -n "${TINE_REMOTE-}" || "$listener" != /* || "$listener" == *:* || ! -S "$listener" ]] \
+     || ! _tine_ssh_is_login "$@" \
+     || [[ "$(command ssh -G "$@" 2>/dev/null)" == *$'\n'(remotecommand|sessiontype\ (none|subsystem))* ]] \
+     || ! _tine_req sshBegin "" 2>/dev/null \
+     || [[ ${#_TINE_REPLY} -ne 32 || "$_TINE_REPLY" == *[^0-9a-f]* ]]; then
+    command ssh "$@"
+    return
+  fi
+  local token=$_TINE_REPLY rc
+  local sock=/tmp/tine-$token.sock
+  command ssh -t -R "$sock:$listener" "$@" \
+    "export TINE_SOCK=$sock TINE_TOKEN=$token TINE_REMOTE=1 TERM_PROGRAM=${(qq)${TERM_PROGRAM-}}; exec \"\$SHELL\" -l"
+  rc=$?
+  _tine_req sshEnd "$token" 2>/dev/null
+  return $rc
+}
+
+# ssh still parses options that follow the destination.
+_tine_ssh_is_login() {
+  emulate -L zsh
+  local arg opt rest dest=""
+  while (( $# )); do
+    arg=$1; shift
+    if [[ "$arg" == -- ]]; then
+      [[ -z "$dest" ]] && { dest=${1-}; (( $# )) && shift }
+      [[ -n "$dest" ]] && (( $# == 0 ))
+      return
+    fi
+    if [[ "$arg" != -?* ]]; then
+      [[ -z "$dest" ]] || return 1
+      dest=$arg
+      continue
+    fi
+    rest=${arg#-}
+    while [[ -n "$rest" ]]; do
+      opt=${rest[1]}; rest=${rest:1}
+      case "$opt" in
+        ([46AaCgKkMqtvXxYy]) ;;
+        ([BbcDEeFIiJLlmoPpRSw])
+          if [[ -z "$rest" ]]; then (( $# )) || return 1; shift; fi
+          rest="" ;;
+        (*) return 1 ;;
+      esac
+    done
+  done
+  [[ -n "$dest" ]]
 }
 
 # Re-source this file if an upgrade replaced it since it was loaded. Safe to run
@@ -642,7 +711,7 @@ if (( $+functions[add-zle-hook-widget] )); then
   # before Esc dismisses it. Drop it to snappy if still at zsh's default (40 =
   # 0.4s); leave a deliberately-set value alone. (Trade-off: at 1, multi-byte
   # escape sequences can mis-split over very slow/SSH links — fine locally.)
-  [[ ${KEYTIMEOUT:-40} -eq 40 ]] && KEYTIMEOUT=1
+  [[ -z "${TINE_REMOTE-}" && ${KEYTIMEOUT:-40} -eq 40 ]] && KEYTIMEOUT=1
   bindkey '^['   _tine_esc
   bindkey '^K'   _tine_detail
 fi

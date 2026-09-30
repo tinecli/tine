@@ -12,19 +12,30 @@ struct Request {
     let rows: Int
     let cellW: Int     // device pixels
     let cellH: Int     // device pixels
-    let session: pid_t
+    var session: pid_t
     let buffer: String
 }
 
-/// `handler` runs on the main thread — it touches UI/AppState state directly.
+/// `respond` runs on the main thread — it touches UI/AppState state directly. A nil reply closes without writing.
 final class SocketServer {
+    struct Limits {
+        let maxLineBytes: Int
+        let readTimeoutSeconds: Int
+    }
+
     private let path: String
-    private let handler: (Request) -> String
+    private let limits: Limits?
+    private let respond: (String) -> String?
     private var fd: Int32 = -1
 
-    init(path: String, handler: @escaping (Request) -> String) {
+    init(path: String, limits: Limits? = nil, respond: @escaping (String) -> String?) {
         self.path = path
-        self.handler = handler
+        self.limits = limits
+        self.respond = respond
+    }
+
+    convenience init(path: String, handler: @escaping (Request) -> String) {
+        self.init(path: path) { line in Request(line: line).map(handler) }
     }
 
     func start() -> Bool {
@@ -46,6 +57,7 @@ final class SocketServer {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, len) }
         }
         guard bound == 0 else { perror("tine bind"); return false }
+        guard chmod(path, 0o600) == 0 else { perror("tine chmod"); return false }
         guard listen(fd, 16) == 0 else { perror("tine listen"); return false }
 
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
@@ -64,34 +76,42 @@ final class SocketServer {
     }
 
     private func handle(_ conn: Int32) {
+        if let limits {
+            var timeout = timeval(tv_sec: limits.readTimeoutSeconds, tv_usec: 0)
+            setsockopt(conn, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        }
         var data = Data()
         var chunk = [UInt8](repeating: 0, count: 4096)
         readLoop: while true {
             let n = read(conn, &chunk, chunk.count)
+            if n <= 0 && limits != nil { return }
             if n <= 0 { break }
             for i in 0..<n {
                 if chunk[i] == 0x0a { break readLoop }
                 data.append(chunk[i])
             }
+            if let limits, data.count > limits.maxLineBytes { return }
         }
-        guard let req = parse(data) else { return }
+        guard let line = String(data: data, encoding: .utf8) else { return }
 
-        var reply = ""
-        DispatchQueue.main.sync { reply = handler(req) }
+        var reply: String?
+        DispatchQueue.main.sync { reply = respond(line) }
+        guard let reply else { return }
 
         var out = Array((reply + "\n").utf8)
         _ = write(conn, &out, out.count)
     }
+}
 
-    private func parse(_ data: Data) -> Request? {
-        guard let s = String(data: data, encoding: .utf8) else { return nil }
-        let parts = s.components(separatedBy: TINE_US)
+extension Request {
+    init?(line: String) {
+        let parts = line.components(separatedBy: TINE_US)
         guard parts.count >= 4 else { return nil }
         // Rejoined below with TINE_US: the buffer itself may contain that separator.
         let extended = parts.count >= 5
         let pos = extended ? parts[3].components(separatedBy: ";").map { Int($0) ?? 0 } : []
         func p(_ i: Int) -> Int { i < pos.count ? pos[i] : 0 }
-        return Request(
+        self.init(
             type: parts[0],
             cursor: Int(parts[1]) ?? 0,
             cwd: parts[2],

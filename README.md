@@ -73,6 +73,30 @@ before you see it, so an invented flag never reaches you.
 Nothing is ever run. The command is printed and pushed onto your next prompt, for
 you to read and run yourself.
 
+## Over SSH
+
+```sh
+tine ssh myhost        # takes the same arguments as ssh
+```
+
+Copy `~/.local/share/tine/tine.zsh` to the remote once and source it from the
+remote `~/.zshrc`, the same way as locally (zsh on macOS or Linux).
+
+`tine ssh` asks the app for a session token and reverse-forwards a restricted
+socket, `~/.local/share/tine/remote.sock`, to `/tmp/tine-<token>.sock` on the
+remote. The remote shell only talks to it if it is a real socket owned by you
+with mode 0600. The main `tine.sock` is never forwarded. The remote side can
+only drive the panel: it gets completions from the installed specs, and nothing
+from this Mac's PATH, files, history, aliases or frecency. Generators (git
+branches, file paths and the like) don't run over SSH yet.
+
+With a remote command, a non-login mode such as `-N` or `-W`, a `RemoteCommand`
+in your ssh config, or the app not running, `tine ssh` runs plain `ssh` with
+your arguments untouched. If the remote sshd refuses the forward, the session
+still opens and simply has no panel. On the remote, `tine version` works;
+commands that manage the app (`learn`, `ask`, `update` and so on) say they are
+not available over ssh.
+
 ## Development
 
 Build and run from source: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Cutting a
