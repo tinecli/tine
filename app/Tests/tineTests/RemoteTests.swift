@@ -221,7 +221,7 @@ struct RemoteRouterTests {
 }
 
 struct RemoteEngineTests {
-    @Test func theRemoteEngineRunsNothingAndReadsOnlyTheSpecPack() throws {
+    @Test func theRemoteEngineRunsNothingAndReadsOnlyTheSpecPack() async throws {
         let root = Scratch.dir("remote-engine")
         let specs = root + "/specs"
         try FileManager.default.createDirectory(atPath: specs, withIntermediateDirectories: true)
@@ -240,13 +240,16 @@ struct RemoteEngineTests {
         let described = engine.suggest(line: "git ", cursor: 4, cwd: root).map(\.description)
 
         #expect(described == ["1", "inside|||", "[]"])
-        Thread.sleep(forTimeInterval: 0.5)
+        try await Task.sleep(for: .milliseconds(500))
         #expect(!FileManager.default.fileExists(atPath: marker))
     }
 }
 
+/// Each listener parks a thread in accept() for good, so these run in a child process.
 struct RemoteSocketTests {
     @Test func theListenerSocketIsOwnerOnly() throws {
+        if try TestSubprocess.runCurrentTest(
+            filteredTo: "theListenerSocketIsOwnerOnly", childEnvironmentKey: "TINE_TEST_SOCKET_CHILD") { return }
         let path = Scratch.dir("remote-socket") + "/remote.sock"
         let server = SocketServer(path: path) { _ in nil }
         #expect(server.start())
@@ -255,6 +258,9 @@ struct RemoteSocketTests {
     }
 
     @Test func aLimitedListenerDropsOversizedLinesAndStalledClients() throws {
+        if try TestSubprocess.runCurrentTest(
+            filteredTo: "aLimitedListenerDropsOversizedLinesAndStalledClients",
+            childEnvironmentKey: "TINE_TEST_SOCKET_CHILD") { return }
         let path = Scratch.dir("remote-limits") + "/remote.sock"
         let server = SocketServer(path: path, limits: .init(maxLineBytes: 16, deadlineSeconds: 1)) { _ in
             Issue.record("a dropped connection must never reach respond")
@@ -291,6 +297,9 @@ struct RemoteSocketTests {
     }
 
     @Test func aClientThatHangsUpBeforeTheReplyDoesNotKillTheApp() throws {
+        if try TestSubprocess.runCurrentTest(
+            filteredTo: "aClientThatHangsUpBeforeTheReplyDoesNotKillTheApp",
+            childEnvironmentKey: "TINE_TEST_SOCKET_CHILD") { return }
         let path = Scratch.dir("remote-sigpipe") + "/remote.sock"
         let server = SocketServer(path: path, respond: { _ in
             Thread.sleep(forTimeInterval: 0.2)
