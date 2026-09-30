@@ -73,7 +73,10 @@ _tine_req() {
   local type=$1 payload=${2-$BUFFER} token=""
   [[ -n "$TINE_SOCK" ]] || return 1
   if [[ -n "${TINE_REMOTE-}" ]]; then
-    _tine_remote_sock_ok || return 1
+    # Over ssh TINE_SOCK sits in a shared /tmp.
+    local -A st
+    zstat -L -H st "$TINE_SOCK" 2>/dev/null || return 1
+    (( st[uid] == UID && (st[mode] & 8#170000) == 8#140000 && (st[mode] & 8#7777) == 8#600 )) || return 1
     token=${TINE_TOKEN}${_TINE_US}
   fi
   zmodload zsh/net/socket 2>/dev/null || return 1
@@ -85,13 +88,6 @@ _tine_req() {
   IFS= read -r -u "$fd" _TINE_REPLY
   exec {fd}>&-
   return 0
-}
-
-# Over ssh TINE_SOCK sits in a shared /tmp.
-_tine_remote_sock_ok() {
-  local -A st
-  zstat -L -H st "$TINE_SOCK" 2>/dev/null || return 1
-  (( st[uid] == UID && (st[mode] & 8#170000) == 8#140000 && (st[mode] & 8#7777) == 8#600 ))
 }
 
 # Fires on every buffer/cursor change: refresh suggestions, track whether the
@@ -339,31 +335,34 @@ _tine_ssh() {
   local listener=${TINE_SOCK:h}/remote.sock
   if [[ -n "${TINE_REMOTE-}" || "$listener" != /* || "$listener" == *:* || ! -S "$listener" ]] \
      || ! _tine_ssh_is_login "$@" \
-     || [[ "$(command ssh -G "$@" 2>/dev/null)" == *$'\n'(remotecommand|sessiontype\ (none|subsystem))* ]] \
      || ! _tine_req sshBegin "" 2>/dev/null \
      || [[ ${#_TINE_REPLY} -ne 32 || "$_TINE_REPLY" == *[^0-9a-f]* ]]; then
     command ssh "$@"
     return
   fi
-  local token=$_TINE_REPLY rc
+  local token=$_TINE_REPLY
   local sock=/tmp/tine-$token.sock
-  command ssh -t -R "$sock:$listener" "$@" \
-    "export TINE_SOCK=$sock TINE_TOKEN=$token TINE_REMOTE=1 TERM_PROGRAM=${(qq)${TERM_PROGRAM-}}; exec \"\$SHELL\" -l"
-  rc=$?
-  _tine_req sshEnd "$token" 2>/dev/null
-  return $rc
+  # One argv that sh, bash, zsh, fish and tcsh all parse the same way.
+  local login="exec env TINE_SOCK=$sock TINE_TOKEN=$token TINE_REMOTE=1 TERM_PROGRAM=${${TERM_PROGRAM-}//[^A-Za-z0-9._-]/} /bin/sh -c 'exec \"\${SHELL:-/bin/sh}\" -l'"
+  {
+    command ssh -t -R "$sock:$listener" "$@" "$login"
+  } always {
+    _tine_req sshEnd "$token" 2>/dev/null
+  }
 }
 
-# ssh still parses options that follow the destination.
+# ssh still parses options that follow the destination. A forward held by a
+# ControlMaster outlives sshEnd.
 _tine_ssh_is_login() {
   emulate -L zsh
-  local arg opt rest dest=""
+  local arg opt rest line dest="" args=("$@")
+  local -A conf
   while (( $# )); do
     arg=$1; shift
     if [[ "$arg" == -- ]]; then
       [[ -z "$dest" ]] && { dest=${1-}; (( $# )) && shift }
-      [[ -n "$dest" ]] && (( $# == 0 ))
-      return
+      (( $# == 0 )) || return 1
+      break
     fi
     if [[ "$arg" != -?* ]]; then
       [[ -z "$dest" ]] || return 1
@@ -374,7 +373,7 @@ _tine_ssh_is_login() {
     while [[ -n "$rest" ]]; do
       opt=${rest[1]}; rest=${rest:1}
       case "$opt" in
-        ([46AaCgKkMqtvXxYy]) ;;
+        ([46AaCgKkqtvXxYy]) ;;
         ([BbcDEeFIiJLlmoPpRSw])
           if [[ -z "$rest" ]]; then (( $# )) || return 1; shift; fi
           rest="" ;;
@@ -382,7 +381,12 @@ _tine_ssh_is_login() {
       esac
     done
   done
-  [[ -n "$dest" ]]
+  [[ -n "$dest" ]] || return 1
+  for line in ${(f)"$(command ssh -G "${args[@]}" 2>/dev/null)"}; do conf[${line%% *}]=${line#* }; done
+  (( ! ${+conf[remotecommand]} )) && [[ ${conf[sessiontype]:-default} == default \
+    && ${conf[controlmaster]:-false} == false && ${conf[controlpersist]:-no} == no \
+    && ${conf[controlpath]:-none} == none && ${conf[forkafterauthentication]:-no} == no \
+    && ${conf[stdinnull]:-no} == no ]]
 }
 
 # Re-source this file if an upgrade replaced it since it was loaded. Safe to run

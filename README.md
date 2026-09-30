@@ -91,8 +91,9 @@ from this Mac's PATH, files, history, aliases or frecency. Generators (git
 branches, file paths and the like) don't run over SSH yet.
 
 With a remote command, a non-login mode such as `-N` or `-W`, a `RemoteCommand`
-in your ssh config, or the app not running, `tine ssh` runs plain `ssh` with
-your arguments untouched. If the remote sshd refuses the forward, the session
+or connection sharing (`ControlMaster`, `ControlPath`, `ControlPersist`) in your
+ssh config, or the app not running, `tine ssh` runs plain `ssh` with your
+arguments untouched. If the remote sshd refuses the forward, the session
 still opens and simply has no panel. On the remote, `tine version` works;
 commands that manage the app (`learn`, `ask`, `update` and so on) say they are
 not available over ssh.

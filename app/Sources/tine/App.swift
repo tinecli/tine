@@ -57,7 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.sockPath = sockPath
         let sockDir = (sockPath as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: sockDir, withIntermediateDirectories: true)
-        chmod(sockDir, 0o700)
+        if env["TINE_SOCK"] == nil { chmod(sockDir, 0o700) }
 
         let resources = Bundle.main.resourcePath ?? "."
         let specsDir = env["TINE_SPECS_DIR"] ?? SpecInstaller.specsDir
@@ -120,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                     panel: self, version: version)
         let remoteServer = SocketServer(
             path: "\(sockDir)/remote.sock",
-            limits: .init(maxLineBytes: 1 << 20, readTimeoutSeconds: 5)
+            limits: .init(maxLineBytes: 16 << 10, deadlineSeconds: 5)
         ) { [weak self] line in
             self?.remoteRouter?.respond(to: line)
         }
@@ -169,14 +169,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return "\(self.state.hasContent ? max(self.state.suggestions.count, 1) : 0)"
         case "up":
             if self.panel?.isVisible != true || self.state.selectedIndex <= 0
-                || !self.sessions.isOwner(req.session) {
+                || !self.sessions.isOwner(req.session) || self.state.showsRemote {
                 return "PASS" // must fire at the top row too, or Up can never reach zsh history
             }
             self.state.moveSelection(-1)
             self.panel?.relayout()
             return "\(self.state.suggestions.count)"
         case "down":
-            if self.panel?.isVisible != true || !self.sessions.isOwner(req.session) {
+            if self.panel?.isVisible != true || !self.sessions.isOwner(req.session)
+                || self.state.showsRemote {
                 return "PASS"
             }
             self.state.moveSelection(1)
@@ -185,7 +186,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "accept":
             // "" here falls through to a normal accept-line — this shell's _TINE_ACTIVE
             // can be stale if the panel idle-hid or moved to another shell.
-            if self.panel?.isVisible != true || !self.sessions.isOwner(req.session) {
+            if self.panel?.isVisible != true || !self.sessions.isOwner(req.session)
+                || self.state.showsRemote {
                 return ""
             }
             if self.state.selectedIsExecute {
@@ -212,7 +214,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return ""
         case "prefix":
-            if self.panel?.isVisible != true || !self.sessions.isOwner(req.session) {
+            if self.panel?.isVisible != true || !self.sessions.isOwner(req.session)
+                || self.state.showsRemote {
                 return ""
             }
             if let (b, c) = self.state.commonPrefix() {

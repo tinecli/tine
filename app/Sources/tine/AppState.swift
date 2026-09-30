@@ -115,7 +115,7 @@ final class AppState: ObservableObject {
         cwd = msg.cwd
         suggestions = suggestingEngine?.suggest(line: msg.buffer, cursor: msg.cursor, cwd: msg.cwd) ?? []
         selectedIndex = initialSelection
-        isLoading = showsRemote ? false : CommandRunner.isLoading
+        isLoading = !showsRemote && CommandRunner.isLoading
     }
 
     @discardableResult
@@ -127,7 +127,7 @@ final class AppState: ObservableObject {
         if selectedIndex < 0 || selectedIndex >= suggestions.count {
             selectedIndex = initialSelection
         }
-        isLoading = showsRemote ? false : CommandRunner.isLoading
+        isLoading = !showsRemote && CommandRunner.isLoading
         return changed
     }
 

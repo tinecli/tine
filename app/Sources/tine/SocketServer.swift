@@ -20,7 +20,7 @@ struct Request {
 final class SocketServer {
     struct Limits {
         let maxLineBytes: Int
-        let readTimeoutSeconds: Int
+        let deadlineSeconds: TimeInterval
     }
 
     private let path: String
@@ -42,6 +42,9 @@ final class SocketServer {
         unlink(path)
         fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { perror("tine socket"); return false }
+        // Set on the listener: accepted sockets inherit it, and setting it on one whose peer already hung up fails.
+        var noSigPipe: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
 
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
@@ -76,13 +79,16 @@ final class SocketServer {
     }
 
     private func handle(_ conn: Int32) {
-        if let limits {
-            var timeout = timeval(tv_sec: limits.readTimeoutSeconds, tv_usec: 0)
-            setsockopt(conn, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
-        }
+        let deadline = limits.map { Date(timeIntervalSinceNow: $0.deadlineSeconds) }
         var data = Data()
         var chunk = [UInt8](repeating: 0, count: 4096)
         readLoop: while true {
+            if let deadline {
+                let remaining = deadline.timeIntervalSinceNow
+                guard remaining > 0 else { return }
+                var timeout = timeval(tv_sec: Int(remaining), tv_usec: Int32(remaining.truncatingRemainder(dividingBy: 1) * 1_000_000))
+                setsockopt(conn, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+            }
             let n = read(conn, &chunk, chunk.count)
             if n <= 0 && limits != nil { return }
             if n <= 0 { break }
@@ -92,6 +98,7 @@ final class SocketServer {
             }
             if let limits, data.count > limits.maxLineBytes { return }
         }
+        if let limits, data.count > limits.maxLineBytes { return }
         guard let line = String(data: data, encoding: .utf8) else { return }
 
         var reply: String?

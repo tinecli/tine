@@ -566,7 +566,7 @@ type SshCase = {
   name: string;
   args: string[];
   reply?: (line: string) => string;
-  remoteCommandConfig?: boolean;
+  sshConfig?: string;
   remote?: boolean;
   appDown?: boolean;
 };
@@ -579,7 +579,7 @@ const sshWorld = async (c: SshCase) => {
     [
       "#!/bin/sh",
       'if [ "$1" = "-G" ]; then',
-      '  [ -n "$FAKE_REMOTECOMMAND" ] && printf "user me\\nremotecommand tmux attach\\n"',
+      '  [ -n "$FAKE_SSH_CONFIG" ] && printf "user me\\n%s\\nport 22\\n" "$FAKE_SSH_CONFIG"',
       "  exit 0",
       "fi",
       'for a in "$@"; do printf "%s\\n" "$a"; done >> "$SSH_LOG"',
@@ -600,7 +600,7 @@ const sshWorld = async (c: SshCase) => {
     SSH_LOG: `${dir}/ssh.log`,
     TERM_PROGRAM: "ghostty",
   };
-  if (c.remoteCommandConfig) env.FAKE_REMOTECOMMAND = "1";
+  if (c.sshConfig) env.FAKE_SSH_CONFIG = c.sshConfig;
   if (c.remote) Object.assign(env, { TINE_REMOTE: "1", TINE_TOKEN: token });
   const quoted = c.args.map((arg) => `'${arg.replace(/'/g, "'\\''")}'`);
   const result = await runZsh(`tine ssh ${quoted.join(" ")}`, env);
@@ -635,11 +635,19 @@ const plainSshCases: SshCase[] = [
   { name: "-W forwards stdio", args: ["-W", "db:5432", "jump"] },
   { name: "a flag is unknown", args: ["-Z", "host"] },
   { name: "no destination is given", args: ["-p", "22"] },
-  {
-    name: "ssh config sets RemoteCommand",
+  ...[
+    "remotecommand tmux attach",
+    "sessiontype none",
+    "controlmaster auto",
+    "controlpersist 10m",
+    "controlpath ~/.ssh/cm-%C",
+    "forkafterauthentication yes",
+    "stdinnull yes",
+  ].map((sshConfig) => ({
+    name: `ssh -G reports ${sshConfig}`,
     args: ["host"],
-    remoteCommandConfig: true,
-  },
+    sshConfig,
+  })),
   { name: "the shell is already remote", args: ["host"], remote: true },
 ];
 
@@ -691,7 +699,7 @@ test(
         "host",
         "-p",
         "22",
-        `export TINE_SOCK=${sock} TINE_TOKEN=${token} TINE_REMOTE=1 TERM_PROGRAM='ghostty'; exec "$SHELL" -l`,
+        `exec env TINE_SOCK=${sock} TINE_TOKEN=${token} TINE_REMOTE=1 TERM_PROGRAM=ghostty /bin/sh -c 'exec "\${SHELL:-/bin/sh}" -l'`,
       ],
     ]);
     expect(world.appLines.map((line) => line.split(unitSeparator))).toEqual([
@@ -716,6 +724,21 @@ test(
         argv.slice(0, 2).concat(argv.slice(3, 5)),
       ),
     ).toEqual([["-t", "-R", "--", "host"]]);
+  },
+  sshTimeout,
+);
+
+test(
+  "tine ssh proceeds when ssh -G reports the defaults",
+  async () => {
+    const world = await sshWorld({
+      name: "defaults",
+      args: ["host"],
+      sshConfig:
+        "sessiontype default\ncontrolmaster false\ncontrolpersist no\nforkafterauthentication no\nstdinnull no",
+      reply: (line) => (line.startsWith("sshBegin") ? token : "0"),
+    });
+    expect(world.invocations.map((argv) => argv[0])).toEqual(["-t"]);
   },
   sshTimeout,
 );

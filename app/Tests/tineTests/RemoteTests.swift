@@ -254,41 +254,78 @@ struct RemoteSocketTests {
         #expect(mode.intValue == 0o600)
     }
 
-    @Test func aLimitedListenerDropsAnOversizedLineAndASilentClient() throws {
+    @Test func aLimitedListenerDropsOversizedLinesAndStalledClients() throws {
         let path = Scratch.dir("remote-limits") + "/remote.sock"
-        let server = SocketServer(path: path, limits: .init(maxLineBytes: 16, readTimeoutSeconds: 1)) { _ in
+        let server = SocketServer(path: path, limits: .init(maxLineBytes: 16, deadlineSeconds: 1)) { _ in
             Issue.record("a dropped connection must never reach respond")
             return "0"
         }
         #expect(server.start())
+        var byte: UInt8 = 0
 
-        let connect = { () -> Int32 in
-            let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-            var addr = sockaddr_un()
-            addr.sun_family = sa_family_t(AF_UNIX)
-            withUnsafeMutableBytes(of: &addr.sun_path) { raw in
-                path.utf8CString.withUnsafeBytes { raw.copyMemory(from: UnsafeRawBufferPointer(rebasing: $0.prefix(raw.count - 1))) }
-            }
-            let connected = withUnsafePointer(to: &addr) {
-                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    Foundation.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
-                }
-            }
-            #expect(connected == 0)
-            return fd
+        for payload in [String(repeating: "x", count: 64), String(repeating: "x", count: 20) + "\n"] {
+            let fd = connectUnix(path)
+            var bytes = Array(payload.utf8)
+            _ = write(fd, &bytes, bytes.count)
+            #expect(read(fd, &byte, 1) == 0)
+            close(fd)
         }
 
-        let oversized = connect()
-        var line = Array(String(repeating: "x", count: 64).utf8)
-        _ = write(oversized, &line, line.count)
-        var byte: UInt8 = 0
-        #expect(read(oversized, &byte, 1) == 0)
-        close(oversized)
-
-        let silent = connect()
-        let started = Date()
+        let silent = connectUnix(path)
+        let silentStart = Date()
         #expect(read(silent, &byte, 1) == 0)
-        #expect(Date().timeIntervalSince(started) < 5)
+        #expect(Date().timeIntervalSince(silentStart) < 3)
         close(silent)
+
+        let drip = connectUnix(path)
+        let dripping = Thread {
+            var x: UInt8 = 0x78
+            for _ in 0..<15 where write(drip, &x, 1) == 1 { Thread.sleep(forTimeInterval: 0.2) }
+        }
+        let dripStart = Date()
+        dripping.start()
+        #expect(read(drip, &byte, 1) == 0)
+        #expect(Date().timeIntervalSince(dripStart) < 2.5)
+        Thread.sleep(forTimeInterval: 0.3)
+        close(drip)
     }
+
+    @Test func aClientThatHangsUpBeforeTheReplyDoesNotKillTheApp() throws {
+        let path = Scratch.dir("remote-sigpipe") + "/remote.sock"
+        let server = SocketServer(path: path, respond: { _ in
+            Thread.sleep(forTimeInterval: 0.2)
+            return "ok"
+        })
+        #expect(server.start())
+        var line = Array("hi\n".utf8)
+
+        let early = connectUnix(path)
+        _ = write(early, &line, line.count)
+        close(early)
+
+        let later = connectUnix(path)
+        _ = write(later, &line, line.count)
+        var reply = [UInt8](repeating: 0, count: 8)
+        let n = read(later, &reply, reply.count)
+        close(later)
+        #expect(String(decoding: reply.prefix(max(n, 0)), as: UTF8.self) == "ok\n")
+    }
+}
+
+private func connectUnix(_ path: String) -> Int32 {
+    let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+    var noSigPipe: Int32 = 1
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
+    var addr = sockaddr_un()
+    addr.sun_family = sa_family_t(AF_UNIX)
+    withUnsafeMutableBytes(of: &addr.sun_path) { raw in
+        path.utf8CString.withUnsafeBytes { raw.copyMemory(from: UnsafeRawBufferPointer(rebasing: $0.prefix(raw.count - 1))) }
+    }
+    let connected = withUnsafePointer(to: &addr) {
+        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+            connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+        }
+    }
+    #expect(connected == 0)
+    return fd
 }
