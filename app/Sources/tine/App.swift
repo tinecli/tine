@@ -511,6 +511,12 @@ struct TineApp: App {
                 .environmentObject(delegate.state)
                 .environmentObject(delegate.specInstaller)
                 .environmentObject(delegate.appUpdater)
+                .onAppear {
+                    // Without a Dock icon, macOS leaves the menu bar blank after a Space switch while the dashboard is key.
+                    NSApp.setActivationPolicy(.regular)
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                .onDisappear { NSApp.setActivationPolicy(.accessory) }
         }
         .windowToolbarStyle(.unified)
         .windowResizability(.contentMinSize)
