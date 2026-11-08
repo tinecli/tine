@@ -220,9 +220,10 @@ final class AppUpdater: ObservableObject {
         req.httpMethod = "HEAD"
         guard let (_, resp) = try? await URLSession.shared.data(for: req, delegate: RedirectBlocker()),
               let http = resp as? HTTPURLResponse,
-              let location = http.value(forHTTPHeaderField: "Location")
+              let location = http.value(forHTTPHeaderField: "Location"),
+              let v = version(fromLocation: location), !v.contains("-")
         else { return nil }
-        return version(fromLocation: location)
+        return v
     }
 
     nonisolated static func version(fromLocation location: String) -> String? {
