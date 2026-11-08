@@ -3,10 +3,11 @@ import Foundation
 /// `run` is called on the main thread; `cache`/`inflight` must stay lock-guarded — the background queue mutates them too.
 enum CommandRunner {
     private static var cache: [String: (output: String, at: Date)] = [:]
-    private static var inflight: Set<String> = []
+    private static var inflight: [String: DispatchGroup] = [:]
     private static let lock = NSLock()
     private static let queue = DispatchQueue(label: "dev.gustaf.tine.generator", attributes: .concurrent)
     private static let ttl: TimeInterval = 3
+    private static let capacity = 512
     private static let grace: TimeInterval = 0.5
 
     static var onRefresh: (() -> Void)?
@@ -45,19 +46,16 @@ enum CommandRunner {
 
         lock.lock()
         let hit = cache[key]
-        let dup = inflight.contains(key)
-        if !dup { inflight.insert(key) }
-        lock.unlock()
-
         if let hit, Date().timeIntervalSince(hit.at) < ttl {
-            if !dup { lock.lock(); inflight.remove(key); lock.unlock() }
+            lock.unlock()
             return hit.output
         }
-
-        if !dup {
+        let running = inflight[key]
+        let group = running ?? DispatchGroup()
+        if running == nil {
+            group.enter()
+            inflight[key] = group
             queue.async {
-                // Must run on every exit path, or the leaked marker blocks this key forever.
-                defer { lock.lock(); inflight.remove(key); lock.unlock() }
                 let output = execute(executable: executable, args: args, cwd: cwd,
                                      env: env, timeoutMs: timeoutMs)
                 let result = encode(stdout: output.stdout, stderr: output.stderr,
@@ -65,14 +63,22 @@ enum CommandRunner {
                 lock.lock()
                 let prev = cache[key]?.output
                 cache[key] = (result, Date())
-                if cache.count > 128 {
-                    cache = cache.filter { Date().timeIntervalSince($0.value.at) < ttl }
+                inflight[key] = nil
+                if cache.count > capacity, let oldest = cache.min(by: { $0.value.at < $1.value.at })?.key {
+                    cache[oldest] = nil
                 }
                 lock.unlock()
+                group.leave()
                 if result != prev, let refresh = onRefresh {
                     DispatchQueue.main.async(execute: refresh)
                 }
             }
+        }
+        lock.unlock()
+
+        if hit == nil, group.wait(timeout: .now() + .milliseconds(60)) == .success {
+            lock.lock(); defer { lock.unlock() }
+            return cache[key]?.output ?? encode(stdout: "", stderr: "", exitCode: 0)
         }
         return hit?.output ?? encode(stdout: "", stderr: "", exitCode: 0)
     }
