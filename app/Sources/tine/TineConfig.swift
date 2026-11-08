@@ -23,6 +23,18 @@ enum UpdateChannel: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum CompletionSource: String, Codable, CaseIterable, Identifiable {
+    case fig, carapace, carapaceOnly
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .fig: return "Fig specs"
+        case .carapace: return "carapace first"
+        case .carapaceOnly: return "carapace only"
+        }
+    }
+}
+
 struct TineConfig: Codable, Equatable {
     var maxVisibleRows: Int = 12
     var glass: Bool = true
@@ -37,10 +49,15 @@ struct TineConfig: Codable, Equatable {
     var autoUpdateApp: Bool = true
     var updateNotifications: Bool = true
     var updateChannel: UpdateChannel = .stable
+    var completionSource: CompletionSource = .carapace
     var localSpecsDirs: [String] = ["\(NSHomeDirectory())/.config/tine/specs"]
 
     var localSpecsDirsExpanded: [String] {
         localSpecsDirs.map { ($0 as NSString).expandingTildeInPath }
+    }
+
+    var effectiveCompletionSource: CompletionSource {
+        AppUpdater.isAlphaBuild ? completionSource : .fig
     }
 
     init() {}
@@ -65,6 +82,7 @@ struct TineConfig: Codable, Equatable {
         autoUpdateApp = value(.autoUpdateApp, d.autoUpdateApp)
         updateNotifications = value(.updateNotifications, d.updateNotifications)
         updateChannel = value(.updateChannel, d.updateChannel)
+        completionSource = value(.completionSource, d.completionSource)
         localSpecsDirs = value(.localSpecsDirs, d.localSpecsDirs)
     }
 

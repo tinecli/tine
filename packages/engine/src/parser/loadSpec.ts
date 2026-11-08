@@ -1,5 +1,9 @@
 import { executeCommand } from "../shared/execShell.js";
-import type { SpecLocation, Subcommand } from "../shared/internal.js";
+import type {
+  ShellContext,
+  SpecLocation,
+  Subcommand,
+} from "../shared/internal.js";
 import { type Logger, logger } from "../shared/log.js";
 import {
   ensureTrailingSlash,
@@ -8,6 +12,7 @@ import {
   withTimeout,
 } from "../shared/utils.js";
 import { specCache } from "./caches.js";
+import { carapace, carapaceSpec } from "./carapace.js";
 import { convertSubcommand, initializeDefault } from "./convertSpec.js";
 import { MissingSpecError } from "./errors.js";
 import {
@@ -171,29 +176,21 @@ export const loadFigSubcommand = async (
 
 export const loadSubcommandCached = async (
   specLocation: SpecLocation,
-  context?: Fig.ShellContext,
+  context?: ShellContext,
   localLogger: Logger = logger,
 ): Promise<Subcommand> => {
   const { name, type: source } = specLocation;
   const path =
     specLocation.type === SpecLocationSource.LOCAL ? specLocation.path : "";
+  const isGlobal = source === SpecLocationSource.GLOBAL;
+  const carapaceSource =
+    isGlobal && !context?.ignoreCarapace ? carapace() : null;
 
-  const key = [source, path || "", name].join(",");
+  const key = [source, path || "", name, carapaceSource ? "carapace" : ""].join(
+    ",",
+  );
   if (specCache.has(key)) {
     return specCache.get(key) as Subcommand;
-  }
-
-  // Base spec (the pack). Missing is not fatal: a command may exist only as a
-  // user spec (a command not in the pack).
-  let merged: Subcommand | undefined;
-  try {
-    const subcommand = await withTimeout(
-      5000,
-      loadFigSubcommand(specLocation, context, localLogger),
-    );
-    merged = convertSubcommand(subcommand, initializeDefault);
-  } catch (err) {
-    if (!(err instanceof MissingSpecError)) throw err;
   }
 
   // User specs (GLOBAL commands only — scripts/.fig keep their own resolution).
@@ -203,28 +200,58 @@ export const loadSubcommandCached = async (
   //   extend/<cmd>.js    is MERGED on top additively (keeps the pack, adds to it)
   // Locations are in priority order: the first with an override wins; every
   // location's extend is merged (earlier/higher-priority wins name collisions).
-  if (source === SpecLocationSource.GLOBAL) {
-    const dirs =
-      (globalThis as { __tineLocalSpecsDirs?: string[] })
-        .__tineLocalSpecsDirs ?? [];
-    for (const dir of dirs) {
-      const override =
-        (await loadUserSpec(specLocation, `${dir}/override`, localLogger)) ??
-        (await loadUserSpec(specLocation, dir, localLogger));
-      if (override) {
-        merged = { ...override, tineLocalOverride: true };
-        break;
-      }
-    }
-    for (const dir of dirs) {
-      const extension = await loadUserSpec(
-        specLocation,
-        `${dir}/extend`,
-        localLogger,
+  const dirs = isGlobal
+    ? ((globalThis as { __tineLocalSpecsDirs?: string[] })
+        .__tineLocalSpecsDirs ?? [])
+    : [];
+  let override: Subcommand | undefined;
+  for (const dir of dirs) {
+    override =
+      (await loadUserSpec(specLocation, `${dir}/override`, localLogger)) ??
+      (await loadUserSpec(specLocation, dir, localLogger));
+    if (override) break;
+  }
+  const extensions: Subcommand[] = [];
+  for (const dir of dirs) {
+    const extension = await loadUserSpec(
+      specLocation,
+      `${dir}/extend`,
+      localLogger,
+    );
+    if (extension) extensions.push(extension);
+  }
+
+  if (
+    !override &&
+    !extensions.length &&
+    carapaceSource?.descriptions.has(name)
+  ) {
+    const spec = carapaceSpec(name, carapaceSource.exe);
+    specCache.set(key, spec);
+    return spec;
+  }
+
+  // Base spec (the pack). Missing is not fatal: a command may exist only as a
+  // user spec (a command not in the pack).
+  let merged: Subcommand | undefined = override && {
+    ...override,
+    tineLocalOverride: true,
+  };
+  const packSkipped =
+    carapaceSource?.only && !carapaceSource.builtins.has(name);
+  if (!merged && !packSkipped) {
+    try {
+      const subcommand = await withTimeout(
+        5000,
+        loadFigSubcommand(specLocation, context, localLogger),
       );
-      if (extension)
-        merged = merged ? mergeSubcommand(merged, extension) : extension;
+      merged = convertSubcommand(subcommand, initializeDefault);
+    } catch (err) {
+      if (!(err instanceof MissingSpecError)) throw err;
     }
+  }
+  for (const extension of extensions) {
+    merged = merged ? mergeSubcommand(merged, extension) : extension;
   }
 
   if (!merged) throw new MissingSpecError("No spec found", name);

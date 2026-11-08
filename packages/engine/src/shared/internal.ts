@@ -1,5 +1,7 @@
 import type { Result } from "../fuzzysort.js";
 
+export type ShellContext = Fig.ShellContext & { ignoreCarapace?: boolean };
+
 export type SpecLocation = Fig.SpecLocation & {
   diffVersionedFile?: string;
 };
@@ -50,6 +52,7 @@ export type SubcommandMeta = Omit<
 > & {
   loadSpec?: LoadSpec;
   tineLocalOverride?: boolean;
+  tineCarapace?: boolean;
 };
 
 export type Subcommand = SubcommandMeta & {

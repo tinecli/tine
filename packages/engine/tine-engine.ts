@@ -10,12 +10,13 @@ import { getCustomSuggestions } from "./src/generators/customSuggestionsGenerato
 import { getScriptSuggestions } from "./src/generators/scriptSuggestionsGenerator.js";
 import { getTemplateSuggestions } from "./src/generators/templateSuggestionsGenerator.js";
 import { createCache, resetCaches } from "./src/parser/caches.js";
+import { carapace } from "./src/parser/carapace.js";
 import {
   LoadLocalSpecError,
   MissingSpecError,
   parseArguments,
 } from "./src/parser/index.js";
-import type { Suggestion } from "./src/shared/internal.js";
+import type { ShellContext, Suggestion } from "./src/shared/internal.js";
 import { SuggestionFlag } from "./src/shared/utils.js";
 import { getCommand } from "./src/shell-parser/index.js";
 import { getQueryTermForSuggestion } from "./src/suggestions/helpers.js";
@@ -148,6 +149,7 @@ async function suggest(
   line: string,
   cursor: number,
   cwd: string,
+  options: Pick<ShellContext, "ignoreCarapace">,
 ): Promise<TineResult> {
   const upToCursor = line.slice(0, Math.max(0, cursor));
   const aliases = shellAliases();
@@ -168,7 +170,7 @@ async function suggest(
 
   const command = getCommand(upToCursor, aliases);
   if (!command) return { searchTerm: "", items: [] };
-  const context = shellContext(cwd);
+  const context = { ...shellContext(cwd), ...options };
   const parsed = await parseArguments(command as never, context as never).catch(
     rethrowUnlessUnavailableSpec,
   );
@@ -254,13 +256,18 @@ async function suggest(
       ((a as { priority?: number }).priority ?? 0),
   );
   const filtered = filterSuggestions(ranked, parsed.searchTerm, true, false);
+  const items = toItems(
+    filtered,
+    parsed.searchTerm ?? "",
+    packSpecName(parsed.annotations),
+  );
+  // Token text drops escapes and quotes; the host replaces queryTerm.length typed chars.
+  const typedWord = command.tokens.at(-1)?.originalNode.text ?? "";
   return {
     searchTerm: parsed.searchTerm ?? "",
-    items: toItems(
-      filtered,
-      parsed.searchTerm ?? "",
-      packSpecName(parsed.annotations),
-    ),
+    items: parsed.completionObj.tineCarapace
+      ? items.map((item) => ({ ...item, queryTerm: typedWord }))
+      : items,
   };
 }
 
@@ -435,10 +442,15 @@ function commandNameResult(
   aliases: Record<string, string>,
 ): TineResult {
   const frec = frecencyIndex();
-  const { names: specs, descriptions } = specIndex();
+  const carapaceSource = carapace();
+  const { names: packIndex, descriptions } = specIndex();
+  const specs = carapaceSource?.only
+    ? packIndex.filter((name) => carapaceSource.builtins.has(name))
+    : packIndex;
   const packNames = new Set(specs);
   const names = new Set<string>([
     ...specs,
+    ...(carapaceSource?.descriptions.keys() ?? []),
     ...Object.keys(aliases),
     ...Object.keys(frec),
   ]);
@@ -460,9 +472,14 @@ function commandNameResult(
       shouldAddSpace: true,
       description: aliases[name]
         ? `alias → ${aliases[name]}`
-        : (descriptions[name] ?? ""),
+        : (descriptions[name] ?? carapaceSource?.descriptions.get(name) ?? ""),
       priority: boost ? 75 + boost : 50,
-      specName: !aliases[name] && packNames.has(name) ? name : "",
+      specName:
+        !aliases[name] &&
+        packNames.has(name) &&
+        !carapaceSource?.descriptions.has(name)
+          ? name
+          : "",
     };
   });
   const filtered = filterSuggestions(cmds as never, partial, true, false);
@@ -485,7 +502,7 @@ async function parseLine(line: string): Promise<TineValidation> {
   try {
     const parsed = await parseArguments(
       command as never,
-      shellContext("/") as never,
+      { ...shellContext("/"), ignoreCarapace: true } as never,
     );
     // Consumed args and options have both left currentArg by this point.
     const args = (parsed.completionObj.args ?? []) as Array<{
@@ -552,10 +569,16 @@ let localSpecNames = new Set<string>();
 
 // The `learn` arg's generator filters PATH executables against this — the
 // same pack completions index the parser already treats as "has a spec", plus
-// the local names above — so the candidate set can never drift from what the
-// parser knows, pack or local.
-(globalThis as Record<string, unknown>).tineHasSpec = (name: string): boolean =>
-  specIndex().names.includes(name) || localSpecNames.has(name);
+// the local names above and carapace's — so the candidate set can never drift
+// from what the parser knows, pack, local or carapace.
+(globalThis as Record<string, unknown>).tineHasSpec = (
+  name: string,
+): boolean => {
+  const source = carapace();
+  if (source?.descriptions.has(name) || localSpecNames.has(name)) return true;
+  if (source?.only && !source.builtins.has(name)) return false;
+  return specIndex().names.includes(name);
+};
 
 // Async result delivered via callback (JSC-friendly; no Swift/JS promise bridge).
 (globalThis as Record<string, unknown>).tineSuggest = (
@@ -563,8 +586,9 @@ let localSpecNames = new Set<string>();
   cursor: number,
   cwd: string,
   cb: (r: TineResult) => void,
+  options: Pick<ShellContext, "ignoreCarapace"> = {},
 ): void => {
-  suggest(line, cursor, cwd)
+  suggest(line, cursor, cwd, options)
     .then((r) => cb(r))
     .catch((e) => {
       (globalThis as Record<string, unknown>).__tineErr = String(e);

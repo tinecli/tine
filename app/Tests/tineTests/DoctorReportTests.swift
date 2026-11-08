@@ -12,7 +12,9 @@ struct DoctorReportTests {
         stagedAppVersion: "0.1.32",
         socketPath: "/tmp/tine-test.sock",
         socketListening: true,
-        panelPlacement: .terminalGrid
+        panelPlacement: .terminalGrid,
+        completionSource: .fig,
+        carapace: nil
     )
 
     @Test func reportStoresEveryValue() {
@@ -44,7 +46,9 @@ struct DoctorReportTests {
             stagedAppVersion: nil,
             socketPath: "",
             socketListening: false,
-            panelPlacement: .awaitingInput
+            panelPlacement: .awaitingInput,
+            completionSource: .fig,
+            carapace: nil
         )
 
         #expect(quiet.socketValue == "ax=0;specs=0;version=?;update=0;appLatest=;appStaged=")

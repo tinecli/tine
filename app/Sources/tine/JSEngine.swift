@@ -58,6 +58,9 @@ final class JSEngine {
         let runCommand: @convention(block) (String) -> String = { CommandRunner.run($0) }
         ctx.setObject(runCommand, forKeyedSubscript: "__tineRun" as NSString)
         ctx.setObject(NSHomeDirectory() as NSString, forKeyedSubscript: "__tineHome" as NSString)
+        let builtins = (try? FileManager.default.contentsOfDirectory(atPath: "\(resourcesDir)/builtin-specs"))?
+            .filter { $0.hasSuffix(".js") }.map { String($0.dropLast(3)) } ?? []
+        ctx.setObject(builtins as NSArray, forKeyedSubscript: "__tineBuiltinSpecNames" as NSString)
 
         let path = "\(resourcesDir)/tine-engine.js"
         guard let src = try? String(contentsOfFile: path, encoding: .utf8) else {
@@ -135,6 +138,15 @@ final class JSEngine {
         ctx.evaluateScript("if (typeof tineResetSpecs === 'function') tineResetSpecs();")
     }
 
+    func setCarapace(_ install: CarapaceInstall?, source: CompletionSource) {
+        guard ready else { return }
+        ctx.setObject(source.rawValue as NSString, forKeyedSubscript: "__tineCompletionSource" as NSString)
+        ctx.setObject((install?.path ?? "") as NSString, forKeyedSubscript: "__tineCarapaceExe" as NSString)
+        ctx.setObject((install?.descriptions ?? [:]) as NSDictionary,
+                      forKeyedSubscript: "__tineCarapaceCompleters" as NSString)
+        resetSpecCache()
+    }
+
     func setFirstTokenEnabled(_ on: Bool) {
         guard ready else { return }
         ctx.setObject(NSNumber(value: on), forKeyedSubscript: "__tineFirstToken" as NSString)
@@ -159,19 +171,20 @@ final class JSEngine {
     /// Only what the spec documents — never widen this with convenience flags.
     func outline(command: String) -> [String] {
         let line = "\(command) "
-        return suggest(line: line, cursor: line.count, cwd: NSHomeDirectory())
+        return suggest(line: line, cursor: line.count, cwd: NSHomeDirectory(),
+                       options: "{ ignoreCarapace: true }")
             .filter { $0.type == "option" || $0.type == "subcommand" }
             .map { $0.name }
     }
 
     /// Looks callback-based but is synchronous in practice — JSC drains the promise
     /// chain's microtasks before this returns. Don't wrap this in async expecting a real yield.
-    func suggest(line: String, cursor: Int, cwd: String) -> [Suggestion] {
+    func suggest(line: String, cursor: Int, cwd: String, options: String = "{}") -> [Suggestion] {
         guard ready else { return [] }
         ctx.setObject(line as NSString, forKeyedSubscript: "__q_line" as NSString)
         ctx.setObject(cwd as NSString, forKeyedSubscript: "__q_cwd" as NSString)
         ctx.evaluateScript(
-            "globalThis.__out=null; tineSuggest(__q_line, \(cursor), __q_cwd, function(r){ globalThis.__out=r; });"
+            "globalThis.__out=null; tineSuggest(__q_line, \(cursor), __q_cwd, function(r){ globalThis.__out=r; }, \(options));"
         )
         guard let out = ctx.objectForKeyedSubscript("__out"), !out.isNull, !out.isUndefined else {
             return []
