@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @MainActor
@@ -32,6 +33,13 @@ struct AppStateTests {
         #expect(AppState.initialSelection(for: [learnIt()]) == -1)
         #expect(AppState.initialSelection(for: [completion()]) == 0)
         #expect(AppState.initialSelection(for: []) == 0)
+    }
+
+    @Test func aStaleCompletionSourceKeyLeavesStableBuildsOnFigSpecs() throws {
+        let config = try JSONDecoder().decode(TineConfig.self, from: Data(#"{"completionSource":"carapace"}"#.utf8))
+
+        #expect(config.completionSourceChoice == nil)
+        #expect(config.effectiveCompletionSource == .fig)
     }
 
     @Test func anUnselectedLearnItRowLeavesTheTypedLineAlone() {
