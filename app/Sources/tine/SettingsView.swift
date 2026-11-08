@@ -35,7 +35,6 @@ struct SettingsView: View {
     private let fonts = [("", "System Monospaced"), ("Menlo", "Menlo"),
                          ("Monaco", "Monaco"), ("SF Mono", "SF Mono"),
                          ("Courier New", "Courier New")]
-    static let appVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
 
     var body: some View {
         NavigationSplitView {
@@ -279,7 +278,7 @@ struct SettingsView: View {
                     Image(nsImage: icon).resizable().frame(width: 72, height: 72)
                 }
                 Text("tine").font(.title2.weight(.semibold))
-                Text("Version \(Self.appVersion)").font(.caption).foregroundStyle(.secondary)
+                Text("Version \(AppUpdater.currentVersion)").font(.caption).foregroundStyle(.secondary)
                 Text("Native macOS terminal autocomplete")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -298,6 +297,10 @@ struct SettingsView: View {
                 Button("Update & Relaunch") { updater.applyAndRelaunch() }
             }
             Toggle("Update tine automatically", isOn: bind(\.autoUpdateApp))
+            Picker("Update channel", selection: bind(\.updateChannel)) {
+                ForEach(UpdateChannel.allCases) { Text($0.label).tag($0) }
+            }
+            .onChange(of: state.config.updateChannel) { _, _ in updater.check() }
             Toggle("Notify me about updates", isOn: bind(\.updateNotifications))
         }
         Section {

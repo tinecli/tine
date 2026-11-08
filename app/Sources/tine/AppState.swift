@@ -71,11 +71,9 @@ final class AppState: ObservableObject {
         let cli = isFirstToken ? suggestion.name : firstToken
         let rendered = suggestion.description.isEmpty
             ? suggestion.name : "\(suggestion.name) — \(suggestion.description)"
-        let version = (Bundle.main.object(
-            forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
         return SuggestionDetail.issueURL(
             cli: cli, item: suggestion.name, specName: suggestion.specName,
-            renderedSuggestion: rendered, version: version
+            renderedSuggestion: rendered, version: AppUpdater.currentVersion
         )
     }
 

@@ -28,6 +28,36 @@ struct AppUpdaterTests {
         #expect(AppUpdater.version(fromLocation: "https://github.com/x/y/releases/tag/v1.٢.3") == nil)
     }
 
+    @Test func versionFromTagAcceptsAnAlphaTag() {
+        #expect(AppUpdater.version(fromTag: "v0.9.0-alpha.1") == "0.9.0-alpha.1")
+        #expect(AppUpdater.version(fromLocation: "https://github.com/tinecli/tine/releases/tag/v0.9.0-alpha.12")
+                == "0.9.0-alpha.12")
+    }
+
+    @Test func versionFromTagRejectsAnythingButAPlainOrAlphaVersion() {
+        for tag in ["0.9.0-beta", "0.9.0-beta.1", "0.9.0-alpha", "0.9.0-alpha.", "0.9.0-alpha.1/../x",
+                    "../0.9.0", "0.9.0-alpha.1-alpha.2", "0.9.0 ", "", "v", ".", "1..2", "0.9.0-alpha.٢"] {
+            #expect(AppUpdater.version(fromTag: tag) == nil, "\(tag)")
+        }
+    }
+
+    @Test func isNewerRanksAlphasBelowTheirReleaseAndAboveThePreviousOne() {
+        let ordered = ["0.8.9", "0.9.0-alpha.3", "0.9.0-alpha.10", "0.9.0", "0.9.1-alpha.1", "0.9.1"]
+        for (i, lower) in ordered.enumerated() {
+            for higher in ordered[(i + 1)...] {
+                #expect(AppUpdater.isNewer(higher, than: lower), "\(higher) > \(lower)")
+                #expect(!AppUpdater.isNewer(lower, than: higher), "\(lower) < \(higher)")
+            }
+            #expect(!AppUpdater.isNewer(lower, than: lower))
+        }
+    }
+
+    @Test func mayInstallNeverReplacesAnAlphaWithAnOlderRelease() {
+        #expect(!AppUpdater.mayInstall("0.8.0", over: "0.9.0-alpha.1"))
+        #expect(!AppUpdater.mayInstall("0.9.0-alpha.1", over: "0.9.0"))
+        #expect(AppUpdater.mayInstall("0.9.0", over: "0.9.0-alpha.1"))
+    }
+
     @Test func isNewerComparesDotSeparatedComponentsNumerically() {
         #expect(AppUpdater.isNewer("0.2.0", than: "0.1.9"))
         #expect(!AppUpdater.isNewer("0.1.9", than: "0.2.0"))
@@ -53,9 +83,9 @@ struct AppUpdaterTests {
     }
 
     @Test func theSwapHelperInstallsTheStagedAppWhenTheTargetIsUntouched() throws {
-        let bundles = try SwapHelperFixture(target: "0.1.36", staged: "0.1.37")
+        let bundles = try SwapHelperFixture(target: "0.1.37-alpha.1", staged: "0.1.37")
 
-        #expect(try bundles.run(expecting: "0.1.36") == 0)
+        #expect(try bundles.run(expecting: "0.1.37-alpha.1") == 0)
         #expect(AppUpdater.bundleVersion(of: bundles.target) == "0.1.37")
         #expect(!FileManager.default.fileExists(atPath: bundles.staged.path))
     }
@@ -165,11 +195,15 @@ private struct SwapHelperFixture {
         return helper.terminationStatus
     }
 
+    /// Only an alpha gets `TineReleaseVersion`, so plain versions stand in for builds that predate the key.
     private static func write(version: String, to app: URL) throws {
         let contents = app.appendingPathComponent("Contents")
         try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
-        let plist = try PropertyListSerialization.data(
-            fromPropertyList: ["CFBundleShortVersionString": version], format: .xml, options: 0)
+        let short = String(version.prefix { $0 != "-" })
+        let info = short == version
+            ? ["CFBundleShortVersionString": version]
+            : ["CFBundleShortVersionString": short, "TineReleaseVersion": version]
+        let plist = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
         try plist.write(to: contents.appendingPathComponent("Info.plist"))
     }
 }

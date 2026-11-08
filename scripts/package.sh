@@ -67,7 +67,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key><string>dev.gustaf.tine</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION%%-*}</string>
+  <key>TineReleaseVersion</key><string>${VERSION}</string>
   <key>CFBundleVersion</key><string>${BUILD}</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>NSHumanReadableCopyright</key><string>© Gustaf Eriksson. Includes code from amazon-q-developer-cli (MIT/Apache-2.0).</string>

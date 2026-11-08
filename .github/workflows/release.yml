@@ -2,7 +2,8 @@ name: Release
 
 # On a version tag (v1.2.3) that lives on main: build the app, package a
 # Developer ID signed + notarized dmg, attach it to a GitHub Release, and bump
-# the Homebrew cask in tinecli/homebrew-tap.
+# the Homebrew cask in tinecli/homebrew-tap. An alpha tag (v1.2.3-alpha.1)
+# becomes a prerelease and leaves the cask alone.
 #
 # All of these secrets are required — the preflight step fails the run if any is
 # empty, so a release is never silently ad-hoc signed or left un-bumped:
@@ -54,6 +55,15 @@ jobs:
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
             echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main — refusing to release"
+            exit 1
+          fi
+
+      - name: Require a stable or alpha version tag
+        run: |
+          set -euo pipefail
+          re='^v[0-9]+\.[0-9]+\.[0-9]+(-alpha\.[0-9]+)?$'
+          if ! [[ "$GITHUB_REF_NAME" =~ $re ]]; then
+            echo "::error::$GITHUB_REF_NAME is not vX.Y.Z or vX.Y.Z-alpha.N — refusing to release"
             exit 1
           fi
 
@@ -137,12 +147,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            "dist/Tine-$VERSION.dmg" \
-            --title "Tine $VERSION" \
-            --notes "Install: \`brew install --cask tinecli/tap/tine\`. Developer ID signed & notarized."
+          set -euo pipefail
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            gh release create "$GITHUB_REF_NAME" \
+              "dist/Tine-$VERSION.dmg" \
+              --prerelease \
+              --title "Tine $VERSION" \
+              --notes "Alpha build, delivered only to tine installs on the alpha update channel. Developer ID signed & notarized."
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              "dist/Tine-$VERSION.dmg" \
+              --title "Tine $VERSION" \
+              --notes "Install: \`brew install --cask tinecli/tap/tine\`. Developer ID signed & notarized."
+          fi
 
       - name: Bump Homebrew cask
+        if: ${{ !contains(github.ref_name, '-') }}
         env:
           TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
           VERSION: ${{ steps.ver.outputs.version }}

@@ -12,6 +12,17 @@ enum PaneTint: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum UpdateChannel: String, Codable, CaseIterable, Identifiable {
+    case stable, alpha
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .stable: return "Stable"
+        case .alpha: return "Alpha"
+        }
+    }
+}
+
 struct TineConfig: Codable, Equatable {
     var maxVisibleRows: Int = 12
     var glass: Bool = true
@@ -25,6 +36,7 @@ struct TineConfig: Codable, Equatable {
     var autoUpdateSpecs: Bool = true
     var autoUpdateApp: Bool = true
     var updateNotifications: Bool = true
+    var updateChannel: UpdateChannel = .stable
     var localSpecsDirs: [String] = ["\(NSHomeDirectory())/.config/tine/specs"]
 
     var localSpecsDirsExpanded: [String] {
@@ -52,6 +64,7 @@ struct TineConfig: Codable, Equatable {
         autoUpdateSpecs = value(.autoUpdateSpecs, d.autoUpdateSpecs)
         autoUpdateApp = value(.autoUpdateApp, d.autoUpdateApp)
         updateNotifications = value(.updateNotifications, d.updateNotifications)
+        updateChannel = value(.updateChannel, d.updateChannel)
         localSpecsDirs = value(.localSpecsDirs, d.localSpecsDirs)
     }
 

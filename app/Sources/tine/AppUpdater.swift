@@ -20,11 +20,15 @@ final class AppUpdater: ObservableObject {
 
     nonisolated static let releasesURL =
         URL(string: "https://github.com/tinecli/tine/releases/latest")!
+    nonisolated static let releasesAPIURL =
+        URL(string: "https://api.github.com/repos/tinecli/tine/releases?per_page=20")!
     /// Never relax this — an unsigned or wrong-team download must never reach the bundle.
     nonisolated static let teamRequirement =
         "=anchor apple generic and certificate leaf[subject.OU] = \"82K3YC8HVF\""
     nonisolated static let currentVersion =
-        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0"
+        (Bundle.main.object(forInfoDictionaryKey: "TineReleaseVersion")
+            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")) as? String ?? "0"
+    nonisolated static var isAlphaBuild: Bool { currentVersion.contains("-") }
     private static let checkInterval: TimeInterval = 24 * 60 * 60
 
     private var staged: (version: String, app: URL)?
@@ -104,7 +108,8 @@ final class AppUpdater: ObservableObject {
 
     private func runCheck(manual: Bool, previousStatus: Status,
                           job: JobState<Status>.Job) async {
-        guard let latest = await Self.latestVersion() else {
+        let config = TineConfig.load()
+        guard let latest = await Self.latestVersion(channel: config.updateChannel) else {
             if manual {
                 jobState.finish(.failed("could not reach github.com"), for: job)
             } else if newerVersion != nil {
@@ -121,7 +126,7 @@ final class AppUpdater: ObservableObject {
         }
         newerVersion = latest
         // Keep `|| manual` — autoUpdateApp must gate only the automatic channel, not `tine update`.
-        guard TineConfig.load().autoUpdateApp || manual else {
+        guard config.autoUpdateApp || manual else {
             settle(.available(latest), "Run `tine update` to install it.", once: "app-\(latest)",
                    job: job)
             return
@@ -195,7 +200,22 @@ final class AppUpdater: ObservableObject {
         return nil
     }
 
-    nonisolated static func latestVersion() async -> String? {
+    nonisolated static func latestVersion(channel: UpdateChannel) async -> String? {
+        guard channel == .alpha else { return await latestStableVersion() }
+        var req = URLRequest(url: releasesAPIURL)
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let releases = try? decoder.decode([GitHubRelease].self, from: data)
+        else { return nil }
+        return releases.filter { !$0.draft }
+            .compactMap { version(fromTag: $0.tagName) }
+            .max { isNewer($1, than: $0) }
+    }
+
+    nonisolated static func latestStableVersion() async -> String? {
         var req = URLRequest(url: releasesURL)
         req.httpMethod = "HEAD"
         guard let (_, resp) = try? await URLSession.shared.data(for: req, delegate: RedirectBlocker()),
@@ -205,12 +225,15 @@ final class AppUpdater: ObservableObject {
         return version(fromLocation: location)
     }
 
-    /// Rejects anything but a plain dotted number — this string builds the download URL below.
     nonisolated static func version(fromLocation location: String) -> String? {
         guard let tag = location.split(separator: "/").last else { return nil }
-        let v = tag.hasPrefix("v") ? String(tag.dropFirst()) : String(tag)
-        guard !v.isEmpty, v.allSatisfy({ ($0.isASCII && $0.isNumber) || $0 == "." })
-        else { return nil }
+        return version(fromTag: String(tag))
+    }
+
+    /// Rejects anything but a dotted number with an optional `-alpha.N` — this string builds the download URL below.
+    nonisolated static func version(fromTag tag: String) -> String? {
+        let v = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+        guard v.wholeMatch(of: #/[0-9]+(\.[0-9]+)*(-alpha\.[0-9]+)?/#) != nil else { return nil }
         return v
     }
 
@@ -220,16 +243,20 @@ final class AppUpdater: ObservableObject {
     }
 
     nonisolated static func isNewer(_ remote: String, than local: String) -> Bool {
-        let r = components(remote), l = components(local)
-        for i in 0..<max(r.count, l.count) {
-            let a = i < r.count ? r[i] : 0, b = i < l.count ? l[i] : 0
+        let r = parts(remote), l = parts(local)
+        for i in 0..<max(r.numbers.count, l.numbers.count) {
+            let a = i < r.numbers.count ? r.numbers[i] : 0, b = i < l.numbers.count ? l.numbers[i] : 0
             if a != b { return a > b }
         }
-        return false
+        return (r.alpha ?? .max) > (l.alpha ?? .max)
     }
 
-    nonisolated private static func components(_ v: String) -> [Int] {
-        (v.hasPrefix("v") ? String(v.dropFirst()) : v).split(separator: ".").map { Int($0) ?? 0 }
+    nonisolated private static func parts(_ v: String) -> (numbers: [Int], alpha: Int?) {
+        let halves = (v.hasPrefix("v") ? String(v.dropFirst()) : v)
+            .split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
+        let numbers = halves[0].split(separator: ".").map { Int($0) ?? 0 }
+        guard halves.count > 1 else { return (numbers, nil) }
+        return (numbers, Int(halves[1].split(separator: ".").last ?? "") ?? 0)
     }
 
     nonisolated static func dmgURL(version: String) -> URL {
@@ -296,7 +323,7 @@ final class AppUpdater: ObservableObject {
               let obj = try? PropertyListSerialization.propertyList(from: data, format: nil),
               let dict = obj as? [String: Any]
         else { return nil }
-        return dict["CFBundleShortVersionString"] as? String
+        return (dict["TineReleaseVersion"] ?? dict["CFBundleShortVersionString"]) as? String
     }
 
     nonisolated private static func run(_ tool: String, _ args: [String]) -> Bool {
@@ -326,8 +353,8 @@ final class AppUpdater: ObservableObject {
     [ -d "$staged" ] && [ -d "$target" ] || exit 1
     # Read it again here, not at spawn: brew or another installer may have replaced
     # the app while we waited, and that install wins.
-    now=$(/usr/bin/plutil -extract CFBundleShortVersionString raw -o - \
-      "$target/Contents/Info.plist" 2>/dev/null)
+    now=$(/usr/bin/plutil -extract TineReleaseVersion raw -o - "$target/Contents/Info.plist" 2>/dev/null \
+      || /usr/bin/plutil -extract CFBundleShortVersionString raw -o - "$target/Contents/Info.plist" 2>/dev/null)
     [ "$now" = "$expected" ] || exit 1
     backup="$target.tine-old"
     rm -rf "$backup"
@@ -349,6 +376,11 @@ final class AppUpdater: ObservableObject {
         else { return nil }
         return path
     }
+}
+
+private struct GitHubRelease: Decodable {
+    let tagName: String
+    let draft: Bool
 }
 
 /// Don't remove this — URLSession follows the redirect by default and the 302's `Location` is lost.
