@@ -21,6 +21,7 @@ struct DoctorReport: Equatable {
     let socketPath: String
     let socketListening: Bool
     let panelPlacement: PanelPlacement
+    let completionSource: CompletionSource
     let carapace: CarapaceInstall?
 
     var shellInstalled: Bool { shellIntegration.isInstalled }
@@ -32,6 +33,8 @@ struct DoctorReport: Equatable {
     }
 
     func diagnostics(logPath: String = TineLog.path) -> String {
+        let carapaceDetail = carapace.map { "\($0.path) (\($0.descriptions.count) CLIs)" }
+            ?? (completionSource == .fig ? "not probed (fig mode)" : "not found")
         let values = [
             "Accessibility: \(accessibilityGranted ? "granted" : "not granted")",
             "Shell integration: \(shellIntegration.diagnosticDetail)",
@@ -42,7 +45,8 @@ struct DoctorReport: Equatable {
             "Staged app version: \(stagedAppVersion ?? "none")",
             "Socket path: \(socketPath)",
             "Panel placement: \(panelPlacement.rawValue)",
-            "carapace: \(carapace.map { "\($0.path) (\($0.names.count) CLIs)" } ?? "not found")",
+            "Completion source: \(completionSource.label)",
+            "carapace: \(carapaceDetail)",
         ]
         let logTail = TineLog.tail(from: logPath)
         let tail = logTail.isEmpty ? "(empty)" : logTail

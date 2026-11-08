@@ -318,6 +318,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             socketPath: sockPath,
             socketListening: socketListening,
             panelPlacement: lastPanelPlacement,
+            completionSource: state.config.effectiveCompletionSource,
             carapace: state.carapace
         )
     }

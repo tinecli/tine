@@ -13,6 +13,7 @@ struct DoctorReportTests {
         socketPath: "/tmp/tine-test.sock",
         socketListening: true,
         panelPlacement: .terminalGrid,
+        completionSource: .fig,
         carapace: nil
     )
 
@@ -46,6 +47,7 @@ struct DoctorReportTests {
             socketPath: "",
             socketListening: false,
             panelPlacement: .awaitingInput,
+            completionSource: .fig,
             carapace: nil
         )
 

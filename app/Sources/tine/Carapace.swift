@@ -2,7 +2,7 @@ import Foundation
 
 struct CarapaceInstall: Equatable {
     let path: String
-    let names: [String]
+    let descriptions: [String: String]
 }
 
 /// The shell sends PATH every prompt: rerun `carapace --list` only when the resolved binary changes.
@@ -25,8 +25,10 @@ final class CarapaceProbe {
             let install = binary.map { path in
                 let output = CommandRunner.runOnce(executable: path, args: ["--list"], timeoutMs: 10_000)
                 let completers = (try? JSONSerialization.jsonObject(with: Data(output.stdout.utf8)))
-                    as? [String: Any]
-                return CarapaceInstall(path: path, names: completers?.keys.sorted() ?? [])
+                    as? [String: Any] ?? [:]
+                return CarapaceInstall(path: path, descriptions: completers.mapValues {
+                    ($0 as? [[String: Any]])?.first?["description"] as? String ?? ""
+                })
             }
             DispatchQueue.main.async { self.onChange?(install) }
         }

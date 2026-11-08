@@ -1,5 +1,9 @@
 import { executeCommand } from "../shared/execShell.js";
-import type { SpecLocation, Subcommand } from "../shared/internal.js";
+import type {
+  ShellContext,
+  SpecLocation,
+  Subcommand,
+} from "../shared/internal.js";
 import { type Logger, logger } from "../shared/log.js";
 import {
   ensureTrailingSlash,
@@ -172,14 +176,19 @@ export const loadFigSubcommand = async (
 
 export const loadSubcommandCached = async (
   specLocation: SpecLocation,
-  context?: Fig.ShellContext,
+  context?: ShellContext,
   localLogger: Logger = logger,
 ): Promise<Subcommand> => {
   const { name, type: source } = specLocation;
   const path =
     specLocation.type === SpecLocationSource.LOCAL ? specLocation.path : "";
+  const isGlobal = source === SpecLocationSource.GLOBAL;
+  const carapaceSource =
+    isGlobal && !context?.ignoreCarapace ? carapace() : null;
 
-  const key = [source, path || "", name].join(",");
+  const key = [source, path || "", name, carapaceSource ? "carapace" : ""].join(
+    ",",
+  );
   if (specCache.has(key)) {
     return specCache.get(key) as Subcommand;
   }
@@ -191,7 +200,6 @@ export const loadSubcommandCached = async (
   //   extend/<cmd>.js    is MERGED on top additively (keeps the pack, adds to it)
   // Locations are in priority order: the first with an override wins; every
   // location's extend is merged (earlier/higher-priority wins name collisions).
-  const isGlobal = source === SpecLocationSource.GLOBAL;
   const dirs = isGlobal
     ? ((globalThis as { __tineLocalSpecsDirs?: string[] })
         .__tineLocalSpecsDirs ?? [])
@@ -213,8 +221,11 @@ export const loadSubcommandCached = async (
     if (extension) extensions.push(extension);
   }
 
-  const carapaceSource = isGlobal ? carapace() : null;
-  if (!override && !extensions.length && carapaceSource?.names.has(name)) {
+  if (
+    !override &&
+    !extensions.length &&
+    carapaceSource?.descriptions.has(name)
+  ) {
     const spec = carapaceSpec(name, carapaceSource.exe);
     specCache.set(key, spec);
     return spec;

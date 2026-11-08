@@ -20,6 +20,7 @@ type Suggest = (
   cursor: number,
   cwd: string,
   cb: (r: Result) => void,
+  options?: { ignoreCarapace: boolean },
 ) => void;
 type Validation = { status: string; token: string; dangerous: boolean };
 type Validate = (line: string, cb: (r: Validation) => void) => void;
@@ -767,6 +768,10 @@ const carapaceOutput: Record<string, string> = {
       },
     ],
   }),
+  "cat export cat ": JSON.stringify({
+    nospace: "/",
+    values: [{ value: "my dir/", display: "my dir/", tag: "files" }],
+  }),
   "git export git checkout ": JSON.stringify({
     nospace: "",
     values: [
@@ -797,7 +802,12 @@ test("carapace sits between the user's specs and the pack", async () => {
     __tineLocalSpecsDirs: ["/tine-carapace-local"],
     __tineCompletionSource: "carapace",
     __tineCarapaceExe: "/fake/carapace",
-    __tineCarapaceNames: ["gh", "cat", "git", "localshadow"],
+    __tineCarapaceCompleters: {
+      gh: "GitHub CLI",
+      cat: "concatenate files",
+      git: "distributed version control",
+      localshadow: "",
+    },
     __tineBuiltinSpecNames: ["tine"],
     __tineRun: (json: string) => {
       const input = JSON.parse(json) as { executable: string; args: string[] };
@@ -852,6 +862,11 @@ test("carapace sits between the user's specs and the pack", async () => {
     shouldAddSpace: false,
     specName: "",
   });
+  const [escaped] = await items("cat my\\ d");
+  expect(escaped).toMatchObject({
+    insertValue: "my\\ dir/",
+    queryTerm: "my\\ d",
+  });
   expect(await rows("git checkout ")).toEqual([
     ["HEAD", "arg"],
     ["main", "arg"],
@@ -861,14 +876,27 @@ test("carapace sits between the user's specs and the pack", async () => {
   expect(calls).not.toContain("cat export cat app/So");
 
   const firstToken = await items("g");
-  expect(firstToken.map((item) => [item.name, item.specName])).toEqual([
-    ["gh", ""],
-    ["git", ""],
+  expect(
+    firstToken.map((item) => [item.name, item.specName, item.description]),
+  ).toEqual([
+    ["gh", "", "GitHub CLI"],
+    ["git", "", "distributed version control"],
   ]);
+
+  const carapaceCalls = calls.length;
   const validation = await new Promise((resolve) =>
     check("gh --quantum", resolve),
   );
-  expect(validation).toEqual({ status: "nospec", token: "", dangerous: false });
+  expect(validation).toEqual({
+    status: "invalid",
+    token: "--quantum",
+    dangerous: false,
+  });
+  const outline = await new Promise<Result>((resolve) =>
+    run("gh ", 3, "/repo", resolve, { ignoreCarapace: true }),
+  );
+  expect(outline.items.map((item) => item.name)).toEqual(["from-pack"]);
+  expect(calls).toHaveLength(carapaceCalls);
 
   vm.runInContext(
     "globalThis.__tineCompletionSource = 'carapaceOnly'; tineResetSpecs();",

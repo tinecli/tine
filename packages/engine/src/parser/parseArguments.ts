@@ -736,7 +736,7 @@ export const clearFigCaches = () => {
 
 const getCacheKey = (
   tokenArray: string[],
-  context: Fig.ShellContext,
+  context: Internal.ShellContext,
   specLocation: Internal.SpecLocation,
 ): string =>
   [
@@ -744,12 +744,13 @@ const getCacheKey = (
     serializeSpecLocation(specLocation),
     context.currentWorkingDirectory,
     context.currentProcess,
+    context.ignoreCarapace ? "fig" : "",
   ].join(",");
 
 // Parse all arguments in tokenArray.
 const parseArgumentsCached = async (
   command: Command,
-  context: Fig.ShellContext,
+  context: Internal.ShellContext,
   // authClient: AuthClient,
   specLocations?: Internal.SpecLocation[],
   startIndex = 0,
@@ -1016,7 +1017,7 @@ const firstTokenSpec: Internal.Subcommand = {
 
 export const parseArguments = async (
   command: Command | null,
-  context: Fig.ShellContext,
+  context: Internal.ShellContext,
   // authClient: AuthClient,
   localLogger: Logger = logger,
 ): Promise<ArgumentParserResult> => {

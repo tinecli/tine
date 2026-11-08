@@ -4,7 +4,7 @@ import { convertSubcommand, initializeDefault } from "./convertSpec.js";
 
 type Carapace = {
   exe: string;
-  names: Set<string>;
+  descriptions: Map<string, string>;
   only: boolean;
   builtins: Set<string>;
 };
@@ -18,11 +18,11 @@ export function carapace(): Carapace | null {
   const g = globalThis as {
     __tineCompletionSource?: unknown;
     __tineCarapaceExe?: unknown;
-    __tineCarapaceNames?: unknown;
+    __tineCarapaceCompleters?: unknown;
     __tineBuiltinSpecNames?: unknown;
   };
   const { __tineCompletionSource: source, __tineCarapaceExe: exe } = g;
-  const names = g.__tineCarapaceNames;
+  const completers = g.__tineCarapaceCompleters;
   const builtins = g.__tineBuiltinSpecNames;
   const value =
     (source === "carapace" || source === "carapaceOnly") &&
@@ -30,10 +30,15 @@ export function carapace(): Carapace | null {
     exe
       ? {
           exe,
-          names: new Set(
-            Array.isArray(names)
-              ? names.filter((n): n is string => typeof n === "string")
-              : [],
+          descriptions: new Map(
+            Object.entries(
+              typeof completers === "object" && completers !== null
+                ? completers
+                : {},
+            ).map(([cli, description]): [string, string] => [
+              cli,
+              typeof description === "string" ? description : "",
+            ]),
           ),
           only: source === "carapaceOnly",
           builtins: new Set(

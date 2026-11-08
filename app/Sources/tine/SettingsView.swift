@@ -231,7 +231,7 @@ struct SettingsView: View {
                 }
                 if state.config.completionSource != .fig {
                     LabeledContent("carapace") {
-                        Text(state.carapace.map { "\($0.path), \($0.names.count) CLIs" }
+                        Text(state.carapace.map { "\($0.path), \($0.descriptions.count) CLIs" }
                              ?? "Not found: brew install carapace")
                             .textSelection(.enabled)
                     }
