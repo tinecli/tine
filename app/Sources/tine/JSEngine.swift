@@ -138,12 +138,17 @@ final class JSEngine {
         ctx.evaluateScript("if (typeof tineResetSpecs === 'function') tineResetSpecs();")
     }
 
-    func setCarapace(_ install: CarapaceInstall?, source: CompletionSource) {
+    func setCarapace(_ install: CarapaceInstall?, config: TineConfig) {
         guard ready else { return }
-        ctx.setObject(source.rawValue as NSString, forKeyedSubscript: "__tineCompletionSource" as NSString)
+        ctx.setObject(config.effectiveCompletionSource.rawValue as NSString,
+                      forKeyedSubscript: "__tineCompletionSource" as NSString)
         ctx.setObject((install?.path ?? "") as NSString, forKeyedSubscript: "__tineCarapaceExe" as NSString)
         ctx.setObject((install?.descriptions ?? [:]) as NSDictionary,
                       forKeyedSubscript: "__tineCarapaceCompleters" as NSString)
+        ctx.setObject(config.carapaceDemotedGroups as NSArray,
+                      forKeyedSubscript: "__tineCarapaceDemotedGroups" as NSString)
+        ctx.setObject(NSNumber(value: config.carapaceFlagsWithValues),
+                      forKeyedSubscript: "__tineCarapaceFlagsWithValues" as NSString)
         resetSpecCache()
     }
 
