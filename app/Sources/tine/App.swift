@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: SuggestionPanel?
     private var server: SocketServer?
     private let frecency = Frecency()
+    private let carapaceProbe = CarapaceProbe()
     private var appliedProjectRoot: String?
     private var pendingProjectFrecencyApply = false
     private var idleHide: DispatchWorkItem?
@@ -76,6 +77,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appUpdater.start()
 
         state.engine?.setFirstTokenEnabled(state.config.firstTokenCompletion)
+        carapaceProbe.onChange = { [weak self] install in
+            self?.state.carapace = install
+            self?.scheduleRefresh()
+        }
+        state.$config.map(\.effectiveCompletionSource).removeDuplicates()
+            .sink { [weak self] source in self?.refreshCarapace(source) }
+            .store(in: &cancellables)
         specLearner.onLearned = { [weak self] in self?.state.engine?.resetSpecCache() }
 
         asker.validate = { [weak self] line in
@@ -185,6 +193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return ""
             case "path":
                 CommandRunner.setShellPath(req.buffer)
+                self.refreshCarapace(self.state.config.effectiveCompletionSource)
                 return "0"
             case "showDashboard":
                 self.openDashboard()
@@ -226,6 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let sections = req.buffer.components(separatedBy: TINE_RS)
                 if let path = sections.first, !path.isEmpty {
                     CommandRunner.setShellPath(path)
+                    self.refreshCarapace(self.state.config.effectiveCompletionSource)
                 }
                 if sections.count > 1 { _ = self.applyAliases(sections[1]) }
                 if sections.count > 2 { self.applyHistoryIgnore(sections[2]) }
@@ -255,6 +265,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tlog("listening on \(sockPath) (AX trusted: \(AXCaret.isTrusted))")
 
         CommandRunner.onRefresh = { [weak self] in self?.scheduleRefresh() }
+    }
+
+    private func refreshCarapace(_ source: CompletionSource) {
+        guard source != .fig else { return }
+        carapaceProbe.refresh(
+            searchPath: CommandRunner.shellPath() ?? ProcessInfo.processInfo.environment["PATH"] ?? "")
     }
 
     private func selectProjectFrecency(for cwd: String) {
@@ -301,7 +317,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             stagedAppVersion: appUpdater.readyVersion,
             socketPath: sockPath,
             socketListening: socketListening,
-            panelPlacement: lastPanelPlacement
+            panelPlacement: lastPanelPlacement,
+            carapace: state.carapace
         )
     }
 

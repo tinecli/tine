@@ -21,6 +21,7 @@ struct DoctorReport: Equatable {
     let socketPath: String
     let socketListening: Bool
     let panelPlacement: PanelPlacement
+    let carapace: CarapaceInstall?
 
     var shellInstalled: Bool { shellIntegration.isInstalled }
 
@@ -41,6 +42,7 @@ struct DoctorReport: Equatable {
             "Staged app version: \(stagedAppVersion ?? "none")",
             "Socket path: \(socketPath)",
             "Panel placement: \(panelPlacement.rawValue)",
+            "carapace: \(carapace.map { "\($0.path) (\($0.names.count) CLIs)" } ?? "not found")",
         ]
         let logTail = TineLog.tail(from: logPath)
         let tail = logTail.isEmpty ? "(empty)" : logTail

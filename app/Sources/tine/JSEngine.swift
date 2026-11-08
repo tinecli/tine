@@ -58,6 +58,9 @@ final class JSEngine {
         let runCommand: @convention(block) (String) -> String = { CommandRunner.run($0) }
         ctx.setObject(runCommand, forKeyedSubscript: "__tineRun" as NSString)
         ctx.setObject(NSHomeDirectory() as NSString, forKeyedSubscript: "__tineHome" as NSString)
+        let builtins = (try? FileManager.default.contentsOfDirectory(atPath: "\(resourcesDir)/builtin-specs"))?
+            .filter { $0.hasSuffix(".js") }.map { String($0.dropLast(3)) } ?? []
+        ctx.setObject(builtins as NSArray, forKeyedSubscript: "__tineBuiltinSpecNames" as NSString)
 
         let path = "\(resourcesDir)/tine-engine.js"
         guard let src = try? String(contentsOfFile: path, encoding: .utf8) else {
@@ -133,6 +136,14 @@ final class JSEngine {
     func resetSpecCache() {
         guard ready else { return }
         ctx.evaluateScript("if (typeof tineResetSpecs === 'function') tineResetSpecs();")
+    }
+
+    func setCarapace(_ install: CarapaceInstall?, source: CompletionSource) {
+        guard ready else { return }
+        ctx.setObject(source.rawValue as NSString, forKeyedSubscript: "__tineCompletionSource" as NSString)
+        ctx.setObject((install?.path ?? "") as NSString, forKeyedSubscript: "__tineCarapaceExe" as NSString)
+        ctx.setObject((install?.names ?? []) as NSArray, forKeyedSubscript: "__tineCarapaceNames" as NSString)
+        resetSpecCache()
     }
 
     func setFirstTokenEnabled(_ on: Bool) {
