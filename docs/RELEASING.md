@@ -9,6 +9,11 @@ app downloads it at runtime from `tinecli/autocomplete`:
 git tag v0.1.1 && git push origin v0.1.1
 ```
 
+To cut an alpha, tag `vX.Y.Z-alpha.N` the same way
+(`git tag v0.9.0-alpha.1 && git push origin v0.9.0-alpha.1`). The workflow publishes it
+as a GitHub prerelease and skips the cask bump, so only installs with the update channel
+set to Alpha in Settings pick it up. Any other tag shape fails the run.
+
 ## Repo secrets
 
 | Secret | Purpose |

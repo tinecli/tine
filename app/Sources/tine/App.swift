@@ -216,7 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "askStatus":
                 return self.asker.statusLine
             case "version":
-                return (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
+                return AppUpdater.currentVersion
             case "doctor":
                 return self.doctorReport().socketValue
             case "aliases":
@@ -296,8 +296,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             shellIntegration: ShellIntegration.status(at: ShellIntegration.zshrcPath()),
             specCount: SpecInstaller.installedCount(),
             packUpdateAvailable: specInstaller.updateAvailable,
-            appVersion: (Bundle.main.object(
-                forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?",
+            appVersion: AppUpdater.currentVersion,
             latestAppVersion: appUpdater.newerVersion,
             stagedAppVersion: appUpdater.readyVersion,
             socketPath: sockPath,
