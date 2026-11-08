@@ -10,6 +10,7 @@ import { getCustomSuggestions } from "./src/generators/customSuggestionsGenerato
 import { getScriptSuggestions } from "./src/generators/scriptSuggestionsGenerator.js";
 import { getTemplateSuggestions } from "./src/generators/templateSuggestionsGenerator.js";
 import { createCache, resetCaches } from "./src/parser/caches.js";
+import { carapace } from "./src/parser/carapace.js";
 import {
   LoadLocalSpecError,
   MissingSpecError,
@@ -435,10 +436,15 @@ function commandNameResult(
   aliases: Record<string, string>,
 ): TineResult {
   const frec = frecencyIndex();
-  const { names: specs, descriptions } = specIndex();
+  const carapaceSource = carapace();
+  const { names: packIndex, descriptions } = specIndex();
+  const specs = carapaceSource?.only
+    ? packIndex.filter((name) => carapaceSource.builtins.has(name))
+    : packIndex;
   const packNames = new Set(specs);
   const names = new Set<string>([
     ...specs,
+    ...(carapaceSource?.names ?? []),
     ...Object.keys(aliases),
     ...Object.keys(frec),
   ]);
@@ -462,7 +468,12 @@ function commandNameResult(
         ? `alias → ${aliases[name]}`
         : (descriptions[name] ?? ""),
       priority: boost ? 75 + boost : 50,
-      specName: !aliases[name] && packNames.has(name) ? name : "",
+      specName:
+        !aliases[name] &&
+        packNames.has(name) &&
+        !carapaceSource?.names.has(name)
+          ? name
+          : "",
     };
   });
   const filtered = filterSuggestions(cmds as never, partial, true, false);
@@ -487,6 +498,9 @@ async function parseLine(line: string): Promise<TineValidation> {
       command as never,
       shellContext("/") as never,
     );
+    if (parsed.completionObj.tineCarapace) {
+      return { status: "nospec", token: "", dangerous: false };
+    }
     // Consumed args and options have both left currentArg by this point.
     const args = (parsed.completionObj.args ?? []) as Array<{
       isDangerous?: boolean;
@@ -552,10 +566,16 @@ let localSpecNames = new Set<string>();
 
 // The `learn` arg's generator filters PATH executables against this — the
 // same pack completions index the parser already treats as "has a spec", plus
-// the local names above — so the candidate set can never drift from what the
-// parser knows, pack or local.
-(globalThis as Record<string, unknown>).tineHasSpec = (name: string): boolean =>
-  specIndex().names.includes(name) || localSpecNames.has(name);
+// the local names above and carapace's — so the candidate set can never drift
+// from what the parser knows, pack, local or carapace.
+(globalThis as Record<string, unknown>).tineHasSpec = (
+  name: string,
+): boolean => {
+  const source = carapace();
+  if (source?.names.has(name) || localSpecNames.has(name)) return true;
+  if (source?.only && !source.builtins.has(name)) return false;
+  return specIndex().names.includes(name);
+};
 
 // Async result delivered via callback (JSC-friendly; no Swift/JS promise bridge).
 (globalThis as Record<string, unknown>).tineSuggest = (

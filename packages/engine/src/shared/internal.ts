@@ -50,6 +50,7 @@ export type SubcommandMeta = Omit<
 > & {
   loadSpec?: LoadSpec;
   tineLocalOverride?: boolean;
+  tineCarapace?: boolean;
 };
 
 export type Subcommand = SubcommandMeta & {

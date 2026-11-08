@@ -12,6 +12,7 @@ type Item = {
   queryTerm: string;
   type: string;
   specName: string;
+  shouldAddSpace: boolean;
 };
 type Result = { searchTerm: string; items: Item[] };
 type Suggest = (
@@ -712,5 +713,178 @@ test("resetting the caches picks up a rewritten pack without a new context", asy
 
   expect(await rows("pc -")).toEqual(["--new"]);
   expect(await rows("fr")).toEqual(["freshcmd"]);
+  expect(vm.runInContext("globalThis.__tineErr", ctx)).toBeUndefined();
+});
+
+// Trimmed real `carapace <cli> export <cli> …` output (carapace 1.8.2), keyed by
+// the args the engine passes.
+const carapaceOutput: Record<string, string> = {
+  "gh export gh ": JSON.stringify({
+    nospace: "",
+    values: [
+      {
+        value: "agent",
+        description: "Work with agent tasks",
+        tag: "other commands",
+      },
+      {
+        value: "pr",
+        description: "Manage pull requests",
+        tag: "core commands",
+      },
+    ],
+  }),
+  "gh export gh pr -": JSON.stringify({
+    nospace: ".",
+    values: [
+      {
+        value: "--help",
+        description: "Show help for command",
+        tag: "longhand flags",
+      },
+      {
+        value: "--repo",
+        description: "Select another repository",
+        style: "blue",
+        tag: "longhand flags",
+      },
+      {
+        value: "-R",
+        description: "Select another repository",
+        tag: "shorthand flags",
+      },
+    ],
+  }),
+  "cat export cat app/": JSON.stringify({
+    nospace: "/",
+    values: [
+      { value: "app/Package.swift", display: "Package.swift", tag: "files" },
+      {
+        value: "app/Sources/",
+        display: "Sources/",
+        style: "cyan bold",
+        tag: "files",
+      },
+    ],
+  }),
+  "git export git checkout ": JSON.stringify({
+    nospace: "",
+    values: [
+      { value: "HEAD", description: "fix(app): keep alpha tags", tag: "heads" },
+      { value: "main", description: "feat: x", tag: "local branches" },
+    ],
+  }),
+};
+
+test("carapace sits between the user's specs and the pack", async () => {
+  const dir = "/tine-carapace-specs";
+  const store: Record<string, string> = {
+    [`${dir}/index.json`]: JSON.stringify({
+      completions: ["gh", "packonly", "localshadow", "wrapper", "tine"],
+      diffVersionedCompletions: [],
+    }),
+    [`${dir}/gh.js`]: `export default { name: "gh", subcommands: [{ name: "from-pack" }] };`,
+    [`${dir}/packonly.js`]: `export default { name: "packonly", subcommands: [{ name: "from-pack" }] };`,
+    [`${dir}/localshadow.js`]: `export default { name: "localshadow", subcommands: [{ name: "from-pack" }] };`,
+    [`${dir}/wrapper.js`]: `export default { name: "wrapper", args: { name: "command", isCommand: true } };`,
+    [`${dir}/tine.js`]: `export default { name: "tine", subcommands: [{ name: "learn" }] };`,
+    "/tine-carapace-local/extend/localshadow.js": `export default { name: "localshadow", subcommands: [{ name: "from-local-extend" }] };`,
+  };
+  const calls: string[] = [];
+  const ctx = vm.createContext({
+    __tineReadFile: (path: string) => store[path] ?? "",
+    __tineSpecsDir: dir,
+    __tineLocalSpecsDirs: ["/tine-carapace-local"],
+    __tineCompletionSource: "carapace",
+    __tineCarapaceExe: "/fake/carapace",
+    __tineCarapaceNames: ["gh", "cat", "git", "localshadow"],
+    __tineBuiltinSpecNames: ["tine"],
+    __tineRun: (json: string) => {
+      const input = JSON.parse(json) as { executable: string; args: string[] };
+      const key = input.args.join(" ");
+      if (input.executable === "/fake/carapace") calls.push(key);
+      const stdout =
+        input.executable === "/fake/carapace"
+          ? (carapaceOutput[key] ?? "")
+          : "";
+      return JSON.stringify({ stdout, stderr: "", exitCode: 0 });
+    },
+  });
+  vm.runInContext(bundle, ctx);
+  const run: Suggest = vm.runInContext("globalThis.tineSuggest", ctx);
+  const check: Validate = vm.runInContext("globalThis.tineValidate", ctx);
+  const items = (line: string): Promise<Item[]> =>
+    new Promise((resolve) =>
+      run(line, line.length, "/repo", (r) => resolve(r.items)),
+    );
+  const rows = async (line: string) =>
+    (await items(line)).map((item) => [item.name, item.type]);
+
+  expect(await rows("localshadow ")).toEqual([
+    ["from-local-extend", "subcommand"],
+    ["from-pack", "subcommand"],
+  ]);
+  expect(await rows("gh ")).toEqual([
+    ["agent", "subcommand"],
+    ["pr", "subcommand"],
+  ]);
+  expect(await rows("wrapper gh ")).toEqual(await rows("gh "));
+  expect(await rows("packonly ")).toEqual([["from-pack", "subcommand"]]);
+
+  const flags = await items("gh pr -");
+  expect(
+    flags.map((item) => [item.name, item.type, item.shouldAddSpace]),
+  ).toEqual([
+    ["--help", "option", true],
+    ["--repo", "option", true],
+    ["-R", "option", true],
+  ]);
+  expect((await items("gh pr --re")).map((item) => item.name)).toEqual([
+    "--repo",
+  ]);
+
+  const [folder] = await items("cat app/So");
+  expect(folder).toMatchObject({
+    name: "app/Sources/",
+    insertValue: "app/Sources/",
+    queryTerm: "app/So",
+    type: "folder",
+    shouldAddSpace: false,
+    specName: "",
+  });
+  expect(await rows("git checkout ")).toEqual([
+    ["HEAD", "arg"],
+    ["main", "arg"],
+  ]);
+  expect(calls).toContain("gh export gh pr -");
+  expect(calls).not.toContain("gh export gh pr --re");
+  expect(calls).not.toContain("cat export cat app/So");
+
+  const firstToken = await items("g");
+  expect(firstToken.map((item) => [item.name, item.specName])).toEqual([
+    ["gh", ""],
+    ["git", ""],
+  ]);
+  const validation = await new Promise((resolve) =>
+    check("gh --quantum", resolve),
+  );
+  expect(validation).toEqual({ status: "nospec", token: "", dangerous: false });
+
+  vm.runInContext(
+    "globalThis.__tineCompletionSource = 'carapaceOnly'; tineResetSpecs();",
+    ctx,
+  );
+  expect(await rows("packonly ")).toEqual([]);
+  expect(await rows("tine ")).toEqual([["learn", "subcommand"]]);
+  expect(await rows("gh ")).toEqual([
+    ["agent", "subcommand"],
+    ["pr", "subcommand"],
+  ]);
+  const hasSpec = vm.runInContext("globalThis.tineHasSpec", ctx);
+  expect([hasSpec("packonly"), hasSpec("tine"), hasSpec("gh")]).toEqual([
+    false,
+    true,
+    true,
+  ]);
   expect(vm.runInContext("globalThis.__tineErr", ctx)).toBeUndefined();
 });
