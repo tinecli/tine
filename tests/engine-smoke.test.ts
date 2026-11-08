@@ -777,6 +777,23 @@ const carapaceOutput: Record<string, string> = {
     values: [
       { value: "HEAD", description: "fix(app): keep alpha tags", tag: "heads" },
       { value: "main", description: "feat: x", tag: "local branches" },
+      { value: "v0.1.47", description: "feat: y", tag: "tags" },
+      { value: "origin/main", description: "feat: x", tag: "remote branches" },
+    ],
+  }),
+  "git export git checkout -": JSON.stringify({
+    nospace: ".",
+    values: [
+      {
+        value: "--detach",
+        description: "detach HEAD at named commit",
+        tag: "longhand flags",
+      },
+      {
+        value: "-b",
+        description: "create a new branch",
+        tag: "shorthand flags",
+      },
     ],
   }),
 };
@@ -809,6 +826,8 @@ test("carapace sits between the user's specs and the pack", async () => {
       localshadow: "",
     },
     __tineBuiltinSpecNames: ["tine"],
+    __tineCarapaceDemotedGroups: ["heads", "tags"],
+    __tineCarapaceFlagsWithValues: true,
     __tineRun: (json: string) => {
       const input = JSON.parse(json) as { executable: string; args: string[] };
       const key = input.args.join(" ");
@@ -868,9 +887,21 @@ test("carapace sits between the user's specs and the pack", async () => {
     queryTerm: "my\\ d",
   });
   expect(await rows("git checkout ")).toEqual([
-    ["HEAD", "arg"],
     ["main", "arg"],
+    ["origin/main", "arg"],
+    ["--detach", "option"],
+    ["-b", "option"],
+    ["HEAD", "arg"],
+    ["v0.1.47", "arg"],
   ]);
+  const flagCalls = calls.filter((c) => c === "git export git checkout -");
+  expect(await rows("git checkout -")).toEqual([
+    ["--detach", "option"],
+    ["-b", "option"],
+  ]);
+  expect(calls.filter((c) => c === "git export git checkout -")).toHaveLength(
+    flagCalls.length + 1,
+  );
   expect(calls).toContain("gh export gh pr -");
   expect(calls).not.toContain("gh export gh pr --re");
   expect(calls).not.toContain("cat export cat app/So");
@@ -897,6 +928,17 @@ test("carapace sits between the user's specs and the pack", async () => {
   );
   expect(outline.items.map((item) => item.name)).toEqual(["from-pack"]);
   expect(calls).toHaveLength(carapaceCalls);
+
+  vm.runInContext(
+    "globalThis.__tineCarapaceFlagsWithValues = false; globalThis.__tineCarapaceDemotedGroups = []; tineResetSpecs();",
+    ctx,
+  );
+  expect(await rows("git checkout ")).toEqual([
+    ["HEAD", "arg"],
+    ["main", "arg"],
+    ["v0.1.47", "arg"],
+    ["origin/main", "arg"],
+  ]);
 
   vm.runInContext(
     "globalThis.__tineCompletionSource = 'carapaceOnly'; tineResetSpecs();",

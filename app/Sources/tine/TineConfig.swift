@@ -50,6 +50,8 @@ struct TineConfig: Codable, Equatable {
     var updateNotifications: Bool = true
     var updateChannel: UpdateChannel = .stable
     var completionSourceChoice: CompletionSource?
+    var carapaceDemotedGroups: [String] = ["heads", "tags"]
+    var carapaceFlagsWithValues: Bool = true
     var localSpecsDirs: [String] = ["\(NSHomeDirectory())/.config/tine/specs"]
 
     var localSpecsDirsExpanded: [String] {
@@ -83,6 +85,8 @@ struct TineConfig: Codable, Equatable {
         updateNotifications = value(.updateNotifications, d.updateNotifications)
         updateChannel = value(.updateChannel, d.updateChannel)
         completionSourceChoice = (try? c.decodeIfPresent(CompletionSource.self, forKey: .completionSourceChoice)) ?? nil
+        carapaceDemotedGroups = value(.carapaceDemotedGroups, d.carapaceDemotedGroups)
+        carapaceFlagsWithValues = value(.carapaceFlagsWithValues, d.carapaceFlagsWithValues)
         localSpecsDirs = value(.localSpecsDirs, d.localSpecsDirs)
     }
 

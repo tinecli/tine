@@ -14,11 +14,11 @@ final class AppState: ObservableObject {
             if persists { config.save() }
             engine?.setFirstTokenEnabled(config.firstTokenCompletion)
             engine?.setLocalSpecsDirs(config.localSpecsDirsExpanded)
-            engine?.setCarapace(carapace, source: config.effectiveCompletionSource)
+            engine?.setCarapace(carapace, config: config)
         }
     }
     @Published var carapace: CarapaceInstall? {
-        didSet { engine?.setCarapace(carapace, source: config.effectiveCompletionSource) }
+        didSet { engine?.setCarapace(carapace, config: config) }
     }
 
     /// The Appearance preview mirrors live config and must never write it back.

@@ -28,7 +28,10 @@ export async function getScriptSuggestions(
     const commandToRun =
       script && typeof script === "function" ? script(tokenArray) : script;
 
-    if (!commandToRun) {
+    if (
+      !commandToRun ||
+      (Array.isArray(commandToRun) && commandToRun.length === 0)
+    ) {
       return [];
     }
 

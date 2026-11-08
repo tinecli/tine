@@ -242,6 +242,8 @@ struct SettingsView: View {
                          ?? "Not found: brew install carapace")
                         .textSelection(.enabled)
                 }
+                TextField("Groups ranked last", value: bind(\.carapaceDemotedGroups), format: CommaList())
+                Toggle("Show flags before typing -", isOn: bind(\.carapaceFlagsWithValues))
             }
         } header: {
             Text("Experimental")
@@ -453,5 +455,15 @@ private extension AppState {
         ]
         state.selectedIndex = 1
         return state
+    }
+}
+
+private struct CommaList: ParseableFormatStyle, ParseStrategy {
+    var parseStrategy: Self { self }
+
+    func format(_ value: [String]) -> String { value.joined(separator: ", ") }
+
+    func parse(_ value: String) -> [String] {
+        value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 }
