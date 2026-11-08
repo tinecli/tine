@@ -226,7 +226,7 @@ export const loadSubcommandCached = async (
     !extensions.length &&
     carapaceSource?.descriptions.has(name)
   ) {
-    const spec = carapaceSpec(name, carapaceSource.exe);
+    const spec = carapaceSpec(name, carapaceSource);
     specCache.set(key, spec);
     return spec;
   }
