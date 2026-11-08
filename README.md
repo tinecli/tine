@@ -57,6 +57,10 @@ for you: it runs `<cmd> --help` and turns the output into a spec with Apple's
 on-device model (macOS 26 with Apple Intelligence on; nothing leaves the Mac).
 The result is a plain file — read it, edit it, delete it. `--force` learns again.
 
+Settings → Suggestions → Experimental can switch the completion source to
+[carapace](https://carapace.sh) (`brew install carapace`). It's opt-in: your own
+specs still win, and commands carapace doesn't know fall back to the Fig specs.
+
 ## Which tool does this?
 
 ```sh

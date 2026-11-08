@@ -49,7 +49,7 @@ struct TineConfig: Codable, Equatable {
     var autoUpdateApp: Bool = true
     var updateNotifications: Bool = true
     var updateChannel: UpdateChannel = .stable
-    var completionSource: CompletionSource = .carapace
+    var completionSourceChoice: CompletionSource?
     var localSpecsDirs: [String] = ["\(NSHomeDirectory())/.config/tine/specs"]
 
     var localSpecsDirsExpanded: [String] {
@@ -57,7 +57,7 @@ struct TineConfig: Codable, Equatable {
     }
 
     var effectiveCompletionSource: CompletionSource {
-        AppUpdater.isAlphaBuild ? completionSource : .fig
+        completionSourceChoice ?? (AppUpdater.isAlphaBuild ? .carapace : .fig)
     }
 
     init() {}
@@ -82,7 +82,7 @@ struct TineConfig: Codable, Equatable {
         autoUpdateApp = value(.autoUpdateApp, d.autoUpdateApp)
         updateNotifications = value(.updateNotifications, d.updateNotifications)
         updateChannel = value(.updateChannel, d.updateChannel)
-        completionSource = value(.completionSource, d.completionSource)
+        completionSourceChoice = (try? c.decodeIfPresent(CompletionSource.self, forKey: .completionSourceChoice)) ?? nil
         localSpecsDirs = value(.localSpecsDirs, d.localSpecsDirs)
     }
 

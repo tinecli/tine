@@ -225,20 +225,28 @@ struct SettingsView: View {
                 }
             }
             Toggle("Complete command names", isOn: bind(\.firstTokenCompletion))
-            if AppUpdater.isAlphaBuild {
-                Picker("Completion source", selection: bind(\.completionSource)) {
-                    ForEach(CompletionSource.allCases) { Text($0.label).tag($0) }
-                }
-                if state.config.completionSource != .fig {
-                    LabeledContent("carapace") {
-                        Text(state.carapace.map { "\($0.path), \($0.descriptions.count) CLIs" }
-                             ?? "Not found: brew install carapace")
-                            .textSelection(.enabled)
-                    }
-                }
-            }
         } footer: {
             Text("↑ ↓ move · Tab inserts the shared prefix · Enter accepts · Esc dismisses · **⌃K** toggles the detail pane")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        Section {
+            Picker("Completion source", selection: Binding(
+                get: { state.config.effectiveCompletionSource },
+                set: { state.config.completionSourceChoice = $0 }
+            )) {
+                ForEach(CompletionSource.allCases) { Text($0.label).tag($0) }
+            }
+            if state.config.effectiveCompletionSource != .fig {
+                LabeledContent("carapace") {
+                    Text(state.carapace.map { "\($0.path), \($0.descriptions.count) CLIs" }
+                         ?? "Not found: brew install carapace")
+                        .textSelection(.enabled)
+                }
+            }
+        } header: {
+            Text("Experimental")
+        } footer: {
+            Text("Uses [carapace](https://carapace.sh) when installed and falls back to Fig specs.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
