@@ -58,6 +58,9 @@ final class SocketServer {
         while true {
             let conn = accept(fd, nil, nil)
             if conn < 0 { break }
+            // A client that hangs up before the reply would otherwise kill the app with SIGPIPE.
+            var on: Int32 = 1
+            setsockopt(conn, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
             handle(conn)
             close(conn)
         }

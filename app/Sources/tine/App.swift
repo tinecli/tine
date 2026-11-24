@@ -139,6 +139,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 // max(…, 1): raw 0 while still loading would unbind Up/Down before results land.
                 return "\(self.state.hasContent ? max(self.state.suggestions.count, 1) : 0)"
+            case "complete":
+                return CompletionReply(engine: self.state.engine, buffer: req.buffer,
+                                       cursor: req.cursor, cwd: req.cwd).json
             case "up":
                 if self.panel?.isVisible != true || self.state.selectedIndex <= 0
                     || !self.sessions.isOwner(req.session) {
