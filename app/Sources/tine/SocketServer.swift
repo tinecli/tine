@@ -46,6 +46,9 @@ final class SocketServer {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, len) }
         }
         guard bound == 0 else { perror("tine bind"); return false }
+        // Accepted sockets inherit it; set per connection, it fails once the client has already hung up.
+        var on: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
         guard listen(fd, 16) == 0 else { perror("tine listen"); return false }
 
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
@@ -58,9 +61,6 @@ final class SocketServer {
         while true {
             let conn = accept(fd, nil, nil)
             if conn < 0 { break }
-            // A client that hangs up before the reply would otherwise kill the app with SIGPIPE.
-            var on: Int32 = 1
-            setsockopt(conn, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
             handle(conn)
             close(conn)
         }

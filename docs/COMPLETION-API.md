@@ -10,22 +10,28 @@ The socket is `~/.local/share/tine/tine.sock`. One connection carries one
 request: write the request line, read one reply line, close.
 
 If the connection is refused or the socket is missing, Tine isn't running. Start
-it in the background with `open -g -b dev.gustaf.tine` and retry for a couple of
-seconds; the socket appears once the app has launched.
+it with `open -g -b dev.gustaf.tine` and retry for a couple of seconds; the
+socket appears once the app has launched. A launch can still show Tine's own
+windows: the dashboard when "open at start" is on, and the Accessibility prompt
+until that is granted.
 
 ## Request
 
-One line, fields separated by US (`0x1f`), ending in `\n`:
+One line: five fields separated by US (`0x1f`), ending in `\n`. Byte for
+byte, from a shell:
 
+```sh
+printf 'complete\x1f6\x1f%s\x1f\x1fgit ch\n' "$PWD" | nc -U ~/.local/share/tine/tine.sock
 ```
-complete <US> <cursor> <US> <cwd> <US> <US> <buffer> \n
-```
+
+The fields, in order: the verb `complete`, `cursor`, `cwd`, an empty field,
+and `buffer`.
 
 - `cursor`: caret position in `buffer`, in UTF-16 code units (an `NSRange`
   location). Out-of-range values are clamped.
 - `cwd`: absolute directory the command would run in. Path and file
   completions are relative to it.
-- The fourth field is empty (the terminal widget's positioning data).
+- The empty field is where the terminal widget sends its screen position.
 - `buffer`: the command line. It can't contain `\n`, so for a multi-line
   input send the line the caret is on, with `cursor` relative to that line, and
   add the line's offset back to the ranges in the reply.
@@ -72,10 +78,11 @@ cache.
 There is no cancel verb: to drop a request, close its connection and ignore the
 reply.
 
-Completions use the PATH, aliases and history the zsh integration last sent. A
-client whose shell doesn't source `tine.zsh` can send its PATH once with the
-`path` verb (`path <US> 0 <US> <cwd> <US> <US> <PATH>`), or generators only see
-launchd's minimal PATH.
+Completions use the PATH, aliases and history the zsh integration last sent;
+the app keeps one of each, shared by every client. Without a zsh prompt sourcing
+`tine.zsh`, generators see only launchd's minimal PATH. A client can set it
+with the `path` verb (`path`, `0`, `cwd`, empty, then the PATH as the
+buffer), but the next zsh prompt replaces it.
 
 ## Client checklist
 
