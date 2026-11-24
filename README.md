@@ -77,6 +77,11 @@ before you see it, so an invented flag never reaches you.
 Nothing is ever run. The command is printed and pushed onto your next prompt, for
 you to read and run yourself.
 
+## Use from another app
+
+Other apps can show tine's completions in their own UI: one JSON request over
+tine's socket, no panel. See [docs/COMPLETION-API.md](docs/COMPLETION-API.md).
+
 ## Development
 
 Build and run from source: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Cutting a
