@@ -118,6 +118,7 @@ const files: Record<string, string> = {
 
 // `ls -1ApL` output per directory, for the filepaths/folders generators.
 const listings: Record<string, string> = {
+  "/tmp/my dir/": "sub/\n",
   "/tmp/": "app/\nmy dir/\nREADME.md\n.DS_Store\n.hidden/\n",
   "/tmp/app/": "Sources/\nPackage.swift\n",
   [`${home}/`]: "Documents/\n.config/\n",
@@ -402,6 +403,33 @@ test("a folder with a space is escaped on insert", async () => {
   const { items } = await suggest("cd my");
   expect(items.map((item) => item.name)).toEqual(["my dir/"]);
   expect(items[0].insertValue).toBe("my\\ dir/");
+});
+
+test("a backslash-escaped word is replaced whole by the escaped folder", async () => {
+  const { items } = await suggest("cd my\\ d");
+  expect(items.map((item) => item.name)).toEqual(["my dir/"]);
+  expect(items[0].queryTerm).toBe("my\\ d");
+  expect(items[0].insertValue).toBe("my\\ dir/");
+});
+
+test("a quoted word is replaced whole, quote included", async () => {
+  for (const quote of ["'", '"']) {
+    const { items } = await suggest(`cd ${quote}my d`);
+    expect(items[0].queryTerm).toBe(`${quote}my d`);
+    expect(items[0].insertValue).toBe("my\\ dir/");
+  }
+});
+
+test("an escaped nested path is replaced whole", async () => {
+  const { items } = await suggest("cd my\\ dir/s");
+  expect(items[0].queryTerm).toBe("my\\ dir/s");
+  expect(items[0].insertValue).toBe("my\\ dir/sub/");
+});
+
+test("a tilde path replaces only the last segment", async () => {
+  const { items } = await suggest("cd ~/Do");
+  expect(items[0].queryTerm).toBe("Do");
+  expect(items[0].insertValue).toBe("Documents/");
 });
 
 test("project frecency reorders the realistic same-band case", async () => {

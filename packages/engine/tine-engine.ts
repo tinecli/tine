@@ -256,13 +256,13 @@ async function suggest(
       ((a as { priority?: number }).priority ?? 0),
   );
   const filtered = filterSuggestions(ranked, parsed.searchTerm, true, false);
-  const items = toItems(
-    filtered,
-    parsed.searchTerm ?? "",
-    packSpecName(parsed.annotations),
-  );
   // Token text drops escapes and quotes; the host replaces queryTerm.length typed chars.
-  const typedWord = command.tokens.at(-1)?.originalNode.text ?? "";
+  const lastToken = command.tokens.at(-1);
+  const typedWord = lastToken?.originalNode.text ?? "";
+  const items = toItems(filtered, parsed.searchTerm ?? "", {
+    specName: packSpecName(parsed.annotations),
+    word: { text: lastToken?.text ?? "", typed: typedWord },
+  });
   return {
     searchTerm: parsed.searchTerm ?? "",
     items: parsed.completionObj.tineCarapace
@@ -342,8 +342,9 @@ function historyFlagKey(upToCursor: string): string {
 function toItems(
   filtered: readonly unknown[],
   searchTerm: string,
-  specName = "",
+  options: { specName?: string; word?: { text: string; typed: string } } = {},
 ): TineSuggestion[] {
+  const { specName = "", word } = options;
   return filtered.map((s) => {
     const type = (s as { type?: string }).type ?? "";
     const generated = (s as { generator?: unknown }).generator !== undefined;
@@ -356,15 +357,24 @@ function toItems(
     const fuzzy = (
       s as { fuzzyMatchData?: Array<{ indexes?: number[] } | null> }
     ).fuzzyMatchData;
+    const isPath = isFolder || type === "file";
+    const queryTerm = getQueryTermForSuggestion(s as never, searchTerm);
+    const replacesWord =
+      isPath &&
+      word !== undefined &&
+      /['"\\]/.test(word.typed) &&
+      word.text.endsWith(queryTerm);
+    const unescaped = replacesWord
+      ? word.text.slice(0, word.text.length - queryTerm.length) + raw
+      : raw;
     return {
       name: firstName((s as { name: string | string[] }).name),
       description: (s as { description?: string }).description ?? "",
-      insertValue:
-        isFolder || type === "file" ? escapeInsertion(raw, isFolder) : raw,
+      insertValue: isPath ? escapeInsertion(unescaped, isFolder) : raw,
       shouldAddSpace:
         (s as { shouldAddSpace?: boolean }).shouldAddSpace ?? false,
       type,
-      queryTerm: getQueryTermForSuggestion(s as never, searchTerm),
+      queryTerm: replacesWord ? word.typed : queryTerm,
       isDangerous: Boolean((s as { isDangerous?: boolean }).isDangerous),
       matchIndices: fuzzy?.[0]?.indexes ?? [],
       specName: generated || type === "history" ? "" : itemSpecName,
