@@ -1,22 +1,40 @@
+<div align="center">
+
+<img src="icon/tine.svg" width="128" height="128" alt="Tine app icon">
+
 # Tine
 
-Native macOS terminal autocomplete — a fast SwiftUI suggestion panel driven by the
-Fig completion-spec engine. No cloud, no telemetry, no login, and **no
-pseudo-terminal**. The one model tine uses runs on device, only when you ask for
-it (`tine learn`).
+**Autocomplete for your terminal, native and on device.**
 
-## What it is
+Subcommands, flags and arguments for 700+ command-line tools, in a panel at your cursor.
 
-- A native, non-activating `NSPanel` + SwiftUI suggestion UI (not a webview).
-- The Fig autocomplete engine (700+ CLIs) runs locally in
-  **JavaScriptCore** — the same specs Fig/Amazon Q used, no network.
-- A **zsh ZLE widget** feeds the edit buffer to the app over a unix socket. No
-  pty wrapper, so nothing can leak the way pty-based tools can.
+[Download](https://github.com/tinecli/tine/releases/latest) · [Install with Homebrew](#install) · Requires macOS 26 and zsh
 
-Features: history/frecency ranking (from your `~/.zsh_history`), fuzzy matching
-with match highlighting, dangerous-command warnings, first-token command-name
-completion, a Ctrl+K detail pane, shell-alias expansion, and a personal specs
-directory that overrides the shipped pack.
+</div>
+
+## What it does
+
+Start typing a command in zsh and Tine shows what can come next: subcommands, options, arguments, file paths, ranked by what you actually run. Tab inserts the shared prefix, Enter accepts. It works in Terminal, iTerm2, VS Code and Ghostty.
+
+Tine is a native SwiftUI app, not a webview. Completions come from the open-source Fig specs that Fig and Amazon Q shipped, run locally in JavaScriptCore. No cloud, no telemetry, no login. The one model Tine uses is Apple's on-device model, and only when you ask for it.
+
+### Why no pseudo-terminal?
+
+Fig-style tools wrap your shell in a pseudo-terminal to see what you type, so every keystroke passes through them. Tine doesn't: a zsh widget sends only the line you're editing to the app over a local unix socket, and the panel follows your cursor through Accessibility.
+
+| | |
+|---|---|
+| **Completions** | The Fig spec pack for 700+ CLIs, command names on the first word, and your shell aliases expanded. |
+| **Ranking** | Fuzzy matching with highlighted matches, ranked by frecency from your `~/.zsh_history`. |
+| **Warnings** | Flags dangerous commands before you run them. |
+| **Detail pane** | ⌃K shows the full description of the selected suggestion. |
+| **Your own specs** | Fig `.js` specs in `~/.config/tine/specs/` override or extend any command in the pack. |
+| **`tine learn <cmd>`** | Writes a spec for a CLI the pack doesn't cover, from its `--help`, with Apple's on-device model. |
+| **`tine ask "<question>"`** | Finds the installed tool that does what you describe and suggests a command line for it. Nothing is run. |
+| **Carapace** | An opt-in experimental completion source ([carapace](https://carapace.sh)). Your own specs still win, and commands it doesn't know fall back to the Fig specs. |
+| **Completion API** | Other apps can show Tine's completions in their own UI with one JSON request over its socket. See [docs/COMPLETION-API.md](docs/COMPLETION-API.md). |
+| **Settings** | Font and size, rows, accent, Liquid Glass, launch at login and menu bar icon. Settings are saved to `~/.config/tine/config.json`. |
+| **Updates** | Downloads new specs and new versions of Tine automatically. |
 
 ## Install
 
@@ -24,72 +42,52 @@ directory that overrides the shipped pack.
 brew install --cask tinecli/tap/tine
 ```
 
-Then finish setup:
+Or download `Tine-<version>.dmg` from the [latest release](https://github.com/tinecli/tine/releases/latest) and move `Tine.app` to `/Applications`. Tine is signed and notarized, and updates itself.
 
-```sh
-echo 'source ~/.local/share/tine/tine.zsh' >> ~/.zshrc   # shell integration
-open -a Tine                                              # launch once (installs the widget)
-```
+## Set up
 
-Grant **Accessibility** (System Settings → Privacy & Security → Accessibility) so the
-panel can track your cursor. Released builds are Developer ID signed & notarized, so
-they launch normally.
+1. Add the shell integration: `echo 'source ~/.local/share/tine/tine.zsh' >> ~/.zshrc`
+2. Open Tine once, so it installs the widget: `open -a Tine`
+3. Approve **Tine** in System Settings › Privacy & Security › Accessibility, so the panel can follow your cursor.
 
-## Requirements
+<details>
+<summary><b>Your own specs</b></summary>
 
-macOS 26+ and zsh.
+<br>
 
-## Configure
+Each spec location (`~/.config/tine/specs/` by default, add more in Settings) has two folders:
 
-Everything lives under `~/.config/tine/`: `config.json` (also editable in the
-Settings window — font + size, max rows, accent, glass, command-name completion)
-and your own Fig `.js` specs under `~/.config/tine/specs/` (add more locations in
-Settings). Each spec location has two folders:
+- **`override/<cmd>.js`** replaces a command's spec completely.
+- **`extend/<cmd>.js`** merges onto the pack's spec, adding subcommands and options while keeping everything upstream. Good for your own or a company CLI's commands (a missing `aws sso login`, say) without copying the whole 400-file `aws` spec.
 
-- **`override/<cmd>.js`** fully replaces a command's spec.
-- **`extend/<cmd>.js`** merges *additively* onto the pack's spec — adds
-  subcommands/options while keeping everything upstream. Great for adding your own
-  or a company CLI's commands (e.g. a missing `aws sso login`) without inheriting
-  the whole 400-file `aws` spec.
+For a CLI the pack never covered, `tine learn <cmd>` writes that `extend/<cmd>.js` for you. It runs `<cmd> --help` and turns the output into a spec with Apple's on-device model (Apple Intelligence on, nothing leaves the Mac). The result is a plain file: read it, edit it, delete it. `--force` learns again.
 
-For a CLI the pack never covered, `tine learn <cmd>` writes that `extend/<cmd>.js`
-for you: it runs `<cmd> --help` and turns the output into a spec with Apple's
-on-device model (macOS 26 with Apple Intelligence on; nothing leaves the Mac).
-The result is a plain file — read it, edit it, delete it. `--force` learns again.
+</details>
 
-Settings → Suggestions → Experimental can switch the completion source to
-[carapace](https://carapace.sh) (`brew install carapace`). It's opt-in: your own
-specs still win, and commands carapace doesn't know fall back to the Fig specs.
+<details>
+<summary><b>How <code>tine ask</code> works</b></summary>
 
-## Which tool does this?
+<br>
 
 ```sh
 tine ask "delete a directory and everything in it"
 ```
 
-Tine indexes every binary on your `PATH` by its man page's `NAME` line — built on
-this machine, on the first ask, and never shipped (`tine index` rebuilds it). The
-question is answered with the tools you actually have installed, ranked, with what
-each one is for. Where a tool's spec is known, the on-device model also composes a
-command line from the flags that spec documents — parsed against the same spec
-before you see it, so an invented flag never reaches you.
+Tine indexes every binary on your `PATH` by its man page's `NAME` line. The index is built on this machine on the first ask and never shipped (`tine index` rebuilds it). The answer is the tools you actually have installed, ranked, with what each one is for. Where a tool's spec is known, the on-device model also composes a command line from the flags that spec documents, parsed against the same spec before you see it, so an invented flag never reaches you.
 
-Nothing is ever run. The command is printed and pushed onto your next prompt, for
-you to read and run yourself.
+Nothing is ever run. The command is printed and pushed onto your next prompt, for you to read and run yourself.
 
-## Use from another app
+</details>
 
-Other apps can show tine's completions in their own UI: one JSON request over
-tine's socket, no panel. See [docs/COMPLETION-API.md](docs/COMPLETION-API.md).
+<details>
+<summary><b>Building from source</b></summary>
 
-## Development
+<br>
 
-Build and run from source: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Cutting a
-release: [docs/RELEASING.md](docs/RELEASING.md).
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Releases are tagged and built by GitHub Actions, see [docs/RELEASING.md](docs/RELEASING.md).
 
-## Credits & license
+</details>
 
-Built on the open-source
-[amazon-q-developer-cli](https://github.com/aws/amazon-q-developer-cli) autocomplete
-engine and Fig completion specs. Licensed under MIT **and** Apache-2.0 — see
-`LICENSE.MIT`, `LICENSE.APACHE`, and `NOTICE`.
+## Credits and license
+
+Built on the open-source [amazon-q-developer-cli](https://github.com/aws/amazon-q-developer-cli) autocomplete engine and the Fig completion specs. Licensed under MIT and Apache-2.0, see [LICENSE.MIT](LICENSE.MIT), [LICENSE.APACHE](LICENSE.APACHE) and [NOTICE](NOTICE).
